@@ -3,6 +3,7 @@ __pycache__/
 .DS_Store
 *.egg-info/
 data/
+__MACOSX/
 
 # artifacts 
 checkpoints/

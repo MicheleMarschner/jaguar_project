@@ -6,7 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from src.jaguar.config import PATHS
-from src.jaguar.FiftyOne import (
+from jaguar.datasets.FiftyOneDataset import (
     FODataset
 )
 
@@ -86,6 +86,18 @@ def run_eda(csv_file: Path, data_path: Path) -> None:
     # Visualize identity distribution and log to W&B
     fig, ax = plt.subplots(figsize=(14, 5))
     identity_counts.plot(kind='bar', ax=ax, color='steelblue')
+    for p in ax.patches:
+        h = p.get_height()
+        ax.annotate(
+            f"{int(h)}",
+            (p.get_x() + p.get_width() / 2, h),
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            rotation=0,
+            xytext=(0, 3),
+            textcoords="offset points",
+        )
     ax.set_xlabel('Jaguar Identity')
     ax.set_ylabel('Number of Images')
     ax.set_title('Training Data: Images per Jaguar Identity')
@@ -112,8 +124,44 @@ def run_eda(csv_file: Path, data_path: Path) -> None:
     fig.savefig(out_path, dpi=200, bbox_inches="tight")
     print("Saved:", out_path)
 
-    
+    # ---- thresholds to compare ----
+    thresholds = [10, 20, 30, 40, 50]  # 1 = baseline (no filtering)
 
+    # ---- summary table ----
+    rows = []
+    for x in thresholds:
+        keep = identity_counts[identity_counts >= x]
+        kept_ids = int(len(keep))
+        kept_samples = int(keep.sum())
+        removed_ids = int((identity_counts < x).sum())
+        removed_samples = int(identity_counts[identity_counts < x].sum())
+
+        if kept_ids > 0:
+            arr = keep.values
+            row = dict(
+                min_imgs_per_id=int(arr.min()),
+                median_imgs_per_id=float(np.median(arr)),
+                mean_imgs_per_id=float(arr.mean()),
+                max_imgs_per_id=int(arr.max()),
+            )
+        else:
+            row = dict(min_imgs_per_id=np.nan, median_imgs_per_id=np.nan, mean_imgs_per_id=np.nan, max_imgs_per_id=np.nan)
+
+        rows.append(dict(
+            threshold=x,
+            kept_ids=kept_ids,
+            kept_samples=kept_samples,
+            removed_ids=removed_ids,
+            removed_samples=removed_samples,
+            **row
+        ))
+
+    summary = pd.DataFrame(rows)
+    print("\n=== FILTER SUMMARY (keep IDs with >= x images) ===")
+    print(summary.to_string(index=False))
+
+    summary.to_csv(out_dir / "identity_filter_summary.csv", index=False)
+    print("Saved:", out_dir / "identity_filter_summary.csv")
 
 
 

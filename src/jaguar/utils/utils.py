@@ -3,6 +3,8 @@ from datetime import datetime
 import torch
 import numpy as np
 
+from jaguar.config import PATHS, Paths
+
 def ensure_dir(paths):
     """
     Ensures that the specified directories exist or creates it and any 
@@ -10,6 +12,12 @@ def ensure_dir(paths):
     """
     for p in paths:
       p.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_dirs(paths: Paths=PATHS) -> None:
+    """Create all directories that should exist"""
+    for p in [PATHS]:
+        ensure_dir(p)
 
 
 def get_timestamp():

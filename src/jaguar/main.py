@@ -9,7 +9,13 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.action == "train":        
+    if args.action == "train": 
+
+        # set_seeds(SEED)  
+        # ensure_dirs()
+        # choose experiment  
+        # get data from fifty One for that experiment
+        # 
         
 
 

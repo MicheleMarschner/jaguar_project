@@ -4,5 +4,7 @@ __pycache__/
 
 # artifacts 
 checkpoints/
+data/
 wandb/
 notebooks/wandb
+

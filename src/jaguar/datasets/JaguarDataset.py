@@ -20,8 +20,9 @@ class JaguarDataset(Dataset):
         base_root: Union[str, Path],
         transform: Optional[Callable] = None,
         processing_fn: Optional[Callable[[Image.Image, Dict[str, Any]], Image.Image]] = None,
+        is_test: bool =False,
         samples_list: Optional[List[Dict[str, Any]]] = None,
-        id_key: str = "ground_truth",     # change if your samples store identity under a different key
+        label: str = "ground_truth",     # change if your samples store identity under a different key
         filepath_key: str = "filepath",
         filename_key: str = "filename",   # if you stored original filename explicitly in the sample
     ):
@@ -29,9 +30,10 @@ class JaguarDataset(Dataset):
         self.transform = transform
         self.processing_fn = processing_fn
 
-        self.id_key = id_key
+        self.id_key = label
         self.filepath_key = filepath_key
         self.filename_key = filename_key
+        self.is_test = is_test
         self.epoch = 0
 
         if samples_list is not None:
@@ -82,9 +84,15 @@ class JaguarDataset(Dataset):
         if self.transform is not None:
             img = self.transform(img)
 
+        if self.is_test:
+            return {
+                "img": img, 
+                "filepath": str(s.get(self.filepath_key, ""))
+            }
+
         return {
             "img": img,
-            "id": str(s.get(self.id_key, "")),
+            "label": str(s.get(self.id_key, "")),
             "filepath": str(s.get(self.filepath_key, "")),
             "idx": idx,
         }

@@ -1,8 +1,9 @@
 import random
 from pathlib import Path
 from PIL import Image, ImageFilter
+import numpy as np
 
-### add a method that applies the same background to all -> random_bg_cutout but the same for all
+from jaguar.config import PATHS
 
 def _resolve(base_root: Path, p: str) -> Path:
     pp = Path(p)
@@ -78,29 +79,122 @@ class ImageProcessor:
         return mask_composite(img.convert("RGB"), mask, white)
 
     @staticmethod
-    def blur_bg_mask(
+    def blur_bg_cutout_alpha(
         img: Image.Image,
         sample: dict,
         base_root: Path,
-        mask_key="mask_path",
         blur_radius: int = 10,
         edge_softness: int = 2,
+        bg_color=(128, 128, 128),
         **kwargs,
     ) -> Image.Image:
-        mask_path = _resolve(base_root, sample[mask_key])
-        mask = Image.open(mask_path).convert("L")
-        if mask.size != img.size:
-            mask = mask.resize(img.size, resample=Image.NEAREST)
+        """
+        Uses alpha as mask:
+        - foreground stays sharp
+        - background becomes blurred (or a solid bg) and edges can be feathered
+        """
+        rgba = img.convert("RGBA")
+        rgb = rgba.convert("RGB")
+        alpha = rgba.getchannel("A")  # L mask
+
+        # feather edges
         if edge_softness > 0:
-            mask = mask.filter(ImageFilter.GaussianBlur(radius=edge_softness))
-        blurred_bg = img.convert("RGB").filter(ImageFilter.GaussianBlur(radius=blur_radius))
-        return Image.composite(img.convert("RGB"), blurred_bg, mask)
+            alpha = alpha.filter(ImageFilter.GaussianBlur(radius=edge_softness))
+
+        # background: either blur original RGB or use solid color
+        blurred_bg = rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        # OR solid bg:
+        # blurred_bg = Image.new("RGB", rgb.size, bg_color)
+
+        # composite: show rgb where alpha is white, else show blurred_bg
+        out = Image.composite(rgb, blurred_bg, alpha)
+        return out
 
 PROCESSORS = {
     "original": ImageProcessor.original,
     "cutout_gray_bg": ImageProcessor.gray_bg_cutout,
-    "cutout_random_bg": ImageProcessor.random_bg_cutout,
+    "cutout_random_bg": ImageProcessor.random_bg_cutout_deterministic,
     "mask_black_bg": ImageProcessor.black_bg_mask,
     "mask_white_bg": ImageProcessor.white_bg_mask,
-    "mask_blur_bg": ImageProcessor.blur_bg_mask,
+    "mask_blur_bg": ImageProcessor.blur_bg_cutout_alpha,
 }
+
+def build_habitat_backgrounds(
+    raw_dir: Path,
+    cutout_dir: Path,
+    out_dir: Path,
+    n_patches: int = 100,
+    patch_size: int = 224,
+    max_tries_per_patch: int = 30,
+    max_fg_frac: float = 0.02,   # allow <=2% foreground pixels in patch
+    seed: int = 51,
+):
+    """
+    raw_dir: folder with raw RGB images (same filenames as cutouts)
+    cutout_dir: folder with RGBA cutouts where alpha=foreground mask (same filenames)
+    out_dir: will be created and filled with background crops
+    """
+    random.seed(seed)
+    raw_dir = Path(raw_dir)
+    cutout_dir = Path(cutout_dir)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    raw_files = sorted([p for p in raw_dir.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}])
+    if not raw_files:
+        raise ValueError(f"No images found in {raw_dir}")
+
+    saved = 0
+    attempts = 0
+
+    while saved < n_patches and attempts < n_patches * max_tries_per_patch:
+        attempts += 1
+        raw_path = random.choice(raw_files)
+        cut_path = cutout_dir / raw_path.name
+        if not cut_path.exists():
+            continue
+
+        raw = Image.open(raw_path).convert("RGB")
+        cut = Image.open(cut_path).convert("RGBA")
+
+        if raw.size != cut.size:
+            # if misaligned, skip (or resize cut alpha to raw)
+            continue
+
+        W, H = raw.size
+        if W < patch_size or H < patch_size:
+            continue
+
+        alpha = np.array(cut.getchannel("A"))  # H,W
+        # sample a random crop location
+        x0 = random.randint(0, W - patch_size)
+        y0 = random.randint(0, H - patch_size)
+
+        a_crop = alpha[y0:y0+patch_size, x0:x0+patch_size]
+        fg_frac = (a_crop > 0).mean()
+
+        if fg_frac > max_fg_frac:
+            continue
+
+        patch = raw.crop((x0, y0, x0+patch_size, y0+patch_size))
+        out_path = out_dir / f"bg_{saved:06d}.jpg"
+        patch.save(out_path, quality=90)
+        saved += 1
+
+        if saved % 200 == 0:
+            print(f"Saved {saved}/{n_patches} backgrounds...")
+
+    print(f"Done. Saved {saved} patches to {out_dir}. Attempts={attempts}")
+
+
+if __name__ == "__main__":
+
+    out_dir = PATHS.data / "backgrounds"
+
+    build_habitat_backgrounds(
+        raw_dir=PATHS.data_train,
+        cutout_dir=PATHS.data_train,
+        out_dir=out_dir,
+        n_patches=2000,
+        patch_size=224,
+    )

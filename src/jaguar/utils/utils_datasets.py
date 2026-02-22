@@ -31,7 +31,7 @@ def load_jaguar_from_FO_export(
     # Torch dataset reads the same samples.json and uses absolute paths inside it
     torch_ds = JaguarDataset(
         base_root=manifest_dir,
-        id_key="ground_truth",
+        label="ground_truth",
         filepath_key="filepath",
         transform=transform,
         processing_fn=processing_fn,

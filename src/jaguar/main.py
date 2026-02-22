@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 from jaguar.config import PROJECT_ROOT, SEED
 from jaguar.utils.utils import set_seeds, ensure_dirs
-from jaguar.experiments.baseline import run_baseline
+from jaguar.experiments.gradcam import run_gradcam
 
 def load_experiment_template(path: Path) -> dict:
     with open(path, "r") as f:
@@ -30,7 +30,7 @@ def main() -> None:
         # intialize wandb if on colab
         #run = init_wandb(exp_config)
 
-        run_baseline()
+        run_gradcam()
         
 
 if __name__ == "__main__":

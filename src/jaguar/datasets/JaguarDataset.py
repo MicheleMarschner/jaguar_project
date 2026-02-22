@@ -1,10 +1,11 @@
+import torch
 import json
 from pathlib import Path
 from typing import Callable, Optional, Any, Dict, List, Union
 
 from PIL import Image
 from torch.utils.data import Dataset
-
+import torchvision.transforms.v2 as transforms
 
 class JaguarDataset(Dataset):
     """
@@ -74,7 +75,7 @@ class JaguarDataset(Dataset):
         s["_epoch"] = self.epoch
 
         img_path = self._resolve_path(s[self.filepath_key])
-        img = Image.open(img_path).convert("RGBA")
+        img = Image.open(img_path).convert("RGB") #.convert("RGBA") do we need the alpha channel?
 
         # Hook: apply custom processing BEFORE torchvision transforms
         # processing_fn should return a PIL.Image (or something your transform accepts)
@@ -83,6 +84,11 @@ class JaguarDataset(Dataset):
 
         if self.transform is not None:
             img = self.transform(img)
+        
+        if not isinstance(img, torch.Tensor):
+            # v2 approach: convert to image tensor and rescale to [0, 1]
+            img = transforms.functional.to_image(img)
+            img = transforms.functional.to_dtype(img, torch.float32, scale=True)
 
         if self.is_test:
             return {

@@ -21,9 +21,9 @@ def load_megadescriptor_model(size="L"):
         size (str): One of "S", "M", or "L" for model size.
     """
     model_name_map = {
-        "S": "megadescriptor_s_384",
-        "M": "megadescriptor_m_384",
-        "L": "megadescriptor_l_384",
+        "S": "hf-hub:BVRA/MegaDescriptor-S-384",
+        "M": "hf-hub:BVRA/MegaDescriptor-M-384",
+        "L": "hf-hub:BVRA/MegaDescriptor-L-384",
     }
     
     if size not in model_name_map:

@@ -26,7 +26,7 @@ class FoundationModelWrapper:
         "MegaDescriptor-L": {
             "loader": lambda: load_megadescriptor_model("L"),
             "transform": transforms.Compose([
-                transforms.Resize((256, 128), interpolation=InterpolationMode.BILINEAR),
+                transforms.Resize((384, 384), interpolation=InterpolationMode.BILINEAR),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
                 transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]),
@@ -159,6 +159,29 @@ class FoundationModelWrapper:
 
     def preprocess(self, image: Image.Image):
         return self.transform(image)
+    
+    def eval(self):
+        """Delegate eval() to the underlying PyTorch model."""
+        self.model.eval()
+        return self
+
+    def train(self, mode=True):
+        """Delegate train() to the underlying PyTorch model."""
+        self.model.train(mode)
+        return self
+
+    def to(self, device):
+        """Delegate to() to the underlying PyTorch model."""
+        self.device = device
+        self.model.to(device)
+        return self
+
+    def __call__(self, x):
+        """
+        Allows the wrapper to be called like a function: output = wrapper(x)
+        This is often what evaluation scripts expect.
+        """
+        return self.model(x)
 
     def extract_embeddings(self, images):
         """
@@ -231,8 +254,6 @@ class FoundationModelWrapper:
 
         return explain
     
-
-
 if __name__ == "__main__":
     from PIL import Image
     import numpy as np

@@ -6,12 +6,14 @@ from functools import partial
 from PIL import Image
 import numpy as np
 from pathlib import Path
+import random
+import os
 
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.config import PATHS, DEVICE
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.preprocessing import PROCESSORS
-
+from jaguar.utils.utils_explainer import generate_similarity_cam
 
 def save_npz(out_path: Path, **arrays):
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,8 +70,39 @@ def show_grid_from_torch_ds(torch_ds, n=16, cols=4):
     plt.tight_layout()
     plt.show()
 
+
+def get_positive_for_query(dataset, query_idx):
+    """
+    Returns: (pos_path, pos_label)
+    """
+    query_label = dataset.labels[query_idx]          # <- plain string label
+    all_pos = dataset.idx_by_id.get(query_label, [])  # or dataset.idx_by_id
+    candidates = [i for i in all_pos if i != query_idx]
+    if not candidates:
+        raise ValueError(f"No positive for label={query_label} at idx={query_idx}")
+
+    pos_idx = random.choice(candidates)
+    pos_path = dataset._resolve_path(dataset.samples[pos_idx][dataset.filepath_key])
+    return str(pos_path), dataset.labels[pos_idx]
+
+
+def get_negative_for_query(dataset, query_idx):
+    """
+    Returns: (neg_path, neg_label)
+    """
+    query_label = dataset.labels[query_idx]
+    all_labels = list(dataset.idx_by_id.keys())
+    neg_labels = [l for l in all_labels if l != query_label]
+    if not neg_labels:
+        raise ValueError("No negative labels available")
+
+    neg_label = random.choice(neg_labels)
+    neg_idx = random.choice(dataset.idx_by_id[neg_label])
+    neg_path = dataset._resolve_path(dataset.samples[neg_idx][dataset.filepath_key])
+    return str(neg_path), dataset.labels[neg_idx]
+
 def run_baseline():
-    processor_name = "cutout_random_bg"  # e.g. from YAML
+    processor_name = "random_bg"  # e.g. from YAML
     model_name = "EfficientNet-B4"
     out_dir = PATHS.data / "embeddings"
     bg_dir = PATHS.data / "backgrounds"   
@@ -81,7 +114,7 @@ def run_baseline():
         bg_dir=str(bg_dir),
         key_for_seed="filename",  # or "filepath"
     )
-    wrapper = FoundationModelWrapper(model_name, device=str(DEVICE))
+    model_wrapper = FoundationModelWrapper(model_name, device=str(DEVICE))
 
     # get data from fifty One for that experiment
     fo_ds, torch_ds = load_jaguar_from_FO_export(
@@ -91,68 +124,71 @@ def run_baseline():
         overwrite_db=False,
     )
 
-    p = torch_ds[0]["filepath"]
-    im = Image.open(p)
-    n=8
+    idx = 4
+    
+    query_sample = torch_ds.samples[idx]
 
-    # ---- 1) take N samples ----
-    items = [torch_ds[i] for i in range(min(n, len(torch_ds)))]
-    pil_images = []
-    ids = []
-    filenames = []
-    for it in items:
-        # Your dataset returns transformed tensor usually; for CAM we want PIL.
-        # If your torch_ds currently returns tensors, adapt it to also return PIL or reload by filepath.
-        # Here we reload by filepath:
-        img_path = it["filepath"]
-        img = Image.open(img_path).convert("RGB")
-        pil_images.append(img)
-        ids.append(it.get("id", ""))
-        filenames.append(it.get("filename", Path(img_path).name))
+    print(query_sample)
 
-    show_grid_from_torch_ds(torch_ds, n=16, cols=4)
+    query_label = torch_ds.labels[idx]
+    query_path = str(torch_ds._resolve_path(query_sample[torch_ds.filepath_key]))
+    
+    print(f"\n[Info] Query Jaguar ID: {query_label} | Path: {query_path}")
+
+    # --- 3. Dynamically fetch Positive and Negative Pairs ---
+    pos_path, pos_label = get_positive_for_query(torch_ds, idx)
+    neg_path, neg_label = get_negative_for_query(torch_ds, idx)
+
+    print(f"[Info] Positive Ref ID: {pos_label} | Path: {pos_path}")
+    print(f"[Info] Negative Ref ID: {neg_label} | Path: {neg_path}")
+
+    # --- 4. Load Images via PIL (Enforcing 3-channel RGB) ---
+    query_img = Image.open(query_path).convert('RGB')
+    pos_ref_img = Image.open(pos_path).convert('RGB')
+    neg_ref_img = Image.open(neg_path).convert('RGB')
+
+    # --- 5. Initialize Model Wrapper ---
+    model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
+
+    # --- 6. Generate CAMs ---
+    print("\n[Info] Generating Positive Similarity CAM...")
+    _, vis_positive = generate_similarity_cam(
+        wrapper=model_wrapper,
+        query_img=query_img, 
+        ref_img=pos_ref_img, 
+        maximize=True   # "What makes them identical?"
+    )
+    
+    print("[Info] Generating Negative Similarity CAM...")
+    _, vis_negative = generate_similarity_cam(
+        wrapper=model_wrapper,
+        query_img=query_img, 
+        ref_img=neg_ref_img, 
+        maximize=False  # "What features uniquely distinguish them?"
+    )
+
+    # --- 7. Save to Disk ---
+    # Include the labels in the filename for easy review!
+    os.makedirs("cam_outputs", exist_ok=True)
+    pos_filename = f"cam_outputs/cam_positive_Q{query_label}_R{pos_label}.jpg"
+    neg_filename = f"cam_outputs/cam_negative_Q{query_label}_R{neg_label}.jpg"
+    
+    Image.fromarray(vis_positive).save(pos_filename)
+    Image.fromarray(vis_negative).save(neg_filename)
+    
+    print(f"[Info] Saved to {pos_filename} and {neg_filename}")
+
 
     '''
+    show_grid_from_torch_ds(torch_ds, n=16, cols=4)
+
     
-    # ---- 2) extract embeddings ----
+    
+    # extract embeddings
     emb = wrapper.extract_embeddings(pil_images)  # np (N, D)
     print("Embeddings shape:", emb.shape)
 
     wrapper.save_embeddings(emb)
 
-    # ---- 4) GradCAM on 1 image (if configured) ----
-    try:
-        target_layers, reshape_transform = wrapper.get_grad_cam_config()
-    except NotImplementedError:
-        print(f"[GradCAM] Not configured for {model_name}, skipping.")
-        return
-
-    cam = GradCAM(
-        model=wrapper.model,
-        target_layers=target_layers,
-        reshape_transform=reshape_transform,
-    )
-
-    # preprocess 1 image to tensor [1,3,H,W]
-    x = wrapper.preprocess(pil_images[3]).unsqueeze(0).to(DEVICE)
-
-    # For ReID/embeddings: GradCAM expects a target.
-    # If your model returns logits, you can use argmax.
-    # If it returns embeddings, simplest smoke target = L2 norm (scalar).
-    with torch.no_grad():
-        out = wrapper.model(x)
-    if isinstance(out, (tuple, list)):
-        out = out[0]
-    if isinstance(out, dict):
-        out = out.get("logits", None) or next(iter(out.values()))
-
-    if out.ndim == 2 and out.shape[1] > 1:
-        target_idx = int(out.argmax(dim=1).item())
-        targets = [ClassifierOutputTarget(target_idx)]
-        grayscale_cam = cam(input_tensor=x, targets=targets)  # shape (B,H,W) depending on lib
-
-    # normalize and overlay
-    cam_2d = grayscale_cam[0]
-    overlay_cam_on_image(pil_images[3], cam_2d, out_dir / f"gradcam_{model_name}_sample0.png")
-
     '''
+

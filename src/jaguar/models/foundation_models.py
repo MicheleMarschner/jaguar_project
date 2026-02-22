@@ -144,7 +144,7 @@ class FoundationModelWrapper:
         }
     }
 
-    def __init__(self, model_name: str, device="cuda"):
+    def __init__(self, model_name: str, device=None):
         assert model_name in self.MODEL_REGISTRY, f"Unknown model {model_name}"
         self.name = model_name
         self.device = device

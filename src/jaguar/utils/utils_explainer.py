@@ -1,8 +1,21 @@
+'''
+ArcFace CAM is best to inspect:
+- “what makes it predict ID y?” (supervised evidence)
+- whether the model is learning foreground vs background under the training loss
+
+Similarity CAM (query→positive ref and query→hard negative)
+'''
+
+
 import torch
+from PIL import Image
+import torch.nn.functional as F
 import numpy as np
 import zennit
 from zennit.attribution import Gradient
 from zennit.composites import EpsilonPlus, EpsilonGammaBox
+from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam.utils.image import show_cam_on_image
 
 ## initialize like:
 ## wrapper = FoundationModelWrapper(name, device=DEVICE)
@@ -95,6 +108,91 @@ def swin_reshape_transform(tensor, **kwargs):
         raise ValueError(f"Unknown tensor shape: {tensor.shape}")
 
 '''
+
+
+class CosineSimilarityTarget:
+    def __init__(self, ref_embedding, maximize=True):
+        """
+        Expects a 1D reference embedding of shape [D].
+        maximize (bool): If True, highlights features that make the images SIMILAR.
+                         If False, highlights features that make them DIFFERENT.
+        """
+        self.ref_embedding = F.normalize(ref_embedding.detach().clone().view(-1), p=2, dim=-1)
+        self.maximize = maximize
+
+    def __call__(self, model_output):
+        if isinstance(model_output, dict):
+            model_output = model_output.get("embeddings") or next(iter(model_output.values()))
+        elif isinstance(model_output, (tuple, list)):
+            model_output = model_output[0]
+
+        query_embedding = F.normalize(model_output.view(-1), p=2, dim=-1)
+        sim = torch.sum(query_embedding * self.ref_embedding)
+        return sim if self.maximize else -sim
+
+class EmbeddingForwardWrapper(torch.nn.Module):
+    """
+    Wraps a model to ensure pytorch-grad-cam's forward hooks intercept the 
+    final embedding vector, even if the model uses a custom method like `get_embeddings`.
+    """
+    def __init__(self, base_model):
+        super().__init__()
+        self.base_model = base_model
+
+    def forward(self, x):
+        if hasattr(self.base_model, "get_embeddings"):
+            return self.base_model.get_embeddings(x)
+        return self.base_model(x)
+
+def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Image, maximize: bool = True):
+    """
+    Generates a GradCAM heatmap on the 'query_img' based on its similarity to 'ref_img'.
+    Accepts your FoundationModelWrapper as the first argument.
+    """
+    device = wrapper.device
+    model = wrapper.model
+    
+    # 1. Prepare tensors
+    query_tensor = wrapper.preprocess(query_img).unsqueeze(0).to(device)
+    ref_tensor = wrapper.preprocess(ref_img).unsqueeze(0).to(device)
+
+    # 2. Extract Reference Embedding
+    with torch.no_grad():
+        if hasattr(model, "get_embeddings"):
+            ref_emb = model.get_embeddings(ref_tensor)
+        else:
+            ref_emb = model(ref_tensor)
+
+    # 3. Setup GradCAM using the Explainer Wrapper
+    cam_model = EmbeddingForwardWrapper(model)
+    target_layers, reshape_transform = wrapper.get_grad_cam_config()
+    
+    cam = GradCAM(
+        model=cam_model,
+        target_layers=target_layers,
+        reshape_transform=reshape_transform
+    )
+
+    # 4. Define target and generate CAM
+    targets = [CosineSimilarityTarget(ref_emb, maximize=maximize)]
+    grayscale_cam = cam(input_tensor=query_tensor, targets=targets)[0, :]
+
+    # 5. Create Visual Overlay
+    target_size = (query_tensor.shape[3], query_tensor.shape[2]) # (W, H)
+    query_img_resized = query_img.resize(target_size, Image.Resampling.LANCZOS)
+    query_img_rgb = np.array(query_img_resized).astype(np.float32) / 255.0
+    
+    visualization = show_cam_on_image(query_img_rgb, grayscale_cam, use_rgb=True)
+
+    return grayscale_cam, visualization
+
+
+
+
+
+
+
+
 
 def lrp_zennit_input_relevance(
     model: torch.nn.Module,

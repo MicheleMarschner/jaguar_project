@@ -5,9 +5,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from src.jaguar.config import PATHS
-from src.jaguar.FiftyOne import (
-    FODataset
+from jaguar.config import PATHS
+from jaguar.FiftyOne import (
+    FODataset, get_or_create_manifest_dataset
 )
 
 FO_DATASET_NAME = "jaguar_stage0"
@@ -124,6 +124,8 @@ def build_from_csv_labels(
     overwrite_db: bool = True,
 ) -> FODataset:
     df = pd.read_csv(csv_path)
+    
+    print(train_dir, csv_path)
 
     # basic validation
     assert {"filename", "ground_truth"}.issubset(df.columns), f"CSV columns are {list(df.columns)}"
@@ -139,9 +141,10 @@ def build_from_csv_labels(
         if not p.exists():
             missing += 1
             continue
-
+        
         label = str(r["ground_truth"])
         s = fo_ds.create_sample(filepath=p, label=label, tags=["train"])
+        print(s)
         s["split"] = "train"
         s["filename"] = p.name
         samples.append(s)
@@ -157,9 +160,8 @@ def build_from_csv_labels(
 def main():
     manifest_dir = PATHS.data_export
     csv_file = PATHS.data / "raw/jaguar-re-id/train.csv"
-
+    
     ### add labels to fiftyOne
-    '''
     def build_fn():
         return build_from_csv_labels(
             dataset_name=FO_DATASET_NAME,
@@ -174,8 +176,7 @@ def main():
         build_fn=build_fn,
         overwrite_load=False,
     )
-    '''
-    run_eda(csv_file, PATHS.data_train)
+    # run_eda(csv_file, PATHS.data_train)
 
 
 if __name__ == "__main__":

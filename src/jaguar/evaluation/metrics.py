@@ -109,7 +109,7 @@ class ReIDEvalBundle:
 
         return ap_list
 
-    def map(self):
+    def mAP(self):
         """
         Standard mAP (mean AP over all queries).
         """
@@ -299,7 +299,7 @@ class ReIDEvalBundle:
 
         # Core ranking metrics
         id_map = self.identity_balanced_map()
-        map_score = self.map()
+        map_score = self.mAP()
         rank1 = self.rank1()
         rank5 = self.rank5()
 

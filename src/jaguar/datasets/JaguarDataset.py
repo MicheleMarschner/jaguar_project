@@ -92,7 +92,7 @@ class JaguarDataset(Dataset):
 
         return {
             "img": img,
-            "label": str(s.get(self.id_key, "")),
+            "label": str(s.get(self.label, "")),
             "filepath": str(s.get(self.filepath_key, "")),
             "idx": idx,
         }

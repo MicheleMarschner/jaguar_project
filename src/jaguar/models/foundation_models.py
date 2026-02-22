@@ -13,7 +13,8 @@ from jaguar.utils.utils_models import (
     load_convnext_v2,
     load_efficientnet_b4,
     load_swin_transformer,
-    load_eva_02
+    load_eva_02,
+    load_miewid
 )
 from jaguar.utils.utils_explainer import (
     vit_reshape_transform, 
@@ -21,10 +22,22 @@ from jaguar.utils.utils_explainer import (
     lrp_zennit_input_relevance
 )
 
+class PadToSquare:
+    def __init__(self, fill=0):
+        self.fill = fill
+
+    def __call__(self, img):
+        w, h = img.size
+        max_side = max(w, h)
+        new_img = Image.new("RGB", (max_side, max_side), self.fill)
+        new_img.paste(img, ((max_side - w) // 2, (max_side - h) // 2))
+        return new_img
+
 class FoundationModelWrapper:
     MODEL_REGISTRY = {
         "MegaDescriptor-L": {
             "loader": lambda: load_megadescriptor_model("L"),
+            "input_size": 384,
             "transform": transforms.Compose([
                 transforms.Resize((384, 384), interpolation=InterpolationMode.BILINEAR),
                 transforms.ToImage(),
@@ -41,6 +54,7 @@ class FoundationModelWrapper:
         },
         "DINO-Small": {
             "loader": lambda: load_dino_model("dino", "small", patch_size=8, pretrained=True),
+            "input_size": 224,
             "transform": transforms.Compose([
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
@@ -54,6 +68,7 @@ class FoundationModelWrapper:
         },
         "DINOv2-Base": {
             "loader": lambda: load_dino_model("dinov2", "base", patch_size=14, pretrained=True, with_register_tokens=False),
+            "input_size": 224,
             "transform": transforms.Compose([
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
@@ -68,8 +83,9 @@ class FoundationModelWrapper:
         },
         "DINOv2_for_wildlife": {
             "loader": lambda: load_megadescriptor_dino_model(),
+            "input_size": 518,
             "transform": transforms.Compose([
-                transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
+                transforms.Resize((518, 518), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
                 transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
@@ -82,6 +98,7 @@ class FoundationModelWrapper:
         },
         "ConvNeXt-V2": {
             "loader": lambda: load_convnext_v2("large"),
+            "input_size": 224,
             "transform": transforms.Compose([
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
@@ -100,6 +117,7 @@ class FoundationModelWrapper:
         },
         "EfficientNet-B4": {
             "loader": lambda: load_efficientnet_b4(),
+            "input_size": 380,
             "transform": transforms.Compose([
                 transforms.Resize((380, 380), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
@@ -118,6 +136,7 @@ class FoundationModelWrapper:
         },
         "Swin-Transformer": {
             "loader": lambda: load_swin_transformer("base"),
+            "input_size": 224,
             "transform": transforms.Compose([
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
@@ -131,8 +150,23 @@ class FoundationModelWrapper:
         },
         "EVA-02": {
             "loader": lambda: load_eva_02(),
+            "input_size": 224,
             "transform": transforms.Compose([
                 transforms.Resize((224,224), interpolation=InterpolationMode.BICUBIC),
+                transforms.ToImage(),
+                transforms.ToDtype(torch.float32, scale=True),
+                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+            ]),
+            "grad_cam": {
+                "layer_getter": lambda m: m.blocks[-1].norm1,
+                "reshape_transform": vit_reshape_transform
+            }
+        },
+        "MiewID": {
+            "loader": lambda: load_miewid(),
+            "input_size": 440,
+            "transform": transforms.Compose([
+                transforms.Resize((440,440), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
                 transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
@@ -151,6 +185,7 @@ class FoundationModelWrapper:
 
         print(f"[Info] Loading model {model_name} on {device}...")
         self.registry_entry = self.MODEL_REGISTRY[model_name]
+        self.input_size = self.registry_entry.get("input_size") 
         self.model = self.MODEL_REGISTRY[model_name]["loader"]()
         self.model.to(device)
         self.model.eval()

@@ -76,14 +76,19 @@ class JaguarIDModel(nn.Module):
             for p in self.backbone.parameters():
                 p.requires_grad = False
 
-        # Infer feature_dim
+        # Dynamic feature_dim # --- DYNAMIC DIMENSION INFERENCE ---
         self.backbone.eval()
+        input_res = self.backbone_wrapper.input_size # Use the wrapper's config!
+        
         with torch.no_grad():
-            dummy = torch.randn(1, 3, 384, 384).to(device) # Compatibility for MegaDescriptor
+            # Create dummy input based on actual model requirements
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)
             out = self.backbone(dummy)
             if isinstance(out, (tuple, list)): out = out[0]
             if out.ndim > 2: out = out.mean(dim=(2, 3))
             self.feature_dim = out.shape[1]
+
+        print(f"[JaguarID] Backbone: {backbone_name} | Input Res: {input_res} | Feature dim: {self.feature_dim}")
 
         # Always create a neck (EmbeddingHead)
         self.neck = EmbeddingHead(self.feature_dim, emb_dim)
@@ -167,7 +172,7 @@ if __name__ == "__main__":
     )
     
     # Calculate unique identities
-    unique_labels = sorted(list(set([str(s.get("ground_truth")) for s in torch_ds.samples])))
+    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in torch_ds.samples])))
     num_classes = len(unique_labels)
     label_to_idx = {l: i for i, l in enumerate(unique_labels)}
     print(f"[Info] Dataset loaded: {len(torch_ds)} images, {num_classes} identities.")
@@ -175,7 +180,7 @@ if __name__ == "__main__":
     # Initialize the full JaguarID Model
     # Baseline example: MegaDescriptor-L + ArcFace head
     model = JaguarIDModel(
-        backbone_name="MegaDescriptor-L",
+        backbone_name="MegaDescriptor-L", # DINOv2_for_wildlife, ConvNeXt-V2, EfficientNet-B4, Swin-Transformer, EVA-02, MegaDescriptor-L, MiewID
         num_classes=num_classes,
         head_type="arcface",
         device=str(DEVICE),
@@ -192,7 +197,9 @@ if __name__ == "__main__":
         num_workers=4,
         pin_memory=True
     )
-
+    example = next(iter(loader))
+    print(f"[Debug] Example batch - img shape: {example['img'].shape}")
+    
     all_embeddings = []
     all_labels = []
     print(f"[Info] Extracting embeddings through JaguarID (ArcFace pipeline)...")
@@ -203,7 +210,7 @@ if __name__ == "__main__":
             # Use the model's extraction logic to get embeddings
             emb = model.get_embeddings(imgs)
             all_embeddings.append(emb.cpu())
-            all_labels.extend([label_to_idx[l] for l in batch_data["label"]])
+            all_labels.extend(batch_data["label_idx"])  
             
             if batch_idx >= 5: break # Sanity check limit
 

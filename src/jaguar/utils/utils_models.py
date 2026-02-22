@@ -4,7 +4,10 @@ These are placeholders; replace with actual model imports / checkpoints.
 """
 
 import torch
+import numpy
 import timm
+import functools
+from transformers import AutoModel
 from torchvision.models import (
     convnext_large, ConvNeXt_Large_Weights,
     efficientnet_b4, EfficientNet_B4_Weights,
@@ -77,8 +80,22 @@ def load_dino_model(model_name: str, model_size: str, patch_size: int, pretraine
 # MegaDescriptor - DINOv2 for Wildlife 
 # ----------------------------
 def load_megadescriptor_dino_model():
-    model = timm.create_model("hf-hub:BVRA/MegaDescriptor-DINOv2-518", pretrained=True)
+    print("[Info] Patching torch.load to allow MegaDescriptor weights...")
 
+    # Store the original torch.load
+    original_load = torch.load
+    # Create a wrapper that forces weights_only=False
+    @functools.wraps(original_load)
+    def safe_load(*args, **kwargs):
+        if 'weights_only' in kwargs:
+            kwargs['weights_only'] = False
+        return original_load(*args, **kwargs)
+    # Apply the patch
+    torch.load = safe_load
+    try:
+        model = timm.create_model("hf-hub:BVRA/MegaDescriptor-DINOv2-518", pretrained=True)
+    finally:
+        torch.load = original_load
     model.eval()
     return model
 
@@ -110,7 +127,7 @@ def load_swin_transformer(size="base"):
     return model
 
 # ----------------------------
-# EVA-02 (placeholder)
+# EVA-02 
 # ----------------------------
 def load_eva_02():
     print("Loading EVA-02 model...")
@@ -118,3 +135,13 @@ def load_eva_02():
     eva_model = timm.create_model('eva02_large_patch14_224.mim_in22k', pretrained=True, num_classes=0) 
     eva_model.eval() 
     return eva_model   
+
+def load_miewid():
+    # Force low_cpu_mem_usage=False to avoid the Meta device/AttributeError bug
+    miew_model = AutoModel.from_pretrained(
+        "conservationxlabs/miewid-msv3", 
+        trust_remote_code=True,
+        low_cpu_mem_usage=False 
+    )
+    miew_model.eval()
+    return miew_model

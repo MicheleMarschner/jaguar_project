@@ -66,6 +66,7 @@ class Paths:
     data_export: Path
     results: Path
     runs: Path
+    configs_file : Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -79,6 +80,7 @@ if IN_COLAB:
         data_export=Path("/data/fiftyone/jaguar_export"),
         results=Path("/results"),
         runs=Path("/experiments"),
+        configs_file=Path("/configs")
     )
     
 else:
@@ -89,6 +91,7 @@ else:
         data=PROJECT_ROOT / "data",
         results=PROJECT_ROOT / "results",
         runs=PROJECT_ROOT / "experiments",
+        configs_file=PROJECT_ROOT / "configs",
     )
 
 DEVICE = get_device(prefer_name="RTX")  

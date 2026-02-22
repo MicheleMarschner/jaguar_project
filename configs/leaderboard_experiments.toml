@@ -1,0 +1,21 @@
+[model]
+backbone_name = "MiewID"
+head_type = "arcface"
+emb_dim = 512
+freeze_backbone = true
+
+[training]
+experiment_name = "jaguar_reid_v1"
+config_folder = "miewid"
+epochs = 20
+batch_size = 32
+lr = 0.0005
+weight_decay = 0.0001
+seed = 42
+use_balanced_sampler = true  # Set to true to handle class imbalance
+
+[data]
+dataset_name = "jaguar_stage0"
+val_split = 0.2
+use_balanced_sampler = true  # Parameter for imbalance
+num_workers = 4

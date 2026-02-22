@@ -39,9 +39,15 @@ class JaguarDataset(Dataset):
             self.labels = [str(s["ground_truth"]["label"]) for s in self.samples]
 
         self.idx_by_id: Dict[str, List[int]] = {}
+        # if not self.is_test:
+        #     for i, sid in enumerate(self.labels):
+        #         self.idx_by_id.setdefault(sid, []).append(i)
         if not self.is_test:
-            for i, sid in enumerate(self.labels):
-                self.idx_by_id.setdefault(sid, []).append(i)
+            # Map label string → index
+            unique_labels = sorted(list(set([str(s["ground_truth"]["label"]) for s in self.samples])))
+            self.label_to_idx = {l: i for i, l in enumerate(unique_labels)}
+            # Also store numeric labels
+            self.labels_idx = [self.label_to_idx[str(s["ground_truth"]["label"])] for s in self.samples]
 
     def __len__(self):
         return len(self.samples)
@@ -63,6 +69,10 @@ class JaguarDataset(Dataset):
 
         if self.processing_fn is not None:
             img = self.processing_fn(img, s)
+        
+        # Remove alpha channel for later tranformation and modeling (models expect 3 channels)
+        if img.mode == "RGBA":
+            img = img.convert("RGB")
 
         if self.transform is not None:
             img = self.transform(img)
@@ -80,6 +90,7 @@ class JaguarDataset(Dataset):
         }
 
         if not self.is_test:
-            out["label"] = self.labels[idx]   
+            out["label"] = self.labels[idx]         # original string
+            out["label_idx"] = self.labels_idx[idx] # numeric index
 
         return out

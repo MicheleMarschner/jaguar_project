@@ -1,8 +1,8 @@
 from pathlib import Path
 import fiftyone as fo
 
-from src.jaguar.datasets.FiftyOneDataset import FODataset
-from src.jaguar.datasets.JaguarDataset import JaguarDataset 
+from jaguar.datasets.FiftyOneDataset import FODataset
+from jaguar.datasets.JaguarDataset import JaguarDataset 
 
 
 def load_jaguar_from_FO_export(

@@ -1,6 +1,9 @@
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 import matplotlib.pyplot as plt
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import torch
 from functools import partial
 from PIL import Image
@@ -39,10 +42,22 @@ def overlay_cam_on_image(img_pil: Image.Image, cam_2d: np.ndarray, out_path: Pat
     print("Saved:", out_path)
 
 
-def show_grid_from_torch_ds(torch_ds, n=16, cols=4):
-    n = min(n, len(torch_ds))
+def show_grid_from_torch_ds(torch_ds, n=16, cols=4, save_path: Path = None):
+    """
+    Display and optionally save a grid of images from a torch dataset.
+    Args:
+        torch_ds: dataset returning dicts with "img"
+        n: number of samples to show
+        cols: number of columns
+        save_path: Path to save the grid (e.g. results/grid.png)
+    """
+    total = len(torch_ds)
+    print(f"[Info] Dataset contains {total} samples")
+
+    n = min(n, total)
     rows = int(np.ceil(n / cols))
-    plt.figure(figsize=(cols * 3, rows * 3))
+
+    fig = plt.figure(figsize=(cols * 3, rows * 3))
 
     for i in range(n):
         it = torch_ds[i]
@@ -50,14 +65,12 @@ def show_grid_from_torch_ds(torch_ds, n=16, cols=4):
 
         # handle PIL vs tensor
         if isinstance(img, torch.Tensor):
-            # assume CHW float tensor in [0,1] or normalized; just for viewing:
             x = img.detach().cpu()
             if x.ndim == 3 and x.shape[0] in (1, 3):
                 x = x.permute(1, 2, 0).numpy()
             x = np.clip(x, 0, 1)
             img_vis = x
         else:
-            # PIL
             img_vis = np.array(img)
 
         plt.subplot(rows, cols, i + 1)
@@ -66,14 +79,24 @@ def show_grid_from_torch_ds(torch_ds, n=16, cols=4):
         plt.title(f'{it.get("id","")}', fontsize=8)
 
     plt.tight_layout()
+
+    # Save if path provided
+    if save_path is not None:
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=200, bbox_inches="tight")
+        print(f"[Info] Grid saved to: {save_path}")
+
     plt.show()
+    plt.close(fig)
 
 def run_baseline():
     processor_name = "cutout_random_bg"  # e.g. from YAML
     model_name = "EfficientNet-B4"
+    
     out_dir = PATHS.data / "embeddings"
     bg_dir = PATHS.data / "backgrounds"   
     base_root = Path(PATHS.data_export)   
+    grid_path = PATHS.data / f"dataset_example.png"
 
     processing_fn = partial(
         PROCESSORS[processor_name],
@@ -89,6 +112,17 @@ def run_baseline():
         dataset_name="jaguar_stage0",
         processing_fn=processing_fn,
         overwrite_db=False,
+    )
+    
+    # Print dataset size
+    print(f"[Info] Total samples in dataset: {len(torch_ds)}")
+
+    # ---- Save grid of images ----
+    show_grid_from_torch_ds(
+        torch_ds, 
+        n=16, 
+        cols=4,
+        save_path=grid_path
     )
 
     p = torch_ds[0]["filepath"]
@@ -109,8 +143,6 @@ def run_baseline():
         pil_images.append(img)
         ids.append(it.get("id", ""))
         filenames.append(it.get("filename", Path(img_path).name))
-
-    show_grid_from_torch_ds(torch_ds, n=16, cols=4)
 
     '''
     
@@ -156,3 +188,8 @@ def run_baseline():
     overlay_cam_on_image(pil_images[3], cam_2d, out_dir / f"gradcam_{model_name}_sample0.png")
 
     '''
+    
+if __name__ == "__main__":
+    print("[Info] Starting baseline run...")
+    run_baseline()
+    print("[Info] Finished baseline run.")

@@ -103,8 +103,6 @@ class ImageProcessor:
 
         # background: either blur original RGB or use solid color
         blurred_bg = rgb.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-        # OR solid bg:
-        # blurred_bg = Image.new("RGB", rgb.size, bg_color)
 
         # composite: show rgb where alpha is white, else show blurred_bg
         out = Image.composite(rgb, blurred_bg, alpha)

@@ -46,7 +46,7 @@ class JaguarDataset(Dataset):
         # Build fast lookup maps
         self._idx_by_id: Dict[str, List[int]] = {}
         for i, s in enumerate(self.samples):
-            sid = s.get(self.id_key, None)
+            sid = s.get(self.label, None)
             if sid is None:
                 continue
             sid = str(sid)

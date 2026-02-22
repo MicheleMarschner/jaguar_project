@@ -74,6 +74,15 @@ def load_dino_model(model_name: str, model_size: str, patch_size: int, pretraine
     return model
 
 # ----------------------------
+# MegaDescriptor - DINOv2 for Wildlife 
+# ----------------------------
+def load_megadescriptor_dino_model():
+    model = timm.create_model("hf-hub:BVRA/MegaDescriptor-DINOv2-518", pretrained=True)
+
+    model.eval()
+    return model
+
+# ----------------------------
 # ConvNeXt-V2
 # ----------------------------
 def load_convnext_v2(size="large"):

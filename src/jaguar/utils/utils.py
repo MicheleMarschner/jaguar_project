@@ -2,14 +2,29 @@ import os
 from datetime import datetime
 import torch
 import numpy as np
+from dataclasses import fields
+from pathlib import Path
+import wandb
+import random
 
-def ensure_dir(paths):
+
+from jaguar.config import PATHS, Paths, IN_COLAB
+
+
+def ensure_dir(p: Path) -> None:
     """
     Ensures that the specified directories exist or creates it and any 
     missing parent directories.
     """
-    for p in paths:
-      p.mkdir(parents=True, exist_ok=True)
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_dirs(paths: Paths = PATHS) -> None:
+    """Create all directories in PATHS (dataclass fields that are Path)."""
+    for f in fields(paths):
+        val = getattr(paths, f.name)
+        if isinstance(val, Path):
+            ensure_dir(val)
 
 
 def get_timestamp():
@@ -69,3 +84,23 @@ def set_seeds(seed: int=51, deterministic: bool=True) -> None:
 
     print(f"All random seeds set to {seed} for reproducibility")
 
+
+def init_wandb(config):
+    wandb.login(key=os.environ["WANDB_API_KEY"])
+
+    if IN_COLAB:
+        mode = "online"
+    else: 
+        mode = "offline"
+
+
+    run = wandb.init(
+        project="jaguar_project",
+        #group=group,
+        #name=name,
+        mode=mode,                 
+        config=config,
+        reinit=True,               
+        settings=wandb.Settings(start_method="thread"),
+    )
+    return run

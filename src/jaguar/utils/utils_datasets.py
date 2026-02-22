@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 import fiftyone as fo
 
@@ -9,6 +8,8 @@ from src.jaguar.datasets.JaguarDataset import JaguarDataset
 def load_jaguar_from_FO_export(
     manifest_dir,
     dataset_name="jaguar_stage0",
+    transform=None,
+    processing_fn=None,
     overwrite_db=False,
 ):
     """
@@ -32,8 +33,8 @@ def load_jaguar_from_FO_export(
         base_root=manifest_dir,
         id_key="ground_truth",
         filepath_key="filepath",
-        transform=None,
-        processing_fn=None,
+        transform=transform,
+        processing_fn=processing_fn,
     )
 
     return fo_ds, torch_ds 

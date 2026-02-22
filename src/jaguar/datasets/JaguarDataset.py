@@ -30,7 +30,7 @@ class JaguarDataset(Dataset):
         self.transform = transform
         self.processing_fn = processing_fn
 
-        self.id_key = label
+        self.label = label
         self.filepath_key = filepath_key
         self.filename_key = filename_key
         self.is_test = is_test

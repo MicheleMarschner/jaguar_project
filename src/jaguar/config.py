@@ -98,5 +98,3 @@ else:
 DEVICE = get_device(prefer_name="RTX")  
 NUM_WORKERS = 0
 SEED = 51
-NUM_WORKERS = 0
-SEED = 51

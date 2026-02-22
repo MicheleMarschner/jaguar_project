@@ -7,9 +7,7 @@ from pathlib import Path
 import wandb
 import random
 
-
 from jaguar.config import PATHS, Paths, IN_COLAB
-
 
 def ensure_dir(p: Path) -> None:
     """

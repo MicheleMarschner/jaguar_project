@@ -12,3 +12,5 @@ data/
 wandb/
 notebooks/wandb
 
+miewid/*.pth
+miewid/*.pth

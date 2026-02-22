@@ -32,6 +32,7 @@ class JaguarDataset(Dataset):
         self.id_key = id_key
         self.filepath_key = filepath_key
         self.filename_key = filename_key
+        self.epoch = 0
 
         if samples_list is not None:
             self.samples = samples_list
@@ -52,9 +53,6 @@ class JaguarDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
-    # ----------------------------
-    # Path / filename helpers
-    # ----------------------------
     def _resolve_path(self, p: str) -> Path:
         """
         Resolve sample filepath:
@@ -65,12 +63,13 @@ class JaguarDataset(Dataset):
         if pp.is_absolute():
             return pp
         return self.base_root / pp
+        
+    def set_epoch(self, epoch: int):
+        self.epoch = int(epoch)
     
-    # ----------------------------
-    # Loading
-    # ----------------------------
     def __getitem__(self, idx: int) -> Dict[str, Any]:
-        s = self.samples[idx]
+        s = dict(self.samples[idx])   # copy
+        s["_epoch"] = self.epoch
 
         img_path = self._resolve_path(s[self.filepath_key])
         img = Image.open(img_path).convert("RGBA")

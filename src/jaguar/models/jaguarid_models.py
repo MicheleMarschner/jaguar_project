@@ -167,7 +167,7 @@ if __name__ == "__main__":
     )
     
     # Calculate unique identities
-    unique_labels = sorted(list(set([str(s.get("ground_truth")) for s in torch_ds.samples])))
+    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in torch_ds.samples])))
     num_classes = len(unique_labels)
     label_to_idx = {l: i for i, l in enumerate(unique_labels)}
     print(f"[Info] Dataset loaded: {len(torch_ds)} images, {num_classes} identities.")
@@ -203,7 +203,7 @@ if __name__ == "__main__":
             # Use the model's extraction logic to get embeddings
             emb = model.get_embeddings(imgs)
             all_embeddings.append(emb.cpu())
-            all_labels.extend([label_to_idx[l] for l in batch_data["label"]])
+            all_labels.extend(batch_data["label_idx"])  
             
             if batch_idx >= 5: break # Sanity check limit
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import torch
+import os
 
 def get_device(prefer_name: str | None = None):
     """
@@ -74,13 +75,13 @@ IN_COLAB = is_colab()
 
 if IN_COLAB:
     PATHS = Paths(
-        data_train=Path("/data/train"),
-        data_test=Path("/data/test"),
-        data=Path("/data"),
-        data_export=Path("/data/fiftyone/jaguar_export"),
-        results=Path("/results"),
-        runs=Path("/experiments"),
-        configs_file=Path("/configs")
+        data_train=Path(os.environ["DATA_TRAIN_ROOT"]),
+        data_test=Path(os.environ["DATA_TEST_ROOT"]),
+        data=Path(os.environ["DATA_ROOT"]),
+        data_export=Path(os.environ["DATA_EXPORT_ROOT"]),
+        results=Path(os.environ["RESULTS_ROOT"]),
+        runs=Path(os.environ["RUNS_ROOT"]),
+        configs_file=Path(os.environ["CONFIGS_ROOT"]),
     )
     
 else:

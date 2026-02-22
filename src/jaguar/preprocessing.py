@@ -19,10 +19,18 @@ def rgba_on_random_bg(rgba: Image.Image, bg_path: Path) -> Image.Image:
     bg = Image.open(bg_path).convert("RGB").resize(rgba.size).convert("RGBA")
     return Image.alpha_composite(bg, rgba).convert("RGB")
 
-def mask_composite(image_rgb: Image.Image, mask_l: Image.Image, bg: Image.Image) -> Image.Image:
-    if mask_l.size != image_rgb.size:
-        mask_l = mask_l.resize(image_rgb.size, resample=Image.NEAREST)
-    return Image.composite(image_rgb, bg, mask_l)
+def _alpha_composite_on_color(rgba: Image.Image, rgb_color=(0, 0, 0), edge_softness: int = 0) -> Image.Image:
+    rgba = rgba.convert("RGBA")
+
+    # Optional: feather edges by blurring alpha
+    if edge_softness > 0:
+        a = rgba.getchannel("A").filter(ImageFilter.GaussianBlur(radius=edge_softness))
+        rgba = rgba.copy()
+        rgba.putalpha(a)
+
+    bg = Image.new("RGBA", rgba.size, (*rgb_color, 255))
+    return Image.alpha_composite(bg, rgba).convert("RGB")
+
 
 class ImageProcessor:
     @staticmethod
@@ -34,11 +42,17 @@ class ImageProcessor:
         return img.convert("RGB")
 
     @staticmethod
-    def gray_bg_cutout(img: Image.Image, sample: dict, base_root: Path, **kwargs) -> Image.Image:
-        print("[DEBUG] gray_bg_cutout called | mode:", img.mode)  
-        # expects img is RGBA cutout
-        return rgba_on_solid_bg(img, color=(128, 128, 128))
+    def black_bg_cutout_alpha(img: Image.Image, sample: dict, base_root, edge_softness: int = 0, **kwargs) -> Image.Image:
+        return _alpha_composite_on_color(img, rgb_color=(0, 0, 0), edge_softness=edge_softness)
 
+    @staticmethod
+    def white_bg_cutout_alpha(img: Image.Image, sample: dict, base_root, edge_softness: int = 0, **kwargs) -> Image.Image:
+        return _alpha_composite_on_color(img, rgb_color=(255, 255, 255), edge_softness=edge_softness)
+
+    @staticmethod
+    def gray_bg_cutout_alpha(img: Image.Image, sample: dict, base_root, edge_softness: int = 0, **kwargs) -> Image.Image:
+        return _alpha_composite_on_color(img, rgb_color=(128, 128, 128), edge_softness=edge_softness)
+    
     @staticmethod
     def random_bg_cutout_deterministic(
         img: Image.Image,
@@ -62,21 +76,6 @@ class ImageProcessor:
         bg_path = rng.choice(bg_files)
 
         return rgba_on_random_bg(img, bg_path)
-
-    @staticmethod
-    def black_bg_mask(img: Image.Image, sample: dict, base_root: Path, mask_key="mask_path", **kwargs) -> Image.Image:
-        # expects raw RGB + mask_path in sample
-        mask_path = _resolve(base_root, sample[mask_key])
-        mask = Image.open(mask_path).convert("L")
-        black = Image.new("RGB", img.size, (0, 0, 0))
-        return mask_composite(img.convert("RGB"), mask, black)
-
-    @staticmethod
-    def white_bg_mask(img: Image.Image, sample: dict, base_root: Path, mask_key="mask_path", **kwargs) -> Image.Image:
-        mask_path = _resolve(base_root, sample[mask_key])
-        mask = Image.open(mask_path).convert("L")
-        white = Image.new("RGB", img.size, (255, 255, 255))
-        return mask_composite(img.convert("RGB"), mask, white)
 
     @staticmethod
     def blur_bg_cutout_alpha(
@@ -110,11 +109,11 @@ class ImageProcessor:
 
 PROCESSORS = {
     "original": ImageProcessor.original,
-    "cutout_gray_bg": ImageProcessor.gray_bg_cutout,
-    "cutout_random_bg": ImageProcessor.random_bg_cutout_deterministic,
-    "mask_black_bg": ImageProcessor.black_bg_mask,
-    "mask_white_bg": ImageProcessor.white_bg_mask,
-    "mask_blur_bg": ImageProcessor.blur_bg_cutout_alpha,
+    "gray_bg": ImageProcessor.gray_bg_cutout_alpha,
+    "random_bg": ImageProcessor.random_bg_cutout_deterministic,
+    "black_bg": ImageProcessor.black_bg_cutout_alpha,
+    "white_bg": ImageProcessor.white_bg_cutout_alpha,
+    "blur_bg": ImageProcessor.blur_bg_cutout_alpha,
 }
 
 def build_habitat_backgrounds(

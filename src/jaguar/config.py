@@ -4,6 +4,52 @@ from dataclasses import dataclass
 from pathlib import Path
 import torch
 
+def get_device(prefer_name: str | None = None):
+    """
+    Select a GPU intelligently:
+    - Print all available CUDA devices
+    - Skip incompatible devices
+    - Prefer a specific GPU name if provided (e.g. "RTX")
+    - Otherwise pick the best (highest capability)
+    """
+    if not torch.cuda.is_available():
+        print("[Config] CUDA not available, using CPU")
+        return torch.device("cpu")
+
+    num_gpus = torch.cuda.device_count()
+    print(f"[Config] Found {num_gpus} CUDA device(s):")
+
+    compatible_devices = []
+
+    for i in range(num_gpus):
+        name = torch.cuda.get_device_name(i)
+        cap = torch.cuda.get_device_capability(i)
+        print(f"  - GPU {i}: {name} (compute capability {cap[0]}.{cap[1]})")
+
+        # PyTorch >= 2.2 typically supports >= sm_70
+        if cap[0] >= 7:  # Skip old GPUs like Quadro P400 (6.1)
+            compatible_devices.append((i, name, cap))
+
+    if not compatible_devices:
+        print("[Config] No compatible CUDA GPUs found, falling back to CPU")
+        return torch.device("cpu")
+
+    # If user prefers a specific GPU (e.g. "RTX", "3090", etc.)
+    if prefer_name is not None:
+        for idx, name, cap in compatible_devices:
+            if prefer_name.lower() in name.lower():
+                torch.cuda.set_device(idx)
+                print(f"[Config] Using preferred GPU {idx}: {name}")
+                return torch.device(f"cuda:{idx}")
+
+    # Otherwise pick the best GPU (highest compute capability)
+    best_gpu = max(compatible_devices, key=lambda x: x[2])
+    best_idx, best_name, best_cap = best_gpu
+
+    torch.cuda.set_device(best_idx)
+    print(f"[Config] Using best compatible GPU {best_idx}: {best_name}")
+    return torch.device(f"cuda:{best_idx}")
+
 def is_colab() -> bool:
     # Most reliable: module only present in Colab
     try:
@@ -45,6 +91,8 @@ else:
         runs=PROJECT_ROOT / "experiments",
     )
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE = get_device(prefer_name="RTX")  
+NUM_WORKERS = 0
+SEED = 51
 NUM_WORKERS = 0
 SEED = 51

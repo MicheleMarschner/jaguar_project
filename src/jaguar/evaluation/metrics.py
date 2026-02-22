@@ -11,38 +11,55 @@ from sklearn.metrics.pairwise import cosine_similarity
 # bundle = ReIDEvalBundle(
 #     model=model,
 #     embeddings=val_embeddings,
-#     labels=val_labels,
+#     labels=labels_idx,
 #     device=device
 # )
-# 
 # results = bundle.compute_all()
 # print(results)
 ###############################################################
 
 class ReIDEvalBundle:
     """
-    Lightweight evaluation bundle for re-identification.
+    Lightweight evaluation bundle for ReID.
 
-    Design goals:
-    - Compute embeddings once
-    - Compute similarity matrix once
+    Supports 3 modes:
+    1) Precomputed embeddings (fastest)            -> embeddings=...
+    2) Images + model (extract embeddings)         -> images=..., model=...
+    3) Embeddings + fine-tuned head projection     -> embeddings=..., model=...
+
+    Design:
+    - Compute embeddings once (cached)
+    - Compute similarity once (cached)
     - Reuse for all metrics (mAP, AP, Rank-k, similarity diagnostics)
     - Fits small validation sets ~300 images)
     """
-
-    def __init__(self, model, embeddings, labels, device="cuda"):
+    def __init__(
+        self,
+        model=None,
+        embeddings=None,
+        labels=None,
+        images=None,
+        device="cuda",
+        normalize=True,
+    ):
         self.model = model
         self.device = device
+        self.normalize = normalize
 
-        # Convert inputs safely
-        if isinstance(embeddings, torch.Tensor):
-            self.input_embeddings = embeddings.detach().cpu().numpy()
+        # Optional inputs
+        self.images = images  # raw tensors (N, C, H, W)
+        self.labels = np.asarray(labels) if labels is not None else None
+
+        # Store initial embeddings (if provided)
+        if embeddings is not None:
+            if isinstance(embeddings, torch.Tensor):
+                self.initial_embeddings = embeddings.detach().cpu().numpy()
+            else:
+                self.initial_embeddings = np.asarray(embeddings)
         else:
-            self.input_embeddings = np.asarray(embeddings)
+            self.initial_embeddings = None
 
-        self.labels = np.asarray(labels)
-
-        # Internal cache (simple, transparent)
+        # Internal cache
         self._finetuned_embeddings = None
         self._sim_matrix = None
         self._ranked_indices = None
@@ -51,26 +68,65 @@ class ReIDEvalBundle:
     # Core cached computations
     # -------------------------------------------------
     def finetuned_embeddings(self):
-        """Forward pass through model head (e.g., MegaDescriptor fine-tuned layer)."""
-        if self._finetuned_embeddings is None:
+        """
+        Returns the final embeddings used for evaluationL
+        1) If embeddings already provided and no model -> use as-is
+        2) If embeddings + model -> pass through model head
+        3) If images + model -> extract embeddings from images
+        """
+        if self._finetuned_embeddings is not None:
+            return self._finetuned_embeddings
+
+        # Case 1: Precomputed embeddings, no model
+        if self.initial_embeddings is not None and self.model is None:
+            emb = self.initial_embeddings
+
+        # Case 2: Precomputed embeddings + fine-tuned head
+        elif self.initial_embeddings is not None and self.model is not None:
             self.model.eval()
             with torch.no_grad():
-                x = torch.FloatTensor(self.input_embeddings).to(self.device)
-                emb = self.model.get_embeddings(x)
-                self._finetuned_embeddings = emb.cpu().numpy()
+                x = torch.from_numpy(self.initial_embeddings).float().to(self.device)
+                # Supports both: model(x) or model.get_embeddings(x)
+                if hasattr(self.model, "get_embeddings"):
+                    emb = self.model.get_embeddings(x)
+                else:
+                    emb = self.model(x)
+                emb = emb.detach().cpu().numpy()
+
+        # Case 3: Images + model (full extraction)
+        elif self.images is not None and self.model is not None:
+            self.model.eval()
+            with torch.no_grad():
+                x = self.images.to(self.device)
+                if hasattr(self.model, "get_embeddings"):
+                    emb = self.model.get_embeddings(x)
+                else:
+                    emb = self.model(x)
+                emb = emb.detach().cpu().numpy()
+        else:
+            raise ValueError(
+                "You must provide either:\n"
+                "- embeddings\n"
+                "- OR (images + model)"
+            )
+        # Optional normalization
+        if self.normalize:
+            norms = np.linalg.norm(emb, axis=1, keepdims=True) + 1e-12
+            emb = emb / norms
+        self._finetuned_embeddings = emb
         return self._finetuned_embeddings
 
     def similarity_matrix(self):
-        """Cosine similarity matrix (NxN)."""
+        """Cosine similarity matrix (NxN), cached."""
         if self._sim_matrix is None:
             emb = self.finetuned_embeddings()
             sim = cosine_similarity(emb)
-            np.fill_diagonal(sim, -1.0)  # exclude self-matching
+            np.fill_diagonal(sim, -1.0)  # exclude self-match
             self._sim_matrix = sim
         return self._sim_matrix
 
     def ranked_indices(self):
-        """Indices sorted by similarity (descending) for each query."""
+        """Sorted retrieval indices per query."""
         if self._ranked_indices is None:
             sim = self.similarity_matrix()
             self._ranked_indices = np.argsort(-sim, axis=1)

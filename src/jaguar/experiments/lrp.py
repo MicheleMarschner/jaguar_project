@@ -1,5 +1,6 @@
-import torch
+import torch, itertools
 import numpy as np
+from PIL import Image
 
 import zennit
 from zennit.attribution import Gradient
@@ -24,6 +25,7 @@ if __name__ == "__main__":
         PATHS.data_export,
         dataset_name=dataset_name,
         processing_fn=None,
+        transform=None,
         overwrite_db=False,
     )
 
@@ -36,6 +38,25 @@ if __name__ == "__main__":
     model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
     split = "training"
     print("[Info] Loaded model:", model_wrapper.name)
+
+    for p in model_wrapper.model.parameters():
+        p.requires_grad_(False)
+
+    torch_ds.transform = model_wrapper.model.transform
+    x0 = torch_ds[0]
+
+
+    ## get weights of frozen model
+
+    # Load the pre-trained ViT model
+    #! model, weights = get_vit_imagenet()
+
+    # Load and preprocess the input image
+    #! image = Image.open('docs/source/_static/cat_dog.jpg').convert('RGB')
+    #! input_tensor = weights.transforms()(image).unsqueeze(0).to("cuda")
+
+    # Store the generated heatmaps
+    heatmaps = []
 
     emb_dir = PATHS.data / "embeddings"
     emb_path = emb_dir / f"embeddings_{model_wrapper.name}_{split}.npy"
@@ -60,33 +81,89 @@ if __name__ == "__main__":
         assert embs.shape[0] == len(filepaths), "Embeddings must align with dataset order!"
         print("[Info] Embedding dim:", embs.shape[1])
 
-# Patch the *DINO* ViT implementation module
-monkey_patch(dino_vit, verbose=True)
-monkey_patch_zennit(verbose=True)
 
-# Basic composite
-comp = LayerMapComposite([
-    (torch.nn.Conv2d, z_rules.Gamma(0.25)),  # patch embed is conv in many ViTs
-    (torch.nn.Linear, z_rules.Gamma(0.05)),  # MLP + qkv/proj are Linear
-])
+    # Experiment with different gamma values for Conv2d and Linear layers
+    # Gamma is a hyperparameter in LRP that controls how much positive vs. negative
+    # contributions are considered in the explanation
+    for conv_gamma, lin_gamma in itertools.product([0.25], [1]):           # [0.1, 0.25, 100], [0, 0.01, 0.05, 0.1, 1]
+        input_tensor.grad = None  # Reset gradients
+        print("Gamma Conv2d:", conv_gamma, "Gamma Linear:", lin_gamma)
+        
+        # Define rules for the Conv2d and Linear layers using 'zennit'
+        # LayerMapComposite maps specific layer types to specific LRP rule implementations
+        zennit_comp = LayerMapComposite([
+            (torch.nn.Conv2d, z_rules.Gamma(conv_gamma)),
+            (torch.nn.Linear, z_rules.Gamma(lin_gamma)),
+        ])
+        
+        # Register the composite rules with the model
+        zennit_comp.register(model)
+        
+        # Forward pass with gradient tracking enabled
+        y = model(input_tensor.requires_grad_())
+        
+        # Get the top 5 predictions
+        _, top5_classes = torch.topk(y, 5, dim=1)
+        top5_classes = top5_classes.squeeze(0).tolist()
+        
+        # Get the class labels
+        labels = weights.meta["categories"]
+        top5_labels = [labels[class_idx] for class_idx in top5_classes]
+        
+        # Print the top 5 predictions and their labels
+        for i, class_idx in enumerate(top5_classes):
+            print(f'Top {i+1} predicted class: {class_idx}, label: {top5_labels[i]}')
+        
+        # Backward pass for the highest probability class
+        # This initiates the LRP computation through the network
+        y[0, top5_classes[0]].backward()
+        
+        # Remove the registered composite to prevent interference in future iterations
+        zennit_comp.remove()
+        
+        # Calculate the relevance by computing Gradient * Input
+        # This is the final step of LRP to get the pixel-wise explanation
+        heatmap = (input_tensor * input_tensor.grad).sum(1)
+        
+        # Normalize relevance between [-1, 1] for plotting
+        heatmap = heatmap / abs(heatmap).max()
+        
+        # Store the normalized heatmap
+        heatmaps.append(heatmap[0].detach().cpu().numpy())
 
-# Preprocess + forward
-## apply transform
-## get one image from ds
+    # Visualize all heatmaps in a grid (3×5) and save to a file
+    # vmin and vmax control the color mapping range
+    imgify(heatmaps, vmin=-1, vmax=1, grid=(3, 5)).save('vit_heatmap.png')
 
-# DINO hub models often output embeddings, not logits
-comp.register(model)
-x = x.requires_grad_()
-feat = model(x)            # usually [B, D] embedding
 
-# choose a scalar target for relevance (examples)
-target = feat[0, 0]        # single embedding dimension
-# target = feat.norm()     # embedding norm (also scalar)
 
-target.backward()
+    # Patch the *DINO* ViT implementation module
+    monkey_patch(dino_vit, verbose=True)
+    monkey_patch_zennit(verbose=True)
 
-# LXT quickstart focuses on Input*Gradient formulation for AttnLRP
-# so this "x * grad" heatmap is the expected baseline form
-heatmap = (x.grad * x).sum(dim=1)[0].detach().cpu()
+    # Basic composite
+    comp = LayerMapComposite([
+        (torch.nn.Conv2d, z_rules.Gamma(0.25)),  # patch embed is conv in many ViTs
+        (torch.nn.Linear, z_rules.Gamma(0.05)),  # MLP + qkv/proj are Linear
+    ])
 
-comp.remove()
+    # Preprocess + forward
+    ## apply transform
+    ## get one image from ds
+
+    # DINO hub models often output embeddings, not logits
+    comp.register(model)
+    x = x.requires_grad_()
+    feat = model(x)            # usually [B, D] embedding
+
+    # choose a scalar target for relevance (examples)
+    target = feat[0, 0]        # single embedding dimension
+    # target = feat.norm()     # embedding norm (also scalar)
+
+    target.backward()
+
+    # LXT quickstart focuses on Input*Gradient formulation for AttnLRP
+    # so this "x * grad" heatmap is the expected baseline form
+    heatmap = (x.grad * x).sum(dim=1)[0].detach().cpu()
+
+    comp.remove()

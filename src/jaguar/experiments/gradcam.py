@@ -45,7 +45,7 @@ def save_cam_row_panel(
 
 if __name__ == "__main__":
 
-    model_name = "MiewID"         # MegaDescriptor-L, DINOv2-Base, MiewID, ConvNeXt-V2
+    model_name = "ConvNeXt-V2"         # DINOv2-Base, MiewID, ConvNeXt-V2, MegaDescriptor-L
     dataset_name = "jaguar_stage0"
     base_root = PATHS.data_export
 

@@ -194,7 +194,7 @@ if __name__ == "__main__":
         torch_ds, 
         batch_size=32, 
         shuffle=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True
     )
     example = next(iter(loader))

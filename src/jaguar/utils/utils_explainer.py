@@ -11,11 +11,10 @@ import torch
 from PIL import Image
 import torch.nn.functional as F
 import numpy as np
-import zennit
-from zennit.attribution import Gradient
-from zennit.composites import EpsilonPlus, EpsilonGammaBox
+
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
+
 
 ## initialize like:
 ## wrapper = FoundationModelWrapper(name, device=DEVICE)

@@ -136,6 +136,9 @@ def load_eva_02():
     eva_model.eval() 
     return eva_model   
 
+# ----------------------------
+# MIEWv3 ID 
+# ----------------------------
 def load_miewid():
     # Force low_cpu_mem_usage=False to avoid the Meta device/AttributeError bug
     miew_model = AutoModel.from_pretrained(

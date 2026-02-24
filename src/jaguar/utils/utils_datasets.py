@@ -61,8 +61,6 @@ def split_train_val_indices_from_labels(labels, val_split: float, seed: int):
     - stratify labels with frequency > 1
     - labels occurring once are forced into train
     """
-    # ut singletons in training set so we don't lose classes
-    train_idx = np.concatenate([train_idx_part, singleton_indices])
 
     labels = [str(x) for x in labels]
     indices = np.arange(len(labels))
@@ -115,17 +113,13 @@ def get_group_aware_stratified_train_val_split(
     identity_col: str = "identity_id",
     burst_group_col: str = "burst_group_id",
     filepath_col: str = "filepath",
-    verbose: bool = True,
 ):
     """
     Burst-aware train/val split
     Primary constraint: Keep all rows belonging to the same burst group in the same split.
-    Secondary objective: Stratify approximately by identity at group level
+    Secondary objective: Stratify approximately by identity at group level - closed set objective
     """
     out = df.copy().reset_index(drop=True)
-
-    if identity_col not in out.columns:
-        raise ValueError(f"Missing required column: {identity_col}")
 
     # ------------------------------------------------------------
     # Build split unit per row:
@@ -177,7 +171,6 @@ def get_group_aware_stratified_train_val_split(
 
     groups_df = pd.DataFrame(group_rows)
 
-
     train_group_idx, val_group_idx = split_train_val_indices_from_labels(
         labels=groups_df["group_identity"].tolist(),
         val_split=val_split,
@@ -201,38 +194,12 @@ def get_group_aware_stratified_train_val_split(
     train_idx = np.where(train_mask)[0]
     val_idx = np.where(val_mask)[0]
 
-    # ------------------------------------------------------------
-    # Diagnostics + group integrity check
-    # ------------------------------------------------------------
-    if verbose:
-        print(f"[BurstAwareSplit] Rows: train={len(train_idx)} | val={len(val_idx)}")
-        print(f"[BurstAwareSplit] Groups: train={len(train_group_ids)} | val={len(val_group_ids)}")
-
-        row_labels = out[identity_col].astype(str).tolist()
-        train_ids = set(row_labels[i] for i in train_idx)
-        val_ids = set(row_labels[i] for i in val_idx)
-        print(
-            f"[BurstAwareSplit] Identities: train={len(train_ids)} | "
-            f"val={len(val_ids)} | overlap={len(train_ids & val_ids)} (closed-set overlap allowed)"
-        )
-
-        tmp = out.copy()
-        tmp["__split"] = None
-        tmp.loc[train_idx, "__split"] = "train"
-        tmp.loc[val_idx, "__split"] = "val"
-
-        per_group_split_nunique = tmp.groupby("_split_group_id")["__split"].nunique()
-        if (per_group_split_nunique > 1).any():
-            raise RuntimeError("Burst/group integrity violated: a group spans multiple splits.")
-
-        print("[BurstAwareSplit] [OK] Burst groups kept intact.")
-
     return train_idx, val_idx, out, groups_df
 
 
 def load_jaguar_from_FO_export(
     manifest_dir,
-    dataset_name="jaguar_stage0",
+    dataset_name="jaguar_init",
     transform=None,
     processing_fn=None,
     overwrite_db=False,

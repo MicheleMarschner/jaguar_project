@@ -1,21 +1,12 @@
-'''
-Create a deduplicated training view / export
-Create splits (open-set or closed-set strategy)
-Train/eval from those splits
-'''
 from __future__ import annotations
 from jaguar.utils.utils import ensure_dir
-import numpy as np
 from pathlib import Path
 import json
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from collections import Counter
 from typing import Literal
 
 from jaguar.config import PATHS, SEED
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
-
+from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_jaguar_from_FO_export
 
 
 # ============================================================
@@ -190,56 +181,6 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 
 
-def split_train_val_indices_from_labels(labels, val_split: float, seed: int):
-    """
-    Generic stratified train/val split on arbitrary split units (images OR groups).
-
-    Logic:
-      - stratify labels that occur >1 times
-      - labels occurring only once are forced into train (to avoid losing classes)
-
-    Parameters
-    ----------
-    labels : list-like
-        One label per split unit.
-    val_split : float
-        Validation fraction, e.g. 0.2
-    seed : int
-        Random seed
-
-    Returns
-    -------
-    train_idx : np.ndarray
-        Indices into the provided labels sequence.
-    val_idx : np.ndarray
-        Indices into the provided labels sequence.
-    """
-    labels = [str(x) for x in labels]
-    indices = np.arange(len(labels))
-
-    counts = Counter(labels)
-    stratifiable_mask = np.array([counts[lbl] > 1 for lbl in labels])
-
-    strat_indices = indices[stratifiable_mask]
-    strat_labels = [labels[i] for i in strat_indices]
-    singleton_indices = indices[~stratifiable_mask]
-
-    if len(strat_indices) == 0:
-        raise ValueError("No stratifiable labels found (all labels occur only once).")
-
-    train_idx_part, val_idx = train_test_split(
-        strat_indices,
-        test_size=val_split,
-        random_state=seed,
-        stratify=strat_labels,
-    )
-
-    # keep singleton-label units in train so classes are not lost
-    train_idx = np.concatenate([train_idx_part, singleton_indices])
-
-    return train_idx, val_idx
-
-
 
 def make_closed_set_splits(
     df: pd.DataFrame,
@@ -248,39 +189,25 @@ def make_closed_set_splits(
     identity_col: str = "identity_id",
 ) -> pd.DataFrame:
     """
-    Closed-set split:
+    Closed-set split (group-aware / burst-preserving):
       - image-disjoint
       - identity-overlapping allowed
-      - potential bursts are kept together
-      - stratified by identity where possible
-      - singleton identities are kept in train to avoid losing classes
+      - burst groups kept together (if burst_group_id is present)
+      - stratified approximately by identity at group level
+      - singleton-label groups are kept in train to avoid losing classes
 
     Returns df with new column: split_final in {'train','val'}.
     """
-    out = df.copy().reset_index(drop=True)
-    out["split_final"] = None
-
-    labels = out[identity_col].astype(str).tolist()
-    indices = np.arange(len(out))
-
-    counts = Counter(labels)
-    stratifiable_mask = np.array([counts[lbl] > 1 for lbl in labels])
-
-    strat_indices = indices[stratifiable_mask]
-    strat_labels = [labels[i] for i in strat_indices]
-    singleton_indices = indices[~stratifiable_mask]
-
-    if len(strat_indices) == 0:
-        raise ValueError("No stratifiable identities (all singleton labels). Closed-set stratified split cannot proceed.")
-
-    train_idx_part, val_idx = train_test_split(
-        strat_indices,
-        test_size=val_size,
-        random_state=seed,
-        stratify=strat_labels,
+    train_idx, val_idx, out, groups_df = get_group_aware_stratified_train_val_split(
+        df=df,
+        val_split=val_size,
+        seed=seed,
+        identity_col=identity_col,
+        burst_group_col="burst_group_id",
+        filepath_col="filepath",
     )
-    train_idx = np.concatenate([train_idx_part, singleton_indices])
 
+    out["split_final"] = None
     out.loc[train_idx, "split_final"] = "train"
     out.loc[val_idx, "split_final"] = "val"
 
@@ -297,43 +224,72 @@ def make_open_set_splits(
     identity_col: str = "identity_id",
 ) -> pd.DataFrame:
     """
-    Open-set split:
-      - identity-disjoint across splits
+    Open-set split (identity-disjoint):
       - all images of an identity go to the same split
+      - val_size targets the fraction of IMAGES in val (approximately)
+      - exact ratio may not be achievable because identities are indivisible units
 
-    Returns df with new column: split_final.
+    Returns df with new column: split_final in {'train','val'}.
     """
     out = df.copy().reset_index(drop=True)
     out["split_final"] = None
 
-    identities = sorted(out[identity_col].dropna().astype(str).unique().tolist())
-    if len(identities) == 0:
-        raise ValueError("No identities found")
-
-    rng = np.random.default_rng(seed)
-    identities = np.array(identities, dtype=object)
-    rng.shuffle(identities)
-
-    n_ids = len(identities)
-
-    n_val = int(round(n_ids * val_size))
-    n_train = n_ids - n_val
-    if n_train <= 0 or n_val <= 0:
-        raise ValueError("Split sizes too aggressive for number of identities")
-
-    train_ids = set(identities[:n_train].tolist())
-    val_ids = set(identities[n_train:].tolist())
-
     out_ids = out[identity_col].astype(str)
+
+    # image counts per identity (identity = indivisible unit in open-set)
+    id_counts = (
+        out_ids.value_counts()
+        .rename_axis(identity_col)
+        .reset_index(name="n_images")
+    )
+
+    total_images = int(len(out))
+    target_val_images = int(round(total_images * val_size))
+    if target_val_images <= 0 or target_val_images >= total_images:
+        raise ValueError("Split sizes too aggressive for number of images/identities")
+
+    # reproducible randomization before greedy packing
+    # (shuffle first, then sort by size desc with stable sort to break ties reproducibly)
+    id_counts = id_counts.sample(frac=1.0, random_state=seed).reset_index(drop=True)
+    id_counts = id_counts.sort_values("n_images", ascending=False, kind="stable").reset_index(drop=True)
+
+    # Greedy identity selection for val to get close to target image count
+    val_ids = []
+    current_val_images = 0
+
+    for _, row in id_counts.iterrows():
+        ident = str(row[identity_col])
+        n_img = int(row["n_images"])
+
+        diff_without = abs(target_val_images - current_val_images)
+        diff_with = abs(target_val_images - (current_val_images + n_img))
+
+        if diff_with <= diff_without:
+            val_ids.append(ident)
+            current_val_images += n_img
+
+    # Fallback: ensure val is non-empty
+    if len(val_ids) == 0:
+        smallest = id_counts.sort_values("n_images", ascending=True).iloc[0]
+        val_ids = [str(smallest[identity_col])]
+        current_val_images = int(smallest["n_images"])
+
+    val_ids = set(val_ids)
+    all_ids = set(id_counts[identity_col].astype(str).tolist())
+    train_ids = all_ids - val_ids
+
+    if len(train_ids) == 0:
+        raise ValueError("Open-set split failed: all identities assigned to val. Reduce val_size.")
+
+    # Assign splits by identity membership (strict identity-disjointness)
     out.loc[out_ids.isin(train_ids), "split_final"] = "train"
     out.loc[out_ids.isin(val_ids), "split_final"] = "val"
 
     if out["split_final"].isna().any():
         missing = out.loc[out["split_final"].isna(), identity_col].unique().tolist()
         raise RuntimeError(f"Some rows were not assigned a split. Missing identities: {missing[:10]}")
-
+    
     return out
-
 
 # ============================================================
 # Save artifacts
@@ -477,15 +433,11 @@ def create_and_save_splits(
     return fo_wrapper, torch_ds, split_df, save_dir
 
 
-# ============================================================
-# Example usage
-# ============================================================
-
 if __name__ == "__main__":
     dataset_name = "jaguar_after_dedup"
     manifest_dir = PATHS.data_export / "dedup"
     dedup_policy = "drop_duplicates"        # "keep_all", "drop_duplicates"
-    strategy = "closed_set"                 # "closed_set" or "open_set"
+    strategy = "open_set"                 # "closed_set" or "open_set"
     out_root = PATHS.runs / "splits"
 
     

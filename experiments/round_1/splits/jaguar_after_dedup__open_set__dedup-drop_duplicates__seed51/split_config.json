@@ -1,8 +1,8 @@
 {
   "dataset_name": "jaguar_after_dedup",
   "manifest_dir": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/data/round_1/fiftyone/dedup",
-  "strategy": "closed_set",
-  "strategy_description": "closed_set (image-disjoint; identity overlap allowed across splits)",
+  "strategy": "open_set",
+  "strategy_description": "open_set (identity-disjoint; all images of an identity stay in one split)",
   "dedup_policy": "drop_duplicates",
   "val_size": 0.2,
   "seed": 51

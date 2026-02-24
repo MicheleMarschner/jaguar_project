@@ -1,8 +1,3 @@
-"""
-Utility functions to load foundation models for ReID.
-These are placeholders; replace with actual model imports / checkpoints.
-"""
-
 import torch
 import numpy as np
 import timm

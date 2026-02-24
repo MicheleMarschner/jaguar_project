@@ -74,7 +74,7 @@ if __name__ == "__main__":
     for p in model.parameters():
         p.requires_grad_(False)
 
-    dataset_name = "jaguar_stage0"
+    dataset_name = "jaguar_init"
     base_root = PATHS.data_export / "init"
 
     fo_ds, torch_ds = load_jaguar_from_FO_export(
@@ -103,7 +103,7 @@ if __name__ == "__main__":
 
     '''
     model_name = "DINOv2-Base"         # MegaDescriptor-L, DINOv2-Base, MiewID, ConvNeXt-V2
-    dataset_name = "jaguar_stage0"
+    dataset_name = "jaguar_init"
     base_root = PATHS.data_export / "init"
 
     fo_ds, torch_ds = load_jaguar_from_FO_export(

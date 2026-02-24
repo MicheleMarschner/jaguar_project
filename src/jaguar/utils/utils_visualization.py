@@ -1,14 +1,87 @@
 from pathlib import Path
-from typing import Any, Optional, Sequence
-
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from typing import Any, Optional, Sequence
 
-from jaguar.utils.utils import denormalize_image, tensor_img_to_hwc01
+from jaguar.utils.utils import denormalize_image, ensure_dir, tensor_img_to_hwc01
 from jaguar.utils.utils_explainer import normalize_heatmap
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+
+sns.set_theme(style="whitegrid", palette="muted")
+
+# ============================================================
+# EDA Plots
+# ============================================================
+
+def plot_image_dimensions(stats_df: pd.DataFrame, save_path: Optional[Path] = None, show: bool = False) -> None:
+    fig = plt.figure(figsize=(8, 4))
+    plt.hist(stats_df["width"], bins=50, alpha=0.6, label="width")
+    plt.hist(stats_df["height"], bins=50, alpha=0.6, label="height")
+    plt.legend()
+    plt.title("Distribution of image widths and heights (train)")
+    plt.xlabel("Pixels")
+    plt.ylabel("Count")
+    plt.tight_layout()
+
+    if save_path is not None:
+        ensure_dir(save_path.parent)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+def plot_identity_distribution(counts: pd.Series, save_path: Path) -> None:
+    
+    plt.figure(figsize=(12, 6))
+
+    # Bar chart
+
+    ax = plt.subplot(1, 2, 1)
+    color_palette = ['red' if x < 20 else 'skyblue' for x in counts.values]
+    sns.barplot(x=counts.values, y=counts.index, palette=color_palette, ax=ax)
+
+    ax.set_title("Training Data: Image Count per Jaguar", fontsize=14)
+    ax.set_xlabel("Number of Images")
+    ax.set_ylabel("Class index (sorted)")
+    ax.tick_params(axis='y', rotation=30)
+
+    # for horizontal bars, median count should be a VERTICAL line (x-axis), not hline
+    ax.axvline(x=counts.median(), color='red', linestyle='--', label=f'Median: {counts.median():.1f}')
+    for p in ax.patches:
+        w = p.get_width()   # horizontal bar length
+        y = p.get_y() + p.get_height() / 2
+        ax.annotate(
+            f"{int(w)}",
+            (w, y),
+            ha="left",
+            va="center",
+            fontsize=8,
+            xytext=(3, 0),
+            textcoords="offset points",
+        )
+    ax.legend()
+
+    # Histogram
+    plt.subplot(1, 2, 2)
+    sns.histplot(counts.values, bins=15, kde=True, color="darkgreen", alpha=0.5)
+    plt.title("Distribution of Class Sizes", fontsize=14)
+    plt.xlabel("Images per Jaguar")
+    plt.ylabel("Count")
+
+    plt.tight_layout()
+
+    ensure_dir(save_path.parent)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+
+
+# ============================================================
+# Interpretability Plots
+# ============================================================
 
 
 def plot_ig_triplets_from_pt(
@@ -102,7 +175,6 @@ def overlay_heatmap_on_image(img_rgb, heatmap, alpha=0.45, cmap="jet"):
     return np.clip(overlay, 0, 1)
 
 
-
 def _resolve_rows_to_plot(
     n_available: int,
     indices: Optional[Sequence[int]] = None,
@@ -122,7 +194,6 @@ def _resolve_rows_to_plot(
         if r < 0 or r >= n_available:
             raise IndexError(f"Requested row {r} out of range [0, {n_available-1}]")
     return rows
-
 
 
 def plot_similarity_ig_quad_from_pt(
@@ -307,7 +378,7 @@ if __name__ == "__main__":
 
     fo_ds, torch_ds = load_jaguar_from_FO_export(
         PATHS.data_export / "init",
-        dataset_name="jaguar_stage0",
+        dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
     )

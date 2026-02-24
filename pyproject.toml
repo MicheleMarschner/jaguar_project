@@ -31,7 +31,8 @@ dependencies = [
   "timm",
   "quantus==0.6.0",
   "pyarrow==23.0.1",
-  "ImageHash"
+  "ImageHash",
+  "seaborn==0.13.2"
 ]
 
 [project.optional-dependencies]

@@ -27,7 +27,7 @@ from jaguar.utils.utils_deduplication import (
 )
 
 # ============================================================
-# kNN (model - dependent): Find bursts through emebeddings similarity
+# kNN (model - dependent): Find bursts through embeddings similarity
 # ============================================================
 
 def build_knn_candidate_edges_for_identity(
@@ -150,7 +150,7 @@ def precompute_knn_candidate_edges_grouped_by_identity(
 
 def filter_candidate_edges(
     candidate_edges_df: pd.DataFrame,
-    sim_threshold: Optional[float] = 0.95,
+    sim_threshold: Optional[float] = None,
     phash_threshold: Optional[int] = 4,
     use_or_rule: bool = True,
     require_same_identity: bool = True,
@@ -469,7 +469,7 @@ def run_burst_assignment_from_precomputed_candidates(
     meta_df: pd.DataFrame,
     embeddings_aligned: np.ndarray,
     candidate_edges_raw_df: pd.DataFrame,
-    sim_threshold: float = 0.95,
+    sim_threshold: float = None,
     phash_threshold: int = 4,
     use_or_rule: bool = True,
     min_cluster_size: int = 2,
@@ -598,40 +598,226 @@ def apply_dedup_assignments_to_fiftyone(
     print(f"Tagged representatives: {len(rep_fps)}")
 
 
+def compute_phash_threshold_diagnostics(
+    meta_df: pd.DataFrame,
+    thresholds: list[int],
+    identity_col: str = "identity_id",
+    phash_col: str = "phash",
+    phash_hex_col: str = "phash_hex",
+    max_within_pairs_per_identity: int = 200,
+    max_cross_pairs_total: int = 5000,
+    seed: int = 51,
+) -> pd.DataFrame:
+    """
+    Goal:
+      Estimate how pHash threshold behaves on:
+      - within-identity pairs (expected to contain more near-duplicates / bursts)
+      - cross-identity pairs (safety / collision signal)
+
+    This helps choose a sensible phash_threshold grid/range before the real
+    graph+embedding dedup sweep.
+    """
+    df = meta_df.copy().reset_index(drop=True)
+
+    # Ensure pHash object column exists (reuse cached phash_hex if needed)
+    if phash_col not in df.columns:
+        df[phash_col] = [
+            imagehash.hex_to_hash(h) if pd.notna(h) and h is not None else None
+            for h in df[phash_hex_col]
+        ]
+
+    # Keep only rows with identity + phash
+    df = df[df[identity_col].notna()].copy()
+    df = df[df[phash_col].notna()].copy()
+
+    rng = np.random.default_rng(seed)
+
+    # ----------------------------
+    # Sample within-identity pairs
+    # ----------------------------
+    within_dists: list[int] = []
+
+    for ident, g in df.groupby(identity_col, dropna=True):
+        idx = g.index.to_numpy()
+        n = len(idx)
+        if n < 2:
+            continue
+
+        # all possible pairs if small, otherwise sample
+        # num possible = n*(n-1)/2
+        all_pairs_count = (n * (n - 1)) // 2
+
+        if all_pairs_count <= max_within_pairs_per_identity:
+            # enumerate all pairs
+            for a_pos in range(n):
+                for b_pos in range(a_pos + 1, n):
+                    h1 = df.at[idx[a_pos], phash_col]
+                    h2 = df.at[idx[b_pos], phash_col]
+                    d = phash_distance(h1, h2)
+                    if d is not None:
+                        within_dists.append(int(d))
+        else:
+            # random sample pairs for this identity
+            seen = set()
+            target = int(max_within_pairs_per_identity)
+            tries = 0
+            max_tries = target * 10
+
+            while len(seen) < target and tries < max_tries:
+                i = int(rng.integers(0, n))
+                j = int(rng.integers(0, n))
+                tries += 1
+                if i == j:
+                    continue
+                a, b = (i, j) if i < j else (j, i)
+                if (a, b) in seen:
+                    continue
+                seen.add((a, b))
+
+                h1 = df.at[idx[a], phash_col]
+                h2 = df.at[idx[b], phash_col]
+                d = phash_distance(h1, h2)
+                if d is not None:
+                    within_dists.append(int(d))
+
+    # ----------------------------
+    # 2) Sample cross-identity pairs (global)
+    # ----------------------------
+    cross_dists: list[int] = []
+
+    indices = df.index.to_numpy()
+    labels = df[identity_col].astype(str).to_numpy()
+    n_total = len(indices)
+
+    if n_total >= 2 and max_cross_pairs_total > 0:
+        seen = set()
+        tries = 0
+        max_tries = max_cross_pairs_total * 20
+
+        while len(cross_dists) < int(max_cross_pairs_total) and tries < max_tries:
+            i = int(rng.integers(0, n_total))
+            j = int(rng.integers(0, n_total))
+            tries += 1
+            if i == j:
+                continue
+            if labels[i] == labels[j]:
+                continue
+
+            a, b = (i, j) if i < j else (j, i)
+            if (a, b) in seen:
+                continue
+            seen.add((a, b))
+
+            h1 = df.at[indices[a], phash_col]
+            h2 = df.at[indices[b], phash_col]
+            d = phash_distance(h1, h2)
+            if d is not None:
+                cross_dists.append(int(d))
+
+    within_arr = np.array(within_dists, dtype=np.int32) if within_dists else np.array([], dtype=np.int32)
+    cross_arr = np.array(cross_dists, dtype=np.int32) if cross_dists else np.array([], dtype=np.int32)
+
+    rows = []
+    n_within = int(len(within_arr))
+    n_cross = int(len(cross_arr))
+
+    for t in sorted(set(int(x) for x in thresholds)):
+        within_links = int((within_arr <= t).sum()) if n_within else 0
+        cross_links = int((cross_arr <= t).sum()) if n_cross else 0
+
+        within_rate = (within_links / n_within) if n_within else 0.0
+        cross_rate = (cross_links / n_cross) if n_cross else 0.0
+
+        ratio = (within_rate / cross_rate) if cross_rate > 0 else (np.inf if within_rate > 0 else 0.0)
+
+        rows.append({
+            "threshold": int(t),
+            "n_within_pairs": n_within,
+            "within_links": within_links,
+            "within_link_rate": float(within_rate),
+            "n_cross_pairs": n_cross,
+            "cross_links": cross_links,
+            "cross_link_rate": float(cross_rate),
+            "link_ratio_within_to_cross": float(ratio) if np.isfinite(ratio) else np.inf,
+        })
+
+    return pd.DataFrame(rows).sort_values("threshold").reset_index(drop=True)
+
+
+def load_or_create_phash_diagnostics(
+    meta_df: pd.DataFrame,
+    out_file: Path,
+    thresholds: list[int],
+    identity_col: str = "identity_id",
+    phash_col: str = "phash",
+    phash_hex_col: str = "phash_hex",
+    max_within_pairs_per_identity: int = 200,
+    max_cross_pairs_total: int = 5000,
+    seed: int = 51,
+    force_recompute: bool = False,
+) -> pd.DataFrame:
+    out_file = Path(out_file)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if out_file.exists() and not force_recompute:
+        return pd.read_parquet(out_file)
+
+    diag_df = compute_phash_threshold_diagnostics(
+        meta_df=meta_df,
+        thresholds=thresholds,
+        identity_col=identity_col,
+        phash_col=phash_col,
+        phash_hex_col=phash_hex_col,
+        max_within_pairs_per_identity=max_within_pairs_per_identity,
+        max_cross_pairs_total=max_cross_pairs_total,
+        seed=seed,
+    )
+    diag_df.to_parquet(out_file, index=False)
+
+    safe_rows = diag_df[diag_df['cross_links'] == 0]
+    
+    if len(safe_rows) > 0:
+        # Pick the highest threshold that is still safe
+        COLLISION_FREE_THRESHOLD = int(safe_rows['threshold'].max())
+        print(f"✅ Found Safe Threshold: {COLLISION_FREE_THRESHOLD} (0 Collisions)")
+        print(f"   -> At this level, you catch {safe_rows.loc[safe_rows['threshold']==COLLISION_FREE_THRESHOLD, 'within_links'].values[0]} duplicates.")
+    else:
+        # Fallback if even threshold 0 has collisions (rare)
+        print("⚠️ Warning: No zero-collision threshold found. Defaulting to strict 2.")
+        COLLISION_FREE_THRESHOLD = 2
+
+    # OPTIONAL: Print the 'danger zone' to see what we are avoiding
+    next_t = COLLISION_FREE_THRESHOLD + 1
+    if next_t in diag_df['threshold'].values:
+        bad_row = diag_df[diag_df['threshold'] == next_t].iloc[0]
+        print(f"   -> Warning: At threshold {next_t}, you would have {bad_row['cross_links']} collisions!")
+    
+    return diag_df, COLLISION_FREE_THRESHOLD
 
 
 if __name__ == "__main__":
     K_CANDIDATES = 50
-    SIM_THRESHOLD = 0.95
-    PHASH_THRESHOLD = 4
     MIN_CLUSTER_SIZE = 2
-
+    
     model_name = "MegaDescriptor-L"
-    dataset_name = "jaguar_stage0"
+    dataset_name = "jaguar_init"
 
+    # 1. LOAD DATA
     fo_wrapper, torch_ds = load_jaguar_from_FO_export(
         PATHS.data_export / "init",
         dataset_name=dataset_name,
         processing_fn=None,
         overwrite_db=False,
     )
-
     print("[Info] Dataset size:", len(torch_ds))
 
     model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
-    print("[Info] Loaded model:", model_wrapper.name)
-
     embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
-    print("[Info] Embeddings shape:", np.asarray(embeddings).shape)
     
-    # Build aligned metadata
     jag_meta = build_meta_from_jaguar_dataset(torch_ds)
-    assert len(jag_meta) == len(embeddings), (
-        f"Mismatch: meta rows={len(jag_meta)} vs embeddings={len(embeddings)}. "
-        "Embedding extraction may have reordered or filtered samples."
-    )
+    assert len(jag_meta) == len(embeddings), "Mismatch in meta vs embeddings"
 
-    # check if experiment configuration exists otherwise precompute
+    # 2. SETUP PATHS
     out_dir = PATHS.runs / "deduplication"
     run_folder = out_dir / f"dedup__{model_name.lower()}"
     precompute_run_folder = run_folder / f"dedup_precompute__{model_name.lower()}__k{K_CANDIDATES}"
@@ -639,10 +825,12 @@ if __name__ == "__main__":
     phash_size = 8
     candidate_edges_file_name = "candidate_edges.parquet"
 
+    # 3. PRECOMPUTE META & CANDIDATES (WITHIN IDENTITY)
+    # This is fine! We only want to find duplicates within the same jaguar folder.
+    meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name)
+
     if not precompute_run_folder.exists():
-        # Load pHash and brightness or precompute once (image-only, model-independent)
-        meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name)
-        # Precompute knn candidate edges once (threshold-free, model-dependent)
+        print("[Info] Precomputing kNN candidates...")
         cand_raw = precompute_knn_candidate_edges_grouped_by_identity(
             meta_df=meta_img_features,
             embeddings_aligned=embeddings,
@@ -651,100 +839,50 @@ if __name__ == "__main__":
             filepath_col="filepath",
             phash_col="phash",
         )
-
         save_model_knn_edge_candidates(
-            out_dir= precompute_run_folder, 
+            out_dir=precompute_run_folder, 
             candidate_edges_df=cand_raw,
-            precompute_config={
-                "dataset_name": dataset_name,
-                "model_name": model_name,
-                "k_candidates": K_CANDIDATES,
-                "hash_size": phash_size,
-                "seed": SEED,
-            },
+            precompute_config={"k": K_CANDIDATES, "model": model_name},
             file_name=candidate_edges_file_name
         )
-
     else:
+        print("[Info] Loading precomputed candidates...")
         cand_raw = pd.read_parquet(precompute_run_folder / candidate_edges_file_name) 
+
+    # 4. CALCULATE SAFE THRESHOLD
+    # This checks CROSS-IDENTITY collisions to find the mathematical limit.
+    # It ensures our pHash threshold is strict enough.
+    phash_diag_file = run_folder / "phash_threshold_diagnostics.parquet"
     
-    sweep = run_folder / f"dedup_sweep_grid.parquet"
-    # Sweep multiple thresholds (cheap)
-    sim_thresholds=[0.90, 0.93, 0.95, 0.97, 0.99]
-    phash_thresholds=[2, 4, 6, 8]
-    # use_or_rules=[True, False],   # compare OR vs AND
+    phash_diag_df, COLLISION_FREE_THRESHOLD = load_or_create_phash_diagnostics(
+        meta_df=meta_img_features,
+        out_file=phash_diag_file,
+        thresholds=list(range(0, 21)),
+        max_within_pairs_per_identity=500,
+        max_cross_pairs_total=10000,
+        seed=SEED,
+    )
 
-    if not sweep.exists():
-        meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name)
-        
-        sweep_rows = []
-        for sim_t in tqdm(sim_thresholds):
-            for ph_t in tqdm(phash_thresholds):
-                res = run_burst_assignment_from_precomputed_candidates(
-                    meta_df=meta_img_features,
-                    embeddings_aligned=embeddings,
-                    candidate_edges_raw_df=cand_raw,
-                    sim_threshold=sim_t,
-                    phash_threshold=ph_t,
-                    use_or_rule=True,
-                    min_cluster_size=MIN_CLUSTER_SIZE,
-                )
-
-                row = {
-                    "sim_threshold": sim_t,
-                    "phash_threshold": ph_t,
-                    "use_or_rule": True,
-                    "min_cluster_size": MIN_CLUSTER_SIZE,
-                    "num_images": res["num_images"],
-                    "num_identities": res["num_identities"],
-                    "num_filtered_edges": res["num_filtered_edges"],
-                    "num_burst_clusters": res["num_burst_clusters"],
-                    "num_burst_images": res["num_burst_images"],
-                    "num_duplicates_tagged": res["num_duplicates_tagged"],
-                    "num_representatives": res["num_representatives"],
-                    "duplicate_rate": (res["num_duplicates_tagged"] / res["num_images"]) if res["num_images"] else 0.0,
-                    "burst_image_rate": (res["num_burst_images"] / res["num_images"]) if res["num_images"] else 0.0,
-                }
-                sweep_rows.append(row)
-
-        sweep_df = pd.DataFrame(sweep_rows).sort_values(
-            ["sim_threshold", "phash_threshold"]
-        ).reset_index(drop=True)
-
-        sweep_df.to_parquet(sweep, index=False)
-        print(f"[Info] Saved sweep grid: {sweep}")
-        print(sweep_df.head())  
-
-
-    chosen_sim = 0.95
-    chosen_ph = 4
-    chosen_use_or = True
-    chosen_min_cluster_size = MIN_CLUSTER_SIZE 
-
-    if chosen_sim not in sim_thresholds:
-        raise ValueError(f"chosen_sim={chosen_sim} not in sim_thresholds={sim_thresholds}")
-
-    if chosen_ph not in phash_thresholds:
-        raise ValueError(f"chosen_ph={chosen_ph} not in phash_thresholds={phash_thresholds}")
+    # 5. EXECUTE DEDUPLICATION
+    # We use the DINO candidates (speed) but filter with SAFE_THRESHOLD (safety)
+    print(f"\n[Run] Executing Safe Deduplication with pHash <= {COLLISION_FREE_THRESHOLD}...")
     
-    meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name)
-    cand_raw = pd.read_parquet(precompute_run_folder / candidate_edges_file_name) 
-
     result = run_burst_assignment_from_precomputed_candidates(
         meta_df=meta_img_features,
         embeddings_aligned=embeddings,
         candidate_edges_raw_df=cand_raw,
-        sim_threshold=chosen_sim,
-        phash_threshold=chosen_ph,
-        use_or_rule=chosen_use_or,
-        min_cluster_size=chosen_min_cluster_size,
+        sim_threshold=None,              # DISABLE Semantic Merging (Aggressive)
+        phash_threshold=COLLISION_FREE_THRESHOLD, # ENABLE Safe Pixel Merging
+        use_or_rule=True,
+        min_cluster_size=MIN_CLUSTER_SIZE,
     )
 
+    # 6. SAVE ARTIFACTS
     run_dir = run_folder / (
-        f"dedup_final__{model_name.lower()}__sim{chosen_sim:.2f}_ph{chosen_ph}__"
-        f"{'or' if chosen_use_or else 'and'}__minSize{chosen_min_cluster_size}"
+        f"dedup_final__{model_name.lower()}__ph{COLLISION_FREE_THRESHOLD}__SAFE"
     )
     
+    # FIXED: Replaced 'chosen_sim', 'chosen_ph' with actual values
     save_dedup_artifacts(
         out_dir=run_dir,
         meta_df=result["meta"],
@@ -758,19 +896,19 @@ if __name__ == "__main__":
         config_dict={
             "dataset_name": dataset_name,
             "model_name": model_name,
-            "sim_threshold": chosen_sim,
-            "phash_threshold": chosen_ph,
-            "use_or_rule": chosen_use_or,
-            "min_cluster_size": chosen_min_cluster_size,
+            "sim_threshold": "None (Safe Mode)",
+            "phash_threshold": COLLISION_FREE_THRESHOLD,
+            "use_or_rule": True,
+            "min_cluster_size": MIN_CLUSTER_SIZE,
         },
         candidate_edges_df=cand_raw,
         filtered_edges_df=result["filtered_edges_df"],
     )
     
+    # 7. APPLY TO FIFTYONE
     meta_assignments = pd.read_parquet(run_dir / "burst_assignments.parquet")
     apply_dedup_assignments_to_fiftyone(
         fo_wrapper.get_dataset(),         
         meta_assignments,
     )
     fo_wrapper.export_manifest(PATHS.data_export / "dedup")
-        

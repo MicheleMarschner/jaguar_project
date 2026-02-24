@@ -1,12 +1,13 @@
 import os
 from datetime import datetime
-from typing import Sequence
 import torch
 import numpy as np
 from dataclasses import fields
 from pathlib import Path
 import wandb
 import random
+
+from typing import Sequence
 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS, Paths, IN_COLAB
 

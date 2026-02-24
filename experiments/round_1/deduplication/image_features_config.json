@@ -1,5 +1,5 @@
 {
-  "dataset_name": "jaguar_stage0",
+  "dataset_name": "jaguar_init",
   "hash_type": "phash",
   "hash_size": 8,
   "sharpness": "laplacian_var_cv2"

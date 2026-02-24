@@ -4,7 +4,6 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import argparse
 import tomllib
 import torch
-
 from torch.utils.data import DataLoader, Subset, random_split
 
 from jaguar.config import PATHS, DEVICE, PROJECT_ROOT
@@ -48,7 +47,7 @@ def main():
     # Load Dataset (Existing loading logic...)
     _, full_ds = load_jaguar_from_FO_export(
         PATHS.data_export / "init",
-        dataset_name="jaguar_stage0",
+        dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
     )

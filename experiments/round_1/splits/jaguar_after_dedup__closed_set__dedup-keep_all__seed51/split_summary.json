@@ -1,0 +1,12 @@
+{
+  "num_images_total": 1895,
+  "num_identities_total": 31,
+  "images_per_split": {
+    "train": 1496,
+    "val": 399
+  },
+  "identities_per_split": {
+    "train": 31,
+    "val": 31
+  }
+}

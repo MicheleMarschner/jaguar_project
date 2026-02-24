@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Any, Optional, Tuple, Dict, List
+from typing import Any, Optional, Sequence, Tuple, Dict, List
 
 from jaguar.utils.utils_mining import quality_score
 
@@ -176,6 +176,36 @@ def easy_negative(
         if _allow_pair(i, j, labels, cluster_id, same_id_required=False):
             return j, float(sim[i, j])
     raise ValueError(f"No easy negative found for i={i}.")
+
+
+## TODO Kann man das generischer machen?
+def build_easy_positive_pairs(
+    query_indices: Sequence[int],
+    sim: np.ndarray,
+    ranked: np.ndarray,
+    labels: np.ndarray,
+    easy_positive_fn,   # pass your jaguar.evaluation.mining.easy_positive
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Returns:
+      ref_indices [N]
+      pair_sims   [N]
+    """
+    q = np.asarray(query_indices, dtype=np.int64).reshape(-1)
+    ref_indices = []
+    pair_sims = []
+
+    for i in q:
+        j, s = easy_positive_fn(
+            int(i),
+            sim=sim,
+            ranked=ranked,
+            labels=labels,
+        )
+        ref_indices.append(int(j))
+        pair_sims.append(float(s))
+
+    return np.asarray(ref_indices, dtype=np.int64), np.asarray(pair_sims, dtype=np.float32)
 
 
 def mining_pack_for_query(

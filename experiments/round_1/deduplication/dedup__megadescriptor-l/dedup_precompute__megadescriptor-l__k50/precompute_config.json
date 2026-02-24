@@ -1,0 +1,7 @@
+{
+  "dataset_name": "jaguar_stage0",
+  "model_name": "MegaDescriptor-L",
+  "k_candidates": 50,
+  "hash_size": 8,
+  "seed": 51
+}

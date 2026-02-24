@@ -1,0 +1,12 @@
+{
+  "num_candidate_edges": 50407,
+  "columns": [
+    "identity_id",
+    "src_emb_row",
+    "dst_emb_row",
+    "src_filepath",
+    "dst_filepath",
+    "cos_sim",
+    "phash_dist"
+  ]
+}

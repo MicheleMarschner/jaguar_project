@@ -26,10 +26,12 @@ dependencies = [
   "python-dotenv==1.2.1",
   "fiftyone==1.11.0",
   "grad-cam==1.5.5",
-  "transformers==4.39.3",
+  "transformers==4.51.0",
   "faiss-cpu==1.13.2",
   "timm",
-  "zennit==1.0.0",
+  "quantus==0.6.0",
+  "pyarrow==23.0.1",
+  "ImageHash"
 ]
 
 [project.optional-dependencies]

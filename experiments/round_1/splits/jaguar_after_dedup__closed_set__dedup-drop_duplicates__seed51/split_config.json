@@ -1,0 +1,12 @@
+{
+  "dataset_name": "jaguar_after_dedup",
+  "manifest_dir": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/data/fiftyone/dedup",
+  "strategy": "closed_set",
+  "strategy_description": "closed_set (image-disjoint; identity overlap allowed across splits)",
+  "dedup_policy": "drop_duplicates",
+  "val_size": 0.2,
+  "test_size": 0.0,
+  "seed": 51,
+  "overwrite_db": false,
+  "notes": "Final split assignments saved; intermediate stages recomputed on-the-fly and logged to console."
+}

@@ -1,0 +1,8 @@
+{
+  "dataset_name": "jaguar_stage0",
+  "model_name": "MiewID",
+  "sim_threshold": 0.95,
+  "phash_threshold": 4,
+  "use_or_rule": true,
+  "min_cluster_size": 2
+}

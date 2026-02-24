@@ -6,15 +6,19 @@ ArcFace CAM is best to inspect:
 Similarity CAM (query→positive ref and query→hard negative)
 '''
 
-
 import torch
 from PIL import Image
 import torch.nn.functional as F
 import numpy as np
+from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
+from captum.attr import IntegratedGradients
 
+from jaguar.models.foundation_models import FoundationModelWrapper
+from jaguar.config import DEVICE, PATHS
 
 ## initialize like:
 ## wrapper = FoundationModelWrapper(name, device=DEVICE)
@@ -28,44 +32,6 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 ##      target_layers=target_layers, 
 ##      reshape_transform=reshape_transform
 ##  )
-
-
-
-# --- Helper functions for GradCAM on Transformers ---
-def vit_reshape_transform(tensor):
-    """
-    Reshapes ViT (EVA-02, DINO) tokens [B, N, C] -> [B, C, H, W]
-    """
-    n_tokens = tensor.shape[1]
-    
-    # default: assume 1 CLS token
-    start_index = 1
-    spatial_tokens = n_tokens - 1
-    
-    # Check for DINOv2 with registers (usually 4 registers + 1 CLS = 5)
-    # If the standard math (tokens-1) isn't a perfect square, try (tokens-5)
-    if int(np.sqrt(spatial_tokens)) ** 2 != spatial_tokens:
-        if int(np.sqrt(n_tokens - 5)) ** 2 == (n_tokens - 5):
-            start_index = 5
-    
-    result = tensor[:, start_index:, :] 
-    
-    # Calculate grid size dynamically
-    target_len = result.shape[1]
-    grid_size = int(np.sqrt(target_len))
-    
-    # [B, N, C] -> [B, C, N] -> [B, C, H, W]
-    result = result.transpose(1, 2)
-    result = result.reshape(tensor.size(0), result.size(1), grid_size, grid_size)
-    return result
-
-
-def swin_reshape_transform(tensor):
-    # Swin output is usually already spatial but channel-last in some implementations
-    # Check your specific Swin implementation. Usually: [B, H, W, C] -> [B, C, H, W]
-    if len(tensor.shape) == 4:
-        return tensor.permute(0, 3, 1, 2)
-    return tensor
 
 
 '''
@@ -108,26 +74,49 @@ def swin_reshape_transform(tensor, **kwargs):
 
 '''
 
+class SimilarityForward(torch.nn.Module):
+    """
+    Returns scalar similarity per sample:
+        s(x) = cosine(f(x), ref_emb)
+    Output shape: [B]
+    """
+    def __init__(self, foundation_wrapper, ref_emb: torch.Tensor, maximize: bool = True):
+        super().__init__()
+        self.w = foundation_wrapper
+
+        ref = ref_emb.detach()
+        if ref.ndim == 2 and ref.shape[0] == 1:
+            ref = ref.squeeze(0)  # [D]
+        self.register_buffer("ref", F.normalize(ref, p=2, dim=0))
+        self.maximize = maximize
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        emb = self.w.get_embeddings_tensor(x)  # [B,D]
+        emb = F.normalize(emb, p=2, dim=1)
+        sim = (emb * self.ref.unsqueeze(0)).sum(dim=1)  # [B]
+        return sim if self.maximize else -sim
+
 
 class CosineSimilarityTarget:
     def __init__(self, ref_embedding, maximize=True):
-        """
-        Expects a 1D reference embedding of shape [D].
-        maximize (bool): If True, highlights features that make the images SIMILAR.
-                         If False, highlights features that make them DIFFERENT.
-        """
-        self.ref_embedding = F.normalize(ref_embedding.detach().clone().view(-1), p=2, dim=-1)
+        ref = ref_embedding.detach()
+        if ref.ndim == 2 and ref.shape[0] == 1:
+            ref = ref.squeeze(0)
+        self.ref_embedding = F.normalize(ref, p=2, dim=0)   # [D]
         self.maximize = maximize
 
     def __call__(self, model_output):
-        if isinstance(model_output, dict):
-            model_output = model_output.get("embeddings") or next(iter(model_output.values()))
-        elif isinstance(model_output, (tuple, list)):
-            model_output = model_output[0]
-
-        query_embedding = F.normalize(model_output.view(-1), p=2, dim=-1)
-        sim = torch.sum(query_embedding * self.ref_embedding)
+        emb = model_output
+        if isinstance(emb, dict):
+            emb = emb.get("embeddings") or next(iter(emb.values()))
+        elif isinstance(emb, (tuple, list)):
+            emb = emb[0]
+        if emb.ndim == 2 and emb.shape[0] == 1:
+            emb = emb.squeeze(0)  # [D]
+        emb = F.normalize(emb, p=2, dim=0)
+        sim = (emb * self.ref_embedding).sum()
         return sim if self.maximize else -sim
+
 
 class EmbeddingForwardWrapper(torch.nn.Module):
     """
@@ -143,6 +132,7 @@ class EmbeddingForwardWrapper(torch.nn.Module):
             return self.base_model.get_embeddings(x)
         return self.base_model(x)
 
+
 def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Image, maximize: bool = True):
     """
     Generates a GradCAM heatmap on the 'query_img' based on its similarity to 'ref_img'.
@@ -157,10 +147,7 @@ def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Imag
 
     # 2. Extract Reference Embedding
     with torch.no_grad():
-        if hasattr(model, "get_embeddings"):
-            ref_emb = model.get_embeddings(ref_tensor)
-        else:
-            ref_emb = model(ref_tensor)
+        ref_emb = wrapper.get_embeddings_tensor(ref_tensor)   # [1,D]
 
     # 3. Setup GradCAM using the Explainer Wrapper
     cam_model = EmbeddingForwardWrapper(model)
@@ -186,52 +173,63 @@ def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Imag
     return grayscale_cam, visualization
 
 
-
-
-
-
-
-
-
-def lrp_zennit_input_relevance(
-    model: torch.nn.Module,
-    x: torch.Tensor,              # [1,3,H,W]
-    target_idx: int,
-    composite: str = "epsilon_plus",
-    canonizers=None,
-) -> np.ndarray:
+def ig_saliency_similarity(
+    x: torch.Tensor,                  # [B,3,H,W], preprocessed (can be CPU)
+    explainer: IntegratedGradients,
+    device: torch.device | str,
+    steps: int = 32,
+    internal_bs: int = 16,
+) -> torch.Tensor:
     """
-    Returns relevance heatmap [H,W] for input x using zennit composites.
+    IG for similarity scalar s(x)=cos(f(x), ref_emb).
+    No class target is used because forward returns [B].
+    Returns:
+        saliency [B,H,W] on CPU
     """
-    from zennit.attribution import Gradient
-    from zennit.composites import EpsilonPlus, EpsilonGammaBox
+    x = x.to(device).requires_grad_(True)
+    baseline = torch.zeros_like(x)
 
-    if composite == "epsilon_plus":
-        comp = EpsilonPlus()
-    elif composite == "epsilon_gamma_box":
-        comp = EpsilonGammaBox()
-    else:
-        raise ValueError(f"Unknown composite: {composite}")
+    attr = explainer.attribute(
+        inputs=x,
+        baselines=baseline,
+        target=None,
+        n_steps=steps,
+        internal_batch_size=internal_bs,
+        method="riemann_trapezoid",
+    )  # [B,3,H,W]
 
-    model.eval()
-    x = x.requires_grad_(True)
+    sal = attr.abs().sum(dim=1)  # [B,H,W]
+    return sal.detach().cpu()
 
-    with comp.context(model, canonizers=canonizers):
-        out = model(x)
 
-        # handle common model outputs
-        if isinstance(out, dict):
-            out = out.get("logits", None) or out.get("preds", None) or next(iter(out.values()))
-        if isinstance(out, (tuple, list)):
-            out = out[0]
+def ig_saliency_batched_similarity(X, explainer, device, steps=32, internal_bs=32, batch_size=32):
+    outs = []
+    n = X.size(0)
+    print(f"[IG] Start batched IG: N={n}, batch_size={batch_size}, steps={steps}, internal_bs={internal_bs}")
+    for i in range(0, n, batch_size):
+        xb = X[i:i+batch_size]
+        print(f"[IG] Batch {i//batch_size + 1}/{(n + batch_size - 1)//batch_size} | xb.shape={tuple(xb.shape)}")
+        out = ig_saliency_similarity(
+            xb, explainer=explainer, device=device, steps=steps, internal_bs=internal_bs
+        )
+        print(f"[IG] Done batch {i//batch_size + 1}, out.shape={tuple(out.shape)}")
+        outs.append(out)
+    return torch.cat(outs, dim=0)
 
-        if out.ndim != 2:
-            raise ValueError(f"Expected logits [B,C], got {tuple(out.shape)}. "
-                             f"For embeddings, define a scalar target (see note below).")
 
-        score = out[:, target_idx].sum()
-        attr = Gradient(model)(x, score)  # relevance-like attribution at input
+def normalize_heatmap(h):
+    """
+    h: [H,W] tensor/ndarray
+    returns [H,W] in [0,1]
+    """
+    if isinstance(h, torch.Tensor):
+        h = h.detach().cpu().float().numpy()
+    h = h.astype(np.float32)
 
-    heat = attr.sum(dim=1).squeeze(0)  # [H,W]
-    heat = heat.detach().cpu().numpy()
-    return heat
+    h_min = h.min()
+    h_max = h.max()
+    if h_max - h_min < 1e-12:
+        return np.zeros_like(h, dtype=np.float32)
+    return (h - h_min) / (h_max - h_min)
+
+

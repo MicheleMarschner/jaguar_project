@@ -206,7 +206,7 @@ def build_from_csv_labels(
 
 
 def main():
-    manifest_dir = PATHS.data_export
+    manifest_dir = PATHS.data_export / "init"
     csv_file = PATHS.data / "raw/jaguar-re-id/train.csv"
     
     ### add labels to fiftyOne

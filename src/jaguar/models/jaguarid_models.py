@@ -165,7 +165,7 @@ if __name__ == "__main__":
 
     # Load Dataset
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export,
+        PATHS.data_export / "init",
         dataset_name="jaguar_stage0",
         processing_fn=None,
         overwrite_db=False,

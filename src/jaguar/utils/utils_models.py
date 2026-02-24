@@ -4,7 +4,7 @@ These are placeholders; replace with actual model imports / checkpoints.
 """
 
 import torch
-import numpy
+import numpy as np
 import timm
 import functools
 from transformers import AutoModel

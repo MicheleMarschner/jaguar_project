@@ -72,6 +72,7 @@ class Paths:
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 IN_COLAB = is_colab()
+ROUND = "round_1"
 
 if IN_COLAB:
     PATHS = Paths(
@@ -86,15 +87,17 @@ if IN_COLAB:
     
 else:
     PATHS = Paths(
-        data_train=PROJECT_ROOT / "data/raw/jaguar-re-id/train/train",
-        data_test=PROJECT_ROOT / "data/raw/jaguar-re-id/test/test",
-        data_export=PROJECT_ROOT / "data/fiftyone/jaguar_export",
-        data=PROJECT_ROOT / "data",
-        results=PROJECT_ROOT / "results",
-        runs=PROJECT_ROOT / "experiments",
-        configs_file=PROJECT_ROOT / "configs",
+        data_train=PROJECT_ROOT / f"data/{ROUND}/raw/jaguar-re-id/train/train",
+        data_test=PROJECT_ROOT / f"data/{ROUND}/raw/jaguar-re-id/test/test",
+        data_export=PROJECT_ROOT / f"data/{ROUND}/fiftyone",
+        data=PROJECT_ROOT / f"data/{ROUND}",
+        results=PROJECT_ROOT / f"results/{ROUND}",
+        runs=PROJECT_ROOT / f"experiments/{ROUND}",
+        configs_file=PROJECT_ROOT / f"configs",
     )
 
 DEVICE = get_device(prefer_name="RTX")  
 NUM_WORKERS = 0
 SEED = 51
+IMGNET_MEAN = [0.485, 0.456, 0.406]
+IMGNET_STD = [0.229, 0.224, 0.225]

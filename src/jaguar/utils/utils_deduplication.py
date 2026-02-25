@@ -1,3 +1,14 @@
+"""
+Image-feature and dedup helper utilities for Jaguar dataset curation.
+
+Contains:
+- row-aligned metadata builders (aligned to embedding rows)
+- cached image features (pHash, sharpness)
+- optional embedding kNN helper (retained for alternative candidate generation)
+- cache save/load utilities for reproducible dedup runs
+"""
+
+
 from pathlib import Path
 from typing import Optional
 from tqdm import tqdm
@@ -80,24 +91,6 @@ def phash_distance(h1, h2) -> Optional[int]:
     return int(h1 - h2)
 
 
-def find_nearest_neighbors_cosine(embeddings: np.ndarray, k: int = 50):
-    """
-    embeddings: (N, D)
-    Returns cosine similarities + neighbor indices via L2-normalized inner product.
-    """
-    embs = embeddings.astype("float32").copy()
-    norms = np.linalg.norm(embs, axis=1, keepdims=True)
-    embs /= (norms + 1e-12)
-
-    n, d = embs.shape
-    k_eff = min(k, n)
-
-    S = cosine_similarity(embs)
-    idxs = np.argsort(-S, axis=1)[:, :k_eff]     # descending
-    sims = np.take_along_axis(S, idxs, axis=1)
-    return sims.astype(np.float32), idxs.astype(np.int64)
-
-
 def _compute_sharpness(filepath: str | Path) -> float:
     image = cv2.imread(str(filepath))
     if image is None:
@@ -147,25 +140,6 @@ def save_image_feature_cache(out_dir, file_path, meta_features: pd.DataFrame, co
     print(f"✅ Saved image feature cache to: {out_dir}")
 
 
-def save_model_knn_edge_candidates(out_dir, candidate_edges_df, precompute_config, file_name="candidate_edges.parquet"):
-    ensure_dir(out_dir)
-
-    candidate_edges_df.to_parquet(out_dir / file_name, index=False)
-
-    summary = {
-        "num_candidate_edges": int(len(candidate_edges_df)),
-        "columns": list(candidate_edges_df.columns),
-    }
-
-    with open(out_dir / "precompute_summary.json", "w") as f:
-        json.dump(summary, f, indent=2, default=json_default)
-
-    with open(out_dir / "precompute_config.json", "w") as f:
-        json.dump(precompute_config, f, indent=2, default=json_default)
-
-    print(f"✅ Saved model candidate-edge cache to: {out_dir}")
-
-
 def load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name):
     if not meta_img_file.exists():
         meta_img_features = add_phash_columns(jag_meta, filepath_col="filepath", hash_size=phash_size)
@@ -184,4 +158,44 @@ def load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, d
         meta_img_features = pd.read_parquet(meta_img_file) 
 
     return  meta_img_features
+
+
+# ------------------------------------------------------------
+# Optional / retained helpers (not used in current "safe all-pairs pHash" pipeline)
+# Kept for alternative candidate-generation experiments and future sweeps.
+# ------------------------------------------------------------
+def find_nearest_neighbors_cosine(embeddings: np.ndarray, k: int = 50):
+    """
+    embeddings: (N, D)
+    Returns cosine similarities + neighbor indices via L2-normalized inner product.
+    """
+    embs = embeddings.astype("float32").copy()
+    norms = np.linalg.norm(embs, axis=1, keepdims=True)
+    embs /= (norms + 1e-12)
+
+    n, d = embs.shape
+    k_eff = min(k, n)
+
+    S = cosine_similarity(embs)
+    idxs = np.argsort(-S, axis=1)[:, :k_eff]     # descending
+    sims = np.take_along_axis(S, idxs, axis=1)
+    return sims.astype(np.float32), idxs.astype(np.int64)
+
+
+def save_model_knn_edge_candidates(out_dir, candidate_edges_df, precompute_config, file_name="candidate_edges.parquet"):
+    ensure_dir(out_dir)
+
+    candidate_edges_df.to_parquet(out_dir / file_name, index=False)
+    summary = {
+        "num_candidate_edges": int(len(candidate_edges_df)),
+        "columns": list(candidate_edges_df.columns),
+    }
+
+    with open(out_dir / "precompute_summary.json", "w") as f:
+        json.dump(summary, f, indent=2, default=json_default)
+
+    with open(out_dir / "precompute_config.json", "w") as f:
+        json.dump(precompute_config, f, indent=2, default=json_default)
+
+    print(f"✅ Saved model candidate-edge cache to: {out_dir}")
 

@@ -115,16 +115,22 @@ def get_group_aware_stratified_train_val_split(
     filepath_col: str = "filepath",
 ):
     """
-    Burst-aware train/val split
-    Primary constraint: Keep all rows belonging to the same burst group in the same split.
-    Secondary objective: Stratify approximately by identity at group level - closed set objective
+    Closed-set split helper: burst-preserving grouping + approximate identity stratification at group level.
+
+    Split semantics:
+    - Primary constraint: keep all images from the same burst group together (no burst leakage).
+    - Secondary objective: approximate identity stratification at the *group* level.
+      (i.e., stratify groups by a representative identity label, not individual rows)
     """
     out = df.copy().reset_index(drop=True)
 
     # ------------------------------------------------------------
-    # Build split unit per row:
-    #    - rows with burst_group_id share one group
-    #    - rows without burst_group_id become singleton groups
+    # Step 1) Define the split unit for each row/image.
+    #
+    # If a burst_group_id exists, the whole burst becomes one indivisible split unit.
+    # Otherwise, the row becomes its own singleton split unit.
+    #
+    # This is the key leakage-prevention step for near-duplicate bursts.
     # ------------------------------------------------------------
     group_ids = []
     has_burst_col = burst_group_col in out.columns
@@ -136,16 +142,22 @@ def get_group_aware_stratified_train_val_split(
         if pd.notna(bg):
             gid = f"burst::{bg}"
         else:
+            # Use filepath as stable singleton group key (better than row index for traceability).
             if has_fp_col and pd.notna(row.get(filepath_col, np.nan)):
                 gid = f"single::{row[filepath_col]}"
             else:
+                # Fallback only if filepath is unavailable.
                 gid = f"single_row::{i}"
         group_ids.append(gid)
 
     out["_split_group_id"] = group_ids
 
     # ------------------------------------------------------------
-    # Build one label per group (majority identity if mixed)
+    # Step 2) Build one representative label per split unit (group).
+    #
+    # Stratification expects one label per unit. Most groups should contain only one identity.
+    # If a group is mixed (unexpected data issue), use the majority identity as a defensive fallback
+    # and warn.
     # ------------------------------------------------------------
     group_rows = []
     for gid, g in out.groupby("_split_group_id", sort=False):
@@ -156,14 +168,15 @@ def get_group_aware_stratified_train_val_split(
         id_counts = Counter(ids)
         group_identity, group_identity_count = id_counts.most_common(1)[0]
 
-        if len(id_counts) > 1 and verbose:
+        # Mixed-identity burst groups should usually not happen; warn so data issues are visible.
+        if len(id_counts) > 1:
             print(f"[WARN] Mixed identities in group {gid}: {dict(id_counts)} -> using majority '{group_identity}'")
 
         group_rows.append(
             {
                 "_split_group_id": gid,
-                "group_identity": group_identity,
-                "group_size": int(len(g)),
+                "group_identity": group_identity,  # label used for group-level stratification
+                "group_size": int(len(g)),         # informative: how many images this unit contributes
                 "n_unique_identities_in_group": int(len(id_counts)),
                 "group_identity_majority_count": int(group_identity_count),
             }
@@ -171,6 +184,11 @@ def get_group_aware_stratified_train_val_split(
 
     groups_df = pd.DataFrame(group_rows)
 
+    # ------------------------------------------------------------
+    # Step 3) Split group indices (NOT row indices) with approximate stratification by identity.
+    #
+    # After this step, every group is assigned to train or val exactly once.
+    # ------------------------------------------------------------
     train_group_idx, val_group_idx = split_train_val_indices_from_labels(
         labels=groups_df["group_identity"].tolist(),
         val_split=val_split,
@@ -181,11 +199,15 @@ def get_group_aware_stratified_train_val_split(
     val_group_ids = set(groups_df.iloc[val_group_idx]["_split_group_id"].tolist())
 
     # ------------------------------------------------------------
-    # Map group assignments back to row/image indices
+    # Step 4) Map group assignments back to image rows.
+    #
+    # This produces row-level indices for downstream dataset filtering/training code,
+    # while preserving the group-level leakage constraint.
     # ------------------------------------------------------------
     train_mask = out["_split_group_id"].isin(train_group_ids).to_numpy()
     val_mask = out["_split_group_id"].isin(val_group_ids).to_numpy()
 
+    # Safety checks: ensure a strict partition of rows.
     if np.any(train_mask & val_mask):
         raise RuntimeError("Group leakage detected: some rows assigned to both train and val.")
     if not np.all(train_mask | val_mask):

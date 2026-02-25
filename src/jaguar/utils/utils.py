@@ -86,27 +86,6 @@ def set_seeds(seed: int=51, deterministic: bool=True) -> None:
     print(f"All random seeds set to {seed} for reproducibility")
 
 
-def init_wandb(config):
-    wandb.login(key=os.environ["WANDB_API_KEY"])
-
-    if IN_COLAB:
-        mode = "online"
-    else: 
-        mode = "offline"
-
-
-    run = wandb.init(
-        project="jaguar_project",
-        #group=group,
-        #name=name,
-        mode=mode,                 
-        config=config,
-        reinit=True,               
-        settings=wandb.Settings(start_method="thread"),
-    )
-    return run
-
-
 def normalize_query_indices(query_indices: Sequence[int], dataset_len: int) -> np.ndarray:
     """
     Strict sequence-only API.

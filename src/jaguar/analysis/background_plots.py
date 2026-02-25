@@ -1,9 +1,7 @@
-import math
 from pathlib import Path
-from typing import Sequence, Optional
-
 import matplotlib.pyplot as plt
 from PIL import Image
+
 from jaguar.config import PATHS
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir
@@ -12,7 +10,7 @@ from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 
 def show_jaguar_images_with_backgrounds(
     jaguar_id,
-    dataset,  # JaguarDataset
+    dataset,  
     processors: dict,
     processor_names,
     n_max: int = 4,

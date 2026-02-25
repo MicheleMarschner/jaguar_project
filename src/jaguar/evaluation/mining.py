@@ -1,3 +1,21 @@
+"""
+Pair mining utilities for Jaguar re-ID analysis and XAI/CAM inspection.
+
+Project role:
+- selects informative reference pairs for a given query image (easy/hard positive/negative)
+- supports duplicate-aware filtering via burst/cluster IDs
+- supports quality-aware pair selection (sharpness + brightness heuristic)
+- returns compact pair metadata used by downstream visualization / explanation analysis
+
+This is analysis/mining logic (not training loss mining).
+
+Pair taxonomy used throughout analysis:
+ - easy positive: same ID, highest similarity
+ - hard positive: same ID, lowest similarity
+ - hard negative: different ID, high similarity (ranked imposter)
+ - easy negative: different ID, lowest similarity
+"""
+
 import numpy as np
 from typing import Any, Optional, Sequence, Tuple, Dict, List
 
@@ -14,8 +32,8 @@ def best_quality_from_top_m_imposters(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float, Dict[str, float]]:
     """
-    Among the first `top_m` valid imposters (closest different-ID neighbors),
-    choose the one with best image quality.
+    Among *already retrieval-relevant* imposters (closest different-ID neighbors), prefer the visually cleaner image.
+    This improves interpretability of CAM/XAI examples without changing the pair type.
     Returns: (j, sim_ij, {"quality":..., "sharpness":..., "brightness":...})
     """
     pool = []
@@ -46,8 +64,8 @@ def best_quality_from_top_m_positives(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float, Dict[str, float]]:
     """
-    Among the first `top_m` valid positives (same-ID neighbors in ranked order),
-    choose the one with best image quality.
+    Same idea for positives: keep retrieval relevance, then choose a cleaner reference image
+    for more reliable qualitative inspection.
     Returns: (j, sim_ij, quality_dict)
     """
     pool = []
@@ -67,6 +85,8 @@ def best_quality_from_top_m_positives(
     return j, s, {"quality": q, "sharpness": sharp, "brightness": bright}
 
 
+# Shared pair-validity gate used by all mining strategies so pair definitions stay consistent
+# (identity relation + duplicate/burst filtering).
 def _allow_pair(
     i: int,
     j: int,
@@ -92,6 +112,8 @@ def _allow_pair(
     return True
 
 
+# "Anchor-preserving" positive: visually/embedding-similar same-ID example.
+# Useful as a stable reference pair in qualitative explanation comparisons.
 def easy_positive(
     i: int,
     sim: np.ndarray,
@@ -110,6 +132,8 @@ def easy_positive(
     raise ValueError(f"No positive found for i={i} (identity has only one sample or all filtered).")
 
 
+# Challenging same-ID pair: tests intra-identity variation (pose, lighting, occlusion, background).
+# Often more informative than easy positives for XAI/CAM comparisons.
 def hard_positive(
     i: int,
     sim: np.ndarray,
@@ -139,6 +163,8 @@ def hard_positive(
     return min(candidates, key=lambda t: t[1])  # lowest sim
 
 
+# Retrieval-confusing imposter (different ID but high similarity).
+# Core failure-analysis pair type for re-ID explanations.
 def hard_negative(
     i: int,
     sim: np.ndarray,
@@ -148,7 +174,8 @@ def hard_negative(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Optional[Tuple[int, float]]:
     """
-    Same as hard_negative, but returns None instead of raising if rank doesn't exist.
+    Return the k-th valid hard negative (imposter) in ranked order. 
+    Returns None if fewer than `imposter_rank` valid imposters exist.
     """
     count = 0
     for j in ranked[i]:
@@ -160,6 +187,8 @@ def hard_negative(
     return None
 
 
+# Trivially different imposter (very low similarity).
+# Useful as a contrast case when hard negatives are too subtle.
 def easy_negative(
     i: int,
     sim: np.ndarray,
@@ -179,6 +208,8 @@ def easy_negative(
 
 
 ## TODO Kann man das generischer machen?
+# Batch helper used when we need one deterministic reference pair per query
+# (e.g., precomputing pair lists/artifacts for later analysis runs).
 def build_easy_positive_pairs(
     query_indices: Sequence[int],
     sim: np.ndarray,
@@ -217,7 +248,8 @@ def mining_pack_for_query(
     neg_ranks: Tuple[int, ...] = (1, 5, 10),
 ) -> Dict[str, Any]:
     """
-    Returns a structured dict of recommended pairs for CAM analysis.
+    One-stop mining output for a query image: standardized pair set for visualization/CAM pipelines 
+    (easy positive, hard positive, and selected hard negatives).
     """
     pos_e_i, pos_e_sim = easy_positive(i, sim, ranked, labels, cluster_id)
     pos_h_i, pos_h_sim = hard_positive(i, sim, ranked, labels, cluster_id)

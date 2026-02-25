@@ -1,3 +1,36 @@
+'''
+wandb:
+job_type="eda"
+
+cfg_overrides = {
+    "meta": {
+        "experiment_family": "eda",
+        "study_id": "dataset_eda__round1_train",
+        "job_type": "eda",
+    },
+    "data": {
+        "dataset_name": "jaguar_init",
+        "dataset_version": "jaguar_stage0_v1",
+        "data_root": str(PATHS.data_train),
+    },
+    "eda": {
+        "analysis_name": "initial_dataset_eda",
+        "identity_filter_thresholds": thresholds,
+        "n_examples_resolution_gallery": n_examples,
+        "merge_key": "filename",
+        "merge_validate": "one_to_one",
+    },
+    "inputs": {
+        "meta_img_features_parquet": str(PATHS.runs / "deduplication" / "meta_img_features.parquet"),
+    },
+    "outputs": {
+        "save_dir": str(save_dir),
+    },
+}
+
+'''
+
+
 from pathlib import Path
 import re
 from PIL import Image
@@ -14,6 +47,8 @@ def print_section(title: str) -> None:
     print("=" * 80)
 
 
+# Fast "first-pass" sanity report before any expensive image scanning.
+# Goal: catch schema/missing-value issues immediately.
 def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
     report = {
         "train_shape": tuple(train_df.shape),
@@ -48,6 +83,8 @@ def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dic
 # EDA: class distribution
 # ----------------------------
 
+# Identity frequency distribution drives almost every downstream decision:
+# split protocol, rebalancing, filtering thresholds, and evaluation interpretation.
 def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
     counts = train_df["ground_truth"].value_counts().sort_values(ascending=False)
     desc = counts.describe()
@@ -76,7 +113,8 @@ def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
 
     return counts, summary
 
-
+# Scenario analysis only: summarizes consequences of minimum-images-per-identity rules
+# without modifying the dataset yet.
 def identity_filter_summary(
     identity_counts: pd.Series,
     thresholds: Iterable[int],
@@ -132,7 +170,8 @@ def identity_filter_summary(
 # ----------------------------
 # EDA: image properties
 # ----------------------------
-
+# Reads image headers (and mode) to build a lightweight technical profile of the dataset.
+# Failed loads are tracked to surface corrupted/missing files.
 def analyze_images(
     df: pd.DataFrame,
     img_dir: Path,
@@ -175,7 +214,7 @@ def analyze_images(
 
     return stats_df
 
-
+# Protects against silent train/CSV mismatches that would later break EDA, dedup, or training.
 def check_filename_and_folder_consistency(
     train_df: pd.DataFrame,
     data_path: Path,
@@ -224,4 +263,43 @@ def check_filename_and_folder_consistency(
         if extra_on_disk[:10]:
             print("example extra:", extra_on_disk[:10])
 
+# Joins upstream feature artifacts (sharpness) with freshly computed image metadata
+# so we can analyze quality signals together with size/resolution.
+def merge_sharpness_with_image_stats(
+    df_sharp: pd.DataFrame,
+    img_stats_df: pd.DataFrame,
+    key: str = "filename",
+    validate: str = "one_to_one",
+) -> pd.DataFrame:
+    """
+    Merge sharpness/features table with image stats (width/height/mode),
+    then add derived size columns.
+    """
+    merged = df_sharp.merge(
+        img_stats_df,
+        on=key,
+        how="left",
+        validate=validate,
+    ).copy()
 
+    merged["resolution_px"] = merged["width"] * merged["height"]
+    merged["short_side"] = merged[["width", "height"]].min(axis=1)
+    merged["long_side"] = merged[["width", "height"]].max(axis=1)
+
+    return merged
+
+# Utility for qualitative spot checks of extremes (useful for debugging dataset artifacts).
+def get_top_bottom_by_column(
+    df: pd.DataFrame,
+    col: str,
+    n: int = 10,
+):
+    """
+    Returns (top_n_df, bottom_n_df) sorted by column.
+    """
+    tmp = df.copy()
+    tmp = tmp.dropna(subset=[col])
+
+    top_n = tmp.sort_values(col, ascending=False).head(n).copy()
+    bottom_n = tmp.sort_values(col, ascending=True).head(n).copy()
+    return top_n, bottom_n

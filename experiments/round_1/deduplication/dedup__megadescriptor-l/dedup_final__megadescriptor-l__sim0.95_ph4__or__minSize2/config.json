@@ -1,8 +1,0 @@
-{
-  "dataset_name": "jaguar_init",
-  "model_name": "MegaDescriptor-L",
-  "sim_threshold": 0.95,
-  "phash_threshold": 4,
-  "use_or_rule": true,
-  "min_cluster_size": 2
-}

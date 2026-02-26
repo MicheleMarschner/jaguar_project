@@ -1,0 +1,15 @@
+{
+  "num_rows": 1895,
+  "num_identities": 31,
+  "columns": [
+    "emb_row",
+    "ds_idx",
+    "filepath",
+    "filepath_rel",
+    "filename",
+    "identity_id",
+    "identity_idx",
+    "phash_hex",
+    "sharpness"
+  ]
+}

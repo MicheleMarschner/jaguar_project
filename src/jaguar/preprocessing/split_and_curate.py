@@ -1,0 +1,489 @@
+"""
+Split and Curation Pipeline for Jaguar Re-ID.
+
+Project role:
+- Produces reproducible train/val split artifacts from the *dedup-annotated manifest*.
+- Optionally performs *post-split curation* inside burst groups to reduce near-duplicate bias
+  while preserving the split protocol (no moving samples across splits).
+
+Pipeline Steps:
+1) Load manifest (dedup + burst annotations are the source of truth):
+   - one row per image with identity_id, burst_group_id, burst_role, filepath, etc.
+
+2) Create base splits (choose ONE protocol):
+   - Open-set: identities are disjoint across train/val (val tests unseen jaguars).
+   - Closed-set: identities may overlap, but bursts/images are split-disjoint
+     (val tests new images of known jaguars). Burst groups are treated as atomic split units.
+
+3) Post-split curation (optional, split-local; never changes split membership):
+   For each (split, burst_group_id):
+   a) Sub-cluster within the burst using a stricter pHash threshold (tight duplicates).
+   b) Rank images inside each sub-cluster by:
+        - embedding centrality (>= median within sub-cluster)
+        - then sharpness (descending), with centrality as tie-breaker
+   c) Keep Top-K per sub-cluster (typically K_train=1, K_val large/“all”).
+   Output columns:
+     - keep_curated: True/False (downstream training should filter on this)
+     - curation_reason: audit label for why kept/dropped
+
+4) Save artifacts:
+   - full_split.parquet: full audit table (kept + dropped)
+   - curated_split.parquet: only rows with keep_curated == True
+   - burst_delta.parquet: per-burst keep/drop summary
+   - config.json: provenance of strategy + thresholds + K values
+
+Notes / assumptions:
+- Embeddings must be aligned with dataset order via emb_row indexing:
+  embeddings[emb_row] corresponds to the same sample as split_df row with emb_row.
+- Some helper functions may remain in the module for alternative workflows; the active path
+  is the split + (optional) intra-burst curation described above.
+"""
+
+from typing import Optional, List, Dict, Tuple
+import pandas as pd
+import numpy as np
+import networkx as nx
+from tqdm import tqdm
+from sklearn.metrics.pairwise import cosine_similarity
+import imagehash
+import fiftyone as fo
+
+from jaguar.config import DEVICE, PATHS, SEED
+from jaguar.models.foundation_models import FoundationModelWrapper
+from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_jaguar_from_FO_export, load_or_extract_embeddings
+from jaguar.utils.utils_split_data import (
+    build_split_table_from_torch_dataset,
+    print_keep_drop_summary,
+    print_top_changed_bursts,
+    save_split_bundle,
+    summarize_splits,
+    
+)
+
+# ============================================================
+# Splitting Strategies
+# ============================================================
+
+def make_open_set_splits(
+    df: pd.DataFrame,
+    val_size: float = 0.2,
+    seed: int = 51,
+    identity_col: str = "identity_id",
+) -> pd.DataFrame:
+    """
+    Open-Set: Identities are mutually exclusive (Identity-Disjoint).
+    Validation measures generalization to entirely new jaguars.
+
+    in detail (identity-disjoint):
+      - all images of an identity go to the same split
+      - val_size targets the fraction of IMAGES in val (approximately)
+      - exact ratio may not be achievable because identities are indivisible units
+    """
+    out = df.copy().reset_index(drop=True)
+    out["split_tmp"] = None
+
+    # Calculate counts per identity (identity = indivisible unit in open-set)
+    id_counts = out[identity_col].astype(str).value_counts().reset_index()
+    id_counts.columns = [identity_col, "n_images"]
+    
+    # Shuffle for reproducibility
+    # (shuffle first, then sort by size desc with stable sort to break ties reproducibly)
+    id_counts = id_counts.sample(frac=1.0, random_state=seed).sort_values("n_images", ascending=False)
+
+    # We approximate the requested val image ratio by selecting whole identities (greedy selection). Exact val_size is usually 
+    # impossible because identities are indivisible.
+    target_val = int(len(out) * val_size)
+    current_val = 0
+    val_ids = []
+
+    # Greedy packing
+    for _, row in id_counts.iterrows():
+        n = row["n_images"]
+        if abs(target_val - (current_val + n)) < abs(target_val - current_val):
+            val_ids.append(row[identity_col])
+            current_val += n
+
+    # Fallback if empty
+    if len(val_ids) == 0:
+        val_ids = [id_counts.iloc[0][identity_col]]
+
+    val_set = set(val_ids)
+    
+    out.loc[out[identity_col].astype(str).isin(val_set), "split_tmp"] = "val"
+    out["split_tmp"] = out["split_tmp"].fillna("train")
+    
+    return out
+
+
+def make_closed_set_splits(
+    df: pd.DataFrame,
+    val_size: float = 0.2,
+    seed: int = 51,
+    identity_col: str = "identity_id",
+) -> pd.DataFrame:
+    """
+    Closed-Set: Same identity may appear in both train and val, but exact images/bursts stay separated. Useful for measuring generalization 
+    to new images of known identities.
+    Identities overlap, but Bursts/Images are disjoint.
+    
+    Uses group-aware stratification:
+    1. Collapses data into "Burst Groups" (Atomic Units).
+    2. Stratifies these groups based on Identity.
+    3. Expands back to image rows.
+    """
+    train_idx, val_idx, out, _ = get_group_aware_stratified_train_val_split(
+        df=df,
+        val_split=val_size,
+        seed=seed,
+        identity_col=identity_col,
+        burst_group_col="burst_group_id",
+        filepath_col="filepath",
+    )
+
+    out["split_tmp"] = None
+    out.loc[train_idx, "split_tmp"] = "train"
+    out.loc[val_idx, "split_tmp"] = "val"
+
+    # Cleanup internal col
+    out.drop(columns=["_split_group_id"], inplace=True, errors="ignore")
+    return out
+
+
+# ============================================================
+# Intra-Burst Logic (Clustering & Ranking)
+# ============================================================
+
+def get_intra_burst_subclusters(
+    phashes: List[Optional[imagehash.ImageHash]], 
+    indices: List[int],
+    threshold: int
+) -> List[List[int]]:
+    """
+    Given a list of pHashes for a single burst, find connected components 
+    where hamming_distance <= threshold.
+    Returns lists of global indices (emb_rows).
+    """
+    if len(indices) < 2:
+        return [indices]
+
+    G = nx.Graph()
+    G.add_nodes_from(indices)
+
+    # Pairwise comparison within the burst (efficient for small N < 50)
+    # We only link if distance is valid and <= threshold
+    for i in range(len(indices)):
+        for j in range(i + 1, len(indices)):
+            h1, h2 = phashes[i], phashes[j]
+            if h1 is not None and h2 is not None:
+                if (h1 - h2) <= threshold:
+                    G.add_edge(indices[i], indices[j])
+
+    # Each component is a tight duplicate group
+    return [list(c) for c in nx.connected_components(G)]
+
+
+def rank_subcluster_by_quality(
+    emb_rows: List[int],
+    meta_df: pd.DataFrame,
+    embeddings: np.ndarray,
+    emb_row_col: str = "emb_row"
+) -> List[int]:
+    """
+    Ranks images in a sub-cluster by:
+    1. Cosine Centrality (filter to >= median)
+    2. Sharpness (sort filtered by desc)
+    Returns: Ordered list of emb_rows (best first).
+    """
+    # Get Embeddings & Centroid
+    cluster_embs = embeddings[emb_rows]
+    centroid = np.mean(cluster_embs, axis=0, keepdims=True)
+    
+    # Calculate Centrality
+    sims = cosine_similarity(cluster_embs, centroid).flatten()
+    
+    # Filter by Centrality (Keep top 50%)
+    median_sim = np.median(sims)
+    
+    # Create list of (emb_row, similarity, sharpness)
+    candidates = []
+    for i, r_idx in enumerate(emb_rows):
+        sharp = meta_df.loc[meta_df[emb_row_col] == r_idx, "sharpness"].fillna(-1.0).values[0]
+        candidates.append({
+            "emb_row": r_idx,
+            "sim": sims[i],
+            "sharpness": float(sharp),
+            "pass_median": sims[i] >= median_sim
+        })
+
+    # 4. Sort
+    # Primary key: Passed Median? (True > False)
+    # Secondary key: Sharpness (High > Low)
+    # Tertiary key: Similarity (High > Low) - tiebreaker
+    candidates.sort(key=lambda x: (x["pass_median"], x["sharpness"], x["sim"]), reverse=True)
+
+    return [c["emb_row"] for c in candidates]
+
+
+# ============================================================
+# Main Curation Orchestrator
+# ============================================================
+
+def apply_post_split_curation(
+    split_df: pd.DataFrame,
+    meta_img_df: pd.DataFrame,
+    embeddings: np.ndarray,
+    train_k: int = 1,
+    val_k: int = 100,  # effectively "all"
+    phash_threshold: int = 2,
+) -> pd.DataFrame:
+    """
+    Iterates through assignments, processes bursts, and flags 'keep_curated'.
+    """
+    print(f"\n[Curation] Processing splits (Train K={train_k}, Val K={val_k}, pHash Thresh={phash_threshold})...")
+    
+    out = split_df.copy()
+    
+    # Attach metadata (sharpness/phash hex)
+    # Note: We need the actual pHash objects for calculation, 
+    meta_img_df["phash"] = meta_img_df["phash_hex"].apply(
+        lambda x: imagehash.hex_to_hash(x) if pd.notna(x) else None
+    )
+
+    # Merge meta data onto split DF for easy access
+    # After this merge, `out` carries per-image sharpness needed for ranking within subclusters.
+    cols_to_merge = ["sharpness", "phash", "filepath"]
+    out = out.merge(
+        meta_img_df[cols_to_merge], 
+        on="filepath", 
+        how="left"
+    )
+
+    out["keep_curated"] = False
+    out["curation_reason"] = "dropped"
+    
+    # -------------------------------------------------
+    # A. Handle Singletons (Always Keep)
+    # -------------------------------------------------
+    singleton_mask = (out["burst_role"] == "singleton") | (out["burst_group_id"].isna())
+    out.loc[singleton_mask, "keep_curated"] = True
+    out.loc[singleton_mask, "curation_reason"] = "singleton"
+
+    # -------------------------------------------------
+    # B. Handle Bursts (Group by Split + BurstID)
+    # -------------------------------------------------
+    # Filter only burst members
+    burst_df = out[~singleton_mask].copy()
+    
+    # Group by Split -> Burst ID
+    grouped = burst_df.groupby(["split_tmp", "burst_group_id"])
+    
+    # Bursts are curated *within each split* to avoid train/val leakage:
+    # we never move images across splits, we only drop/keep inside each split's burst groups.
+    for (split_name, burst_id), group in tqdm(grouped, desc="Curating Bursts"):
+        
+        # Determine K for this split
+        k = train_k if split_name == "train" else val_k
+        
+        # Get data for this burst
+        # phashes and indices share the same row order (both derived from the grouped DataFrame).
+        indices = group["emb_row"].values
+        phashes = group["phash"].tolist()
+        
+        # 1. Sub-cluster within this burst
+        # Subclusters = tighter duplicate sets inside one (looser) burst cluster.
+        # We keep top-K per subcluster so a large burst doesn't collapse to a single image.
+        subclusters = get_intra_burst_subclusters(phashes, indices, phash_threshold)
+        
+        # 2. Process each sub-cluster
+        for i, cluster_indices in enumerate(subclusters, start=1):
+
+            # assign a unique subcluster ID
+            sub_id = f"{burst_id}__sub{i}"
+            out.loc[out["emb_row"].isin(cluster_indices), "duplicate_cluster_id"] = sub_id
+
+            # Rank indices by (Centrality + Sharpness)
+            ranked_indices = rank_subcluster_by_quality(
+                cluster_indices, out, embeddings, emb_row_col="emb_row"
+            )
+            
+            # Select Top K
+            kept_indices = ranked_indices[:k]
+            
+            # Update DataFrame
+            out.loc[out["emb_row"].isin(kept_indices), "keep_curated"] = True
+            out.loc[out["emb_row"].isin(kept_indices), "curation_reason"] = f"burst_top{k}"
+
+    # Clean up temp cols
+    out.drop(columns=["phash"], inplace=True, errors="ignore")
+    
+    return out
+
+
+# ============================================================
+# FiftyOne and helpers
+# ============================================================
+
+def _ensure_sample_field_type(dataset, field_name: str, field_cls):
+    schema = dataset.get_field_schema()
+    if field_name in schema and not isinstance(schema[field_name], field_cls):
+        dataset.delete_sample_field(field_name)
+        schema = dataset.get_field_schema()
+    if field_name not in schema:
+        dataset.add_sample_field(field_name, field_cls)
+
+def set_values_typed(dataset, view, df: pd.DataFrame, field_name: str, field_cls) -> None:
+    s = df[field_name].astype("object").copy()
+    def _is_missing(x): return pd.isna(x)
+
+    if field_cls is fo.StringField:
+        values = [None if _is_missing(x) else str(x) for x in s.tolist()]
+    elif field_cls is fo.IntField:
+        values = [None if _is_missing(x) else int(x) for x in s.tolist()]
+    elif field_cls is fo.FloatField:
+        values = [None if _is_missing(x) else float(x) for x in s.tolist()]
+    else:
+        values = [None if _is_missing(x) else x for x in s.tolist()]
+
+    _ensure_sample_field_type(dataset, field_name, field_cls)
+    view.set_values(field_name, values)
+
+def apply_curation_assignments_to_fiftyone(
+    dataset,
+    final_df: pd.DataFrame,
+    filepath_col: str = "filepath",
+    split_col: str = "split_final",   # or split_tmp
+    keep_col: str = "keep_curated",
+    reason_col: str = "curation_reason",
+    # tags
+    dup_tag: str = "curation_duplicate",
+    rep_train_tag: str = "curation_rep_train",
+):
+    df = final_df.copy()
+    df[filepath_col] = df[filepath_col].astype(str)
+
+    view_all = dataset.select_by(filepath_col, df[filepath_col].tolist())
+
+    # store fields (so you can filter/sort in FO without relying on tags)
+    if split_col in df.columns:
+        set_values_typed(dataset, view_all, df, split_col, fo.StringField)
+    if keep_col in df.columns:
+        _ensure_sample_field_type(dataset, keep_col, fo.BooleanField)
+        view_all.set_values(keep_col, df[keep_col].fillna(False).astype(bool).tolist())
+    if reason_col in df.columns:
+        set_values_typed(dataset, view_all, df, reason_col, fo.StringField)
+
+    # tags
+    dup_fps = df.loc[df[reason_col] == "dropped", filepath_col].tolist()
+
+    rep_train_fps = df.loc[
+        (df[split_col] == "train") & (df[reason_col] == "burst_top1"),
+        filepath_col
+    ].tolist()
+
+    if dup_fps:
+        dataset.select_by(filepath_col, dup_fps).tag_samples(dup_tag)
+    if rep_train_fps:
+        dataset.select_by(filepath_col, rep_train_fps).tag_samples(rep_train_tag)
+
+    dataset.save()
+    print(f"Applied curation tags/fields to {len(df)} samples.")
+
+
+
+def main():
+    # Configuration
+    TRAIN_K_PER_BURST = 1      # Keep 1 best image per duplicate group in Train        
+    VAL_K_PER_BURST = 50        # Keep ALL (or high K) images in Val to test robustness       
+    INTRA_BURST_PHASH_THRESH = 4 # strict-ish near-duplicate grouping inside bursts (not pixel-identical)
+    dataset_name = "jaguar_burst"
+    manifest_dir = PATHS.data_export / "burst"  
+    strategy = "closed_set"                 # "open_set" or "closed_set"
+    dedup_policy = "drop_duplicates"        # "keep_all", "drop_duplicates"
+    stem = f"{dataset_name}__str_{strategy}__pol_{dedup_policy}__k{TRAIN_K_PER_BURST}"
+    out_root = PATHS.runs / "splits" / f"{stem}"
+    
+    # Load Data
+    print(f"Loading {dataset_name}...")
+    fo_wrapper, torch_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
+    
+    # Load Embeddings
+    model_name = "MegaDescriptor-L"
+    model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
+    embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
+    
+    # Load Metadata (Sharpness/pHash)
+    meta_img_file = PATHS.runs / "deduplication" / "meta_img_features.parquet"
+    if not meta_img_file.exists():
+        raise FileNotFoundError("Run deduplication first to generate meta features.")
+    meta_img_df = pd.read_parquet(meta_img_file)
+    
+    # Build Split Table
+    # convert dataset into a split-ready metadata table (one row = one image, including 
+    # identity and dedup annotations)
+    df_full = build_split_table_from_torch_dataset(torch_ds)
+
+    # Generate Raw Splits
+    # Assign train/val according to the evaluation protocol (closed-set = known identities; open-set = unseen identities).
+    print(f"Generating {strategy} splits...")
+    if strategy == "open_set":
+        split_df = make_open_set_splits(df_full, val_size=0.2, seed=SEED)
+    elif strategy == "closed_set":
+        split_df = make_closed_set_splits(df_full, val_size=0.2, seed=SEED)
+    else:
+        raise ValueError(f"Unknown strategy: {strategy}")
+
+    # Apply Post-Split Curation
+    # choose which images are eligible for splitting based on dedup policy. This controls whether 
+    # training/validation sees all burst members or only deduplicated data.
+    if dedup_policy == "drop_duplicates": 
+        final_df = apply_post_split_curation(
+            split_df=split_df,
+            meta_img_df=meta_img_df,
+            embeddings=embeddings,
+            train_k=TRAIN_K_PER_BURST,
+            val_k=VAL_K_PER_BURST,
+            phash_threshold=INTRA_BURST_PHASH_THRESH
+        )
+    elif dedup_policy == "keep_all":
+        final_df = split_df.copy()
+        final_df["keep_curated"] = True
+        final_df["curation_reason"] = "keep_all"
+    
+    # Finalize columns
+    # Contract: downstream training should filter on keep_curated == True.
+    # The full table is kept for audit/debugging.
+    final_df["split_final"] = final_df["split_tmp"]
+    
+    print_keep_drop_summary(final_df)
+
+    config = {
+        "strategy": strategy,
+        "dedup_policy": dedup_policy,
+        "train_k": TRAIN_K_PER_BURST,
+        "val_k": VAL_K_PER_BURST,
+        "intra_burst_phash_threshold": INTRA_BURST_PHASH_THRESH,
+        "dataset_name": dataset_name,
+        "base_dedup_manifest": str(manifest_dir),
+    }
+
+    summary = summarize_splits(final_df)
+    config["data_summary"] = summary
+        
+    # persist split assignments as reusable experiment artifacts.
+    save_split_bundle(
+        out_root=out_root,
+        final_df=final_df,
+        config=config,
+    )
+    print(f"\nDone. Artifacts saved to {out_root}")
+
+    # Change in FiftyOne and export
+    apply_curation_assignments_to_fiftyone(
+        dataset=fo_wrapper.get_dataset(),
+        final_df=final_df,
+    )
+    fo_wrapper.export_manifest(PATHS.data_export / "splits_curated")
+    
+
+if __name__ == "__main__":
+    main()

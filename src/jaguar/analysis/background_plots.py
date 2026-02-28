@@ -2,9 +2,9 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from jaguar.config import PATHS
+from jaguar.config import DATA_STORE, PATHS
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
-from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 
 
@@ -96,7 +96,7 @@ if __name__ == "__main__":
     jaguar_id = "Marcela"
 
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "init",
+        resolve_path("fiftyone/init", DATA_STORE),
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
@@ -108,6 +108,6 @@ if __name__ == "__main__":
         processors=PROCESSORS,
         processor_names=["raw_original", "gray_bg", "blur_bg", "random_bg"],
         n_max=4,
-        processor_kwargs={"bg_dir": str(PATHS.data / "backgrounds")},
+        processor_kwargs={"bg_dir": str(resolve_path("backgrounds", DATA_STORE))},
         save_path=save_dir / f"{jaguar_id}_background_variants.png"
     )

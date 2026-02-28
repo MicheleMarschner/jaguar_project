@@ -1,9 +1,11 @@
+# src/jaguar/config.py
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
 import torch
 import os
+
 
 def get_device(prefer_name: str | None = None):
     """
@@ -51,13 +53,16 @@ def get_device(prefer_name: str | None = None):
     print(f"[Config] Using best compatible GPU {best_idx}: {best_name}")
     return torch.device(f"cuda:{best_idx}")
 
+
 def is_colab() -> bool:
     return "COLAB_GPU" in os.environ or "COLAB_TPU_ADDR" in os.environ
-    
+
+
 def is_kaggle() -> bool:
     if Path("/kaggle/input").exists():
         return True
     return False
+
 
 def find_project_root(start: Path) -> Path:
     """
@@ -79,54 +84,104 @@ class Paths:
     data_export: Path
     results: Path
     runs: Path
-    configs : Path
+    configs: Path
     checkpoints: Path
 
 
-# --- Roots (stable scheme) ---
-ROUND = os.environ.get("JAGUAR_ROUND", "round_1")
-# Code root (auto)
+@dataclass(frozen=True)
+class ArtifactStore:
+    """
+    Cache pattern:
+      - read_roots: optional persisted caches (read-only is fine)
+      - write_root: always writable (current run)
+    """
+    read_roots: tuple[Path, ...]
+    write_root: Path
+
+
+# NOTE: Project root is where your repo (configs/, src/, pyproject.toml, …) lives.
+# We detect it robustly so it behaves the same even if nesting changes.
 PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
-# Data root (portable): set this in Kaggle + local
+IN_COLAB = is_colab()
+IN_KAGGLE = is_kaggle()
+ROUND = "round_1"
+
+# NOTE: DATA_ROOT should be set explicitly for portability.
+# Local example:
+#   export JAGUAR_DATA_ROOT=/Users/.../jaguar_data
 # Kaggle example:
-#   os.environ["JAGUAR_DATA_ROOT"] = "/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data"
-DATA_ROOT_ENV = os.environ.get("JAGUAR_DATA_ROOT")
-if DATA_ROOT_ENV is None:
-    # Local fallback: keep your old layout as a default *only* if env var not set
-    DATA_ROOT = PROJECT_ROOT / f"data/{ROUND}"
+#   os.environ["JAGUAR_DATA_ROOT"]="/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data"
+DATA_ROOT = Path(
+    os.environ.get("JAGUAR_DATA_ROOT", str(PROJECT_ROOT / f"data/{ROUND}"))
+).resolve()
+
+# NOTE: WORK_ROOT is where you write everything you generate (results/runs/checkpoints/artifacts).
+# Kaggle: /kaggle/working (writable)
+# Local: default to PROJECT_ROOT
+if IN_KAGGLE and "JAGUAR_WORK_ROOT" not in os.environ:
+    WORK_ROOT = Path("/kaggle/working").resolve()
 else:
-    DATA_ROOT = Path(DATA_ROOT_ENV)
+    WORK_ROOT = Path(os.environ.get("JAGUAR_WORK_ROOT", str(PROJECT_ROOT))).resolve()
 
-# Work root (where outputs go). On Kaggle, always writable.
-WORK_ROOT_ENV = os.environ.get("JAGUAR_WORK_ROOT")
-if WORK_ROOT_ENV is not None:
-    WORK_ROOT = Path(WORK_ROOT_ENV)
-else:
-    WORK_ROOT = Path("/kaggle/working") if Path("/kaggle/working").exists() else PROJECT_ROOT
-
-# Optional: separate persistent checkpoints input (read-only). If not set, just write to WORK_ROOT.
-CHECKPOINTS_ROOT_ENV = os.environ.get("JAGUAR_CHECKPOINTS_ROOT")
-CHECKPOINTS_ROOT = Path(CHECKPOINTS_ROOT_ENV) if CHECKPOINTS_ROOT_ENV else (WORK_ROOT / "checkpoints")
-
-
-# --- Derive your existing PATHS exactly as your code expects ---
+# NOTE: keep your PATHS interface unchanged, but make Kaggle-safe by writing to WORK_ROOT.
 PATHS = Paths(
     data_train=DATA_ROOT / "raw/jaguar-re-id/train/train",
     data_test=DATA_ROOT / "raw/jaguar-re-id/test/test",
     data=DATA_ROOT / "raw",
     data_export=DATA_ROOT / "fiftyone",
-
-    # outputs always go to WORK_ROOT (Kaggle-safe)
     results=WORK_ROOT / "results" / ROUND,
     runs=WORK_ROOT / "experiments" / ROUND,
-    checkpoints=CHECKPOINTS_ROOT / ROUND,
-
-    # configs live with code
     configs=PROJECT_ROOT / "configs",
+    checkpoints=WORK_ROOT / "checkpoints" / ROUND,
 )
 
-DEVICE = get_device(prefer_name="RTX")  
+# NOTE: caching pattern (read-if-exists else compute+write)
+# - Local: read_roots empty, write_root is under WORK_ROOT (often same as PROJECT_ROOT)
+# - Kaggle: optional read cache dataset mounted at /kaggle/input/jaguar-artifacts, write_root under /kaggle/working
+_experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_1")   
+_results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_1") 
+_data_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data")   # dein DATA dataset root (enthält fiftyone/, embeddings/, ...)    
+
+_experiments_read_roots = []
+_results_read_roots = []
+_data_read_roots = []
+
+if IN_KAGGLE:
+    if _experiments_cache.exists():
+        _experiments_read_roots.append(_experiments_cache)
+    if _results_cache.exists():
+        _results_read_roots.append(_results_cache)
+    if _data_cache.exists():
+        _data_read_roots.append(_data_cache)
+
+# immer auch "aktueller Run" als fallback lesen können
+_experiments_read_roots.append(PATHS.runs)
+_results_read_roots.append(PATHS.results)
+_data_read_roots.append(PATHS.runs / "data")
+
+EXPERIMENTS_STORE = ArtifactStore(
+    read_roots=tuple(_experiments_read_roots),
+    write_root=PATHS.runs,
+)
+
+RESULTS_STORE = ArtifactStore(
+    read_roots=tuple(_results_read_roots),
+    write_root=PATHS.results,
+)
+
+# schreiben:
+# - lokal: in DATA_ROOT (weil writeable)
+# - kaggle: in runs/data (weil /kaggle/input read-only)
+_data_write_root = DATA_ROOT if not IN_KAGGLE else (PATHS.runs / "data")
+DATA_STORE = ArtifactStore(
+    read_roots=tuple(_data_read_roots),
+    write_root=_data_write_root,
+)
+
+
+
+DEVICE = get_device(prefer_name="RTX")
 NUM_WORKERS = 0
 SEED = 51
 IMGNET_MEAN = [0.485, 0.456, 0.406]

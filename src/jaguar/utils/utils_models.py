@@ -1,5 +1,5 @@
-from jaguar.config import PATHS
-from jaguar.utils.utils import save_npy
+from jaguar.config import DATA_STORE, PATHS
+from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import numpy as np
 import timm
@@ -209,7 +209,7 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
     Returns embeddings as np.ndarray [N,D].
     Loads from disk if available; otherwise extracts and saves.
     """
-    folder = PATHS.data / "embeddings"
+    folder = resolve_path("embeddings", DATA_STORE)
     folder.mkdir(parents=True, exist_ok=True)
 
     filename = f"embeddings_{model_wrapper.name}_{split}.npy"

@@ -13,9 +13,10 @@ Used for preprocessing/augmentation experiments, not for model training logic it
 import random
 from pathlib import Path
 from PIL import Image, ImageFilter
+from jaguar.utils.utils import resolve_path
 import numpy as np
 
-from jaguar.config import PATHS
+from jaguar.config import DATA_STORE, PATHS
 
 
 def rgba_on_solid_bg(rgba: Image.Image, color=(128, 128, 128)) -> Image.Image:
@@ -206,7 +207,7 @@ def build_habitat_backgrounds(
 
 if __name__ == "__main__":
 
-    out_dir = PATHS.data / "backgrounds"
+    out_dir = resolve_path("backgrounds", DATA_STORE)
 
     # Assumes cutout alpha masks are stored alongside/raw-equivalent filenames in PATHS.data_train.
     # If raw and cutout folders differ in your setup, pass separate directories here.

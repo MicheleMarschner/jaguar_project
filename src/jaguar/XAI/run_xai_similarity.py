@@ -33,8 +33,8 @@ from pytorch_grad_cam import GradCAM
 
 from typing import Dict, Any, Sequence, Tuple, List
 
-from jaguar.config import PATHS, DEVICE, SEED 
-from jaguar.utils.utils import ensure_dir, save_npy, save_parquet
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, DEVICE, SEED 
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy, save_parquet
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export, load_or_extract_embeddings 
 from jaguar.models.foundation_models import FoundationModelWrapper  
 from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name  
@@ -63,7 +63,7 @@ class XAIConfig:
     pair_types: Tuple[str, ...] = ("easy_pos", "hard_neg", "hard_pos")
 
     # Output root; each run creates its own subfolder under here
-    out_root: Path = PATHS.runs / "xai/similarity"
+    out_root: Path = Path()
 
 # ============================================================
 # Step 1: deterministic query selection (curated val subset)
@@ -194,25 +194,25 @@ def mine_references_from_gallery(
         # --- Mining Logic ---
         # iterate through the ranked gallery items
         valid_rank = 0
-        for g_local_idx in range(ranked_g_indices):
+        for g_idx in ranked_g_indices:
             # early break is only safe if we don't need hard_pos
             if (not need_tail_scan) and all(found_pairs.values()):
                 break
 
-            g_idx_global = int(g_global[g_local_idx])
+            g_idx_global = int(g_global[g_idx])
             
             # Skip Self-Match
             if q_idx_global == g_idx_global:
                 continue
 
             # Skip same burst group (avoid trivial near-duplicates)
-            if burst_q[i] != -1 and burst_g[g_local_idx] == burst_q[i]:
+            if burst_q[i] != -1 and burst_g[g_idx] == burst_q[i]:
                 continue
             
             valid_rank += 1
 
-            current_sim = float(sims_i[g_local_idx])
-            g_label = labels_g[g_local_idx]
+            current_sim = float(sims_i[g_idx])
+            g_label = labels_g[g_idx]
             is_same_id = (q_label == g_label)
 
             # Check Pair Types
@@ -497,12 +497,15 @@ def run_xai(cfg: XAIConfig, model_name: str, explainer_names: Sequence[str]) -> 
     ensure_dir(run_root)
 
     # Load curated split artifacts (defines what counts as “kept” + provides burst IDs)
-    artifacts_dir = PATHS.runs / "splits" / "jaguar_burst__str_closed_set__pol_drop_duplicates__k1"
+    artifacts_dir = resolve_path(
+        "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1",
+        EXPERIMENTS_STORE,
+    )
     split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
 
     # Load the dataset manifest used for indexing (emb_row is the common join key)
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "splits_curated",      
+        resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=cfg.dataset_name,
         processing_fn=None,
         overwrite_db=False, 
@@ -565,7 +568,7 @@ if __name__ == "__main__":
         ig_steps=10,
         ig_internal_bs=32,
         ig_batch_size=32,
-        out_root=PATHS.runs / "xai/similarity",
+        out_root=PATHS.runs / "xai/similarity",         ### TODO ISt das verhalten nur write oder auch read?
     )
 
     model_name = "MiewID"      # MiewID, ConvNeXt-V2

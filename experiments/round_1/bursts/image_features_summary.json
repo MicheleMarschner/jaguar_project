@@ -4,7 +4,7 @@
   "columns": [
     "emb_row",
     "ds_idx",
-    "filepath",
+    "filepath_root",
     "filepath_rel",
     "filename",
     "identity_id",

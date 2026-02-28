@@ -36,7 +36,7 @@ def main():
     args = parse_args()
 
     # Load Config
-    with open(PATHS.configs_file / f"{args.config}.toml", "rb") as f:
+    with open(PATHS.configs / f"{args.config}.toml", "rb") as f:
         config = tomllib.load(f)
 
     # Optionally override experiment name inside config

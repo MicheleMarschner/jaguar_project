@@ -13,8 +13,9 @@ This script is analysis-only (no training / no model evaluation).
 from pathlib import Path
 import pandas as pd
 
-from jaguar.config import PATHS
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
 from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
+from jaguar.utils.utils import resolve_path
 from jaguar.utils.utils_eda import (
     analyze_images, 
     basic_integrity_report, 
@@ -43,7 +44,7 @@ def run_eda(data_path: Path, train_file: Path, test_file: Path) -> None:
     train_df = pd.read_csv(train_file)
     test_df = pd.read_csv(test_file)
 
-    artifacts_dir = PATHS.runs / "deduplication"   # upstream image-feature artifacts (e.g., sharpness)
+    artifacts_dir = resolve_path("bursts", EXPERIMENTS_STORE)   # upstream image-feature artifacts (e.g., sharpness)
     save_dir = PATHS.results / "eda"               # EDA outputs used for reporting + later decisions
 
     # configs for later
@@ -167,9 +168,9 @@ def build_from_csv_labels(
 
 
 def main():
-    manifest_dir = PATHS.data_export / "init"
-    csv_file = PATHS.data / "raw/jaguar-re-id/train.csv"
-    test_csv_file = PATHS.data / "raw/jaguar-re-id/test.csv"
+    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
+    csv_file = PATHS.data / "jaguar-re-id/train.csv"
+    test_csv_file = PATHS.data / "jaguar-re-id/test.csv"
     
     
     ### add labels to fiftyOne

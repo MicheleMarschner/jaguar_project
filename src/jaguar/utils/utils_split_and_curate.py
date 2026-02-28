@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 import pandas as pd
 
-from jaguar.utils.utils import json_default, save_parquet
+from jaguar.utils.utils import json_default, save_parquet, to_rel_path
 
 # ============================================================
 # Load exported manifest into metadata table (one row per image)
@@ -20,9 +20,11 @@ def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
         gt = s.get("ground_truth", {}) if isinstance(s, dict) else {}
         label = gt.get("label", None)
 
+        packed = to_rel_path(torch_ds._resolve_path(s["filepath"]))
         row = {
-            "emb_row": i,  # stable row index to align with dataset-order-based artifacts if needed
-            "filepath": str(torch_ds._resolve_path(s["filepath"])),
+            "emb_row": i,
+            "filepath_root": packed["root"],
+            "filepath_rel": packed["rel"],
             "filename": s.get("filename", Path(s["filepath"]).name),
             "identity_id": (str(label) if label is not None else None),
             "split_original": s.get("split", None),
@@ -30,7 +32,7 @@ def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
             # dedup fields if present
             "burst_group_id": s.get("burst_group_id", None),
             "burst_cluster_size": s.get("burst_cluster_size", None),
-            "burst_role": s.get("burst_role", None),  # singleton / burst_member
+            "burst_role": s.get("burst_role", None),
         }
         rows.append(row)
 
@@ -74,7 +76,7 @@ def build_burst_delta_table(
     g = burst_df.groupby([split_col, burst_col], dropna=False)
 
     out = g.agg(
-        n_total=("filepath", "size"),
+        n_total=("filename", "size"),
         n_kept=(keep_col, "sum"),
     ).reset_index()
 

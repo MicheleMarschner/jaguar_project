@@ -285,6 +285,7 @@ def find_module_name(model: torch.nn.Module, target_module: torch.nn.Module) -> 
 
 
 def save_vec(save_dir: Path, prefix: str, expl: str, pt: str, vec: np.ndarray) -> str:
-    p = save_dir / f"{prefix}__{expl}__{pt}.npy"
+    fname = f"{prefix}__{expl}__{pt}.npy"
+    p = Path(save_dir) / fname
     np.save(p, np.asarray(vec, dtype=np.float32))
-    return str(p)
+    return fname

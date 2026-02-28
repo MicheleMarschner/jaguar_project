@@ -271,7 +271,7 @@ if __name__ == "__main__":
         "sample_indices": [int(x) for x in torch_idx],
         "data": {
             "dataset_name": dataset_name,
-            "manifest_dir": str(manifest_dir),
+            "manifest_dir": to_rel_path(manifest_dir),
         },
         "model": {
             "checkpoint_path": checkpoint_path,

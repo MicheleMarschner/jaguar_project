@@ -28,7 +28,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 from jaguar.XAI.run_xai_classification import select_random_datasubset_balanced
-from jaguar.config import DEVICE, IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.config import DEVICE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.utils.utils_xai import MaskAwareJaguarDataset
@@ -254,7 +254,7 @@ def load_all_classification_sensitivity(bg_root: Path) -> pd.DataFrame:
 
     return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
-from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils import ensure_dir, resolve_path
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
@@ -504,7 +504,7 @@ def plot_drop_bars(cls_all: pd.DataFrame, out_path: Path, title: str = "Average 
 
 
 if __name__ == "__main__":
-    bg_root = PATHS.runs / "xai" / "background_sensitivity"
+    bg_root = resolve_path("xai/background_sensitivity", EXPERIMENTS_STORE)
     save_dir = PATHS.results / "xai" / "background_sensitivity"
     ensure_dir(save_dir)
 
@@ -540,7 +540,7 @@ if __name__ == "__main__":
 
 
     # load
-    cls_all = load_all_classification_sensitivity(PATHS.runs / "xai" / "background_sensitivity")
+    cls_all = load_all_classification_sensitivity(bg_root)
     if cls_all.empty:
         raise RuntimeError("No classification_sensitivity__* files found. Did you run the cls pipeline?")
 

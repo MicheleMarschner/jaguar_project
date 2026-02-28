@@ -3,7 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from jaguar.config import PATHS
+from jaguar.config import EXPERIMENTS_STORE, PATHS
+from jaguar.utils.utils import resolve_path
 
 
 def get_largest_burst_group(artifacts_dir):
@@ -16,7 +17,7 @@ def get_largest_burst_group(artifacts_dir):
     gid = x["burst_group_id"].value_counts().index[0]
     burst_df = x[x["burst_group_id"] == gid].copy()
 
-    burst_df = burst_df.sort_values(["filepath"], ascending=[True]).copy()
+    burst_df = burst_df.sort_values(["filename"], ascending=[True]).copy()
 
     # jaguar name + burst members
     jaguar_name = burst_df["identity_id"].iloc[0] if "identity_id" in burst_df.columns else "unknown"
@@ -39,9 +40,9 @@ def plot_burst(data_root, df, save_dir, filename=None):
     plt.figure(figsize=(2.0 * n, 2.8))  
 
     for i, r in enumerate(show.itertuples(index=False), start=1):
-        fp = Path(r.filepath)
+        fp = Path(r.filename)
         if not fp.exists() and data_root is not None:
-            fp = Path(data_root) / fp.name  
+            fp = Path(data_root) / Path(r.filename).name  
 
         with Image.open(fp) as img:
             plt.subplot(1, n, i)
@@ -50,11 +51,11 @@ def plot_burst(data_root, df, save_dir, filename=None):
             # put jaguar + burst size into first image title (no extra top gap)
             if i == 1:
                 plt.title(
-                    f"{jaguar_name} | n={burst_size}\n{Path(r.filepath).name}",
+                    f"{jaguar_name} | n={burst_size}\n{Path(r.filename).name}",
                     fontsize=8, pad=2
                 )
             else:
-                plt.title(f"{Path(r.filepath).name}", fontsize=8, pad=2)
+                plt.title(f"{Path(r.filename).name}", fontsize=8, pad=2)
 
             plt.axis("off")
 
@@ -77,7 +78,7 @@ def compute_burst_stats(artifacts_dir: Path, save_dir: Path):
     df["is_in_burst"] = df["burst_group_id"].notna()
 
     id_col = "identity_id"
-    file_col = "filepath"
+    file_col = "filename"
 
     jaguar_stats = (
         df.groupby(id_col)
@@ -121,7 +122,11 @@ def plot_burst_stats(jaguar_stats: pd.DataFrame, save_dir: Path, filename="burst
     return out_fp
 
 if __name__ == "__main__":
-    artifacts_dir = PATHS.runs / "bursts" / f"burst_groups__within500__cross10000__ph13"
+    artifacts_dir = resolve_path(
+        "bursts/burst_groups__within500__cross10000__ph13",
+        EXPERIMENTS_STORE,
+    )
+    
     img_root = PATHS.data_train
     save_dir = PATHS.results / "bursts"
 

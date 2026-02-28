@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -119,6 +120,7 @@ class FODataset:
         view.delete()
         return export_root
 
+    
     @classmethod
     def load_manifest(
         cls,
@@ -148,6 +150,45 @@ class FODataset:
     def launch(self):
         return fo.launch_app(self.dataset, auto=False)
 
+
+
+def rewrite_samples_json_to_data_relative(export_dir: Path, data_root: Path) -> Path:
+    export_dir = Path(export_dir)
+    data_root = Path(data_root).resolve()
+    fp = export_dir / "samples.json"
+
+    with fp.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    samples = data["samples"] if isinstance(data, dict) and "samples" in data else data
+    changed = 0
+
+    for s in samples:
+        p = Path(s.get("filepath", ""))
+        # normalize only if absolute and under data_root
+        try:
+            rel = p.resolve().relative_to(data_root).as_posix()
+        except Exception:
+            # if it's not under data_root, leave it as-is
+            continue
+
+        s["filepath"] = rel              # now portable
+        s["path_root"] = "data"          # optional but useful
+        s.setdefault("filename", Path(rel).name)
+        changed += 1
+
+    # write back in the same structure
+    if isinstance(data, dict) and "samples" in data:
+        data["samples"] = samples
+        out_obj = data
+    else:
+        out_obj = samples
+
+    with fp.open("w", encoding="utf-8") as f:
+        json.dump(out_obj, f, indent=2)
+
+    print(f"[FO] Rewrote {changed} sample filepaths to data-relative in {fp}")
+    return fp
 
 # =====================================================================
 # Minimal "build from raw" helper (filename ids)

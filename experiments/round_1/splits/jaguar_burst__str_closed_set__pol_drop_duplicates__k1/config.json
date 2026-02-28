@@ -5,7 +5,10 @@
   "val_k": 50,
   "intra_burst_phash_threshold": 4,
   "dataset_name": "jaguar_burst",
-  "base_dedup_manifest": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/data/round_1/fiftyone/burst",
+  "base_dedup_manifest": {
+    "root": "data",
+    "rel": "fiftyone/burst"
+  },
   "data_summary": {
     "raw_data": {
       "total_samples": 1895,

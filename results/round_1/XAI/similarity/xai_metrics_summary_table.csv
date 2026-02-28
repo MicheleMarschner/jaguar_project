@@ -1,8 +1,4 @@
 model,explainer,pair_type,complexity,faith,sanity
-ConvNeXt-V2,GradCAM,easy_pos,0.595 ± 0.059,0.686 ± 0.146,-0.294 ± 0.259
-ConvNeXt-V2,GradCAM,hard_neg,0.682 ± 0.085,0.561 ± 0.098,-0.231 ± 0.321
-ConvNeXt-V2,IG,easy_pos,0.687 ± 0.037,0.435 ± 0.128,0.002 ± 0.004
-ConvNeXt-V2,IG,hard_neg,0.683 ± 0.033,0.433 ± 0.123,0.001 ± 0.005
 MiewID,GradCAM,easy_pos,0.525 ± 0.124,0.360 ± 0.065,0.064 ± 0.163
 MiewID,GradCAM,hard_neg,0.456 ± 0.048,0.421 ± 0.085,0.094 ± 0.168
 MiewID,IG,easy_pos,0.649 ± 0.044,0.322 ± 0.069,-0.003 ± 0.005

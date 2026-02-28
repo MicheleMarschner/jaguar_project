@@ -13,6 +13,7 @@ This script evaluates *explanations*, not retrieval performance.
 """
 
 import gc
+from pathlib import Path
 import numpy as np
 import torch
 from collections import defaultdict
@@ -24,9 +25,9 @@ import pandas as pd
 from typing import Any, Dict
 
 from jaguar.XAI.run_xai_similarity import XAIConfig, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
-from jaguar.config import DEVICE, PATHS, SEED
+from jaguar.config import DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, SEED
 from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.utils.utils import ensure_dir, load_parquet
+from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.utils.utils_xai import SimilarityForward, save_vec
 
@@ -293,19 +294,23 @@ def run_xai_metrics(cfg) -> pd.DataFrame:
     model_name = "MiewID"      # MiewID, ConvNeXt-V2
     explainer_names = ["GradCAM", "IG"]
 
-    run_root = cfg.out_root / f"{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
+    run_root = resolve_path(
+        f"xai/similarity/{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}",
+        EXPERIMENTS_STORE,
+    )
     # locate an existing XAI run folder (metrics assume saliency artifacts already exist)
     if not run_root.exists():
         print(f"[Skip] Missing run_root: {run_root} (run XAI first)")
         raise SystemExit(0)
+    run_root_write = Path(EXPERIMENTS_STORE.write_root) / f"xai/similarity/{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
     
-    metrics_path = run_root / "metrics"
+    metrics_path = run_root_write / "metrics"
     ensure_dir(metrics_path)
 
     # Load the same dataset + model backbone used for scoring similarity 
     # (needed for faithfulness and sanity recomputation).
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "splits_curated",      
+        resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=cfg.dataset_name,
         processing_fn=None,
         overwrite_db=False, 

@@ -1,12 +1,12 @@
 import os
-from jaguar.utils.utils import save_npy
+from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms.v2 as transforms
 from torchvision.transforms import InterpolationMode
 
-from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
 from jaguar.utils.utils_models import (
     load_megadescriptor_model,
     load_dino_model,  # For DINO/DINOv2
@@ -258,7 +258,9 @@ class FoundationModelWrapper:
         print(f"[Info] Extracted embeddings shape: {emb_np.shape}")
         return emb_np
 
-    def save_embeddings(self, embeddings: np.ndarray, split="training", folder=PATHS.data / "embeddings"):
+    def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
         os.makedirs(folder, exist_ok=True)
         filename = f"embeddings_{self.name}_{split}.npy"
         path = os.path.join(folder, filename)
@@ -266,7 +268,9 @@ class FoundationModelWrapper:
         print(f"[Info] Saved embeddings to {path}")
         return path
 
-    def load_embeddings(self, split="training", folder=PATHS.data / "embeddings"):
+    def load_embeddings(self, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
         filename = f"embeddings_{self.name}_{split}.npy"
         path = os.path.join(folder, filename)
         emb = np.load(path)

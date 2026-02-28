@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from jaguar.config import PATHS
-from jaguar.utils.utils import ensure_dir
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
+from jaguar.utils.utils import ensure_dir, resolve_path, to_abs
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 
 
@@ -261,9 +261,11 @@ def plot_duplicate_group(cluster_df, data_root, save_dir):
     plt.figure(figsize=(3 * n, 3))
 
     for i, row in enumerate(df.itertuples(index=False), start=1):
-        fp = Path(row.filepath)
-        if not fp.exists():
-            fp = Path(data_root) / Path(fp).name
+        if hasattr(row, "filepath_root") and hasattr(row, "filepath_rel"):
+            fp = to_abs(row.filepath_root, row.filepath_rel)
+        else:
+            # Fallback: resolve by filename under the train image root
+            fp = Path(data_root) / Path(row.filename).name
 
         img = Image.open(fp).convert("RGB")
 
@@ -284,11 +286,11 @@ def plot_duplicate_group(cluster_df, data_root, save_dir):
 
 
 if __name__ == "__main__":
-    artifacts_dir = PATHS.runs / "splits" / "jaguar_burst__str_closed_set__pol_drop_duplicates__k1"
+    artifacts_dir = resolve_path("splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1", EXPERIMENTS_STORE)
     save_dir = PATHS.results / "splits"
     ensure_dir(save_dir)
     img_root = PATHS.data_train
-    manifest_dir = PATHS.data_export / "splits_curated"
+    manifest_dir = resolve_path("fiftyone/splits_curated", DATA_STORE)
     dataset_name = "jaguar_curated"
     
     split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")

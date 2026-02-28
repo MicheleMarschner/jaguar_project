@@ -2,6 +2,7 @@ from collections import deque
 import json
 from pathlib import Path
 from typing import Optional
+from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -9,7 +10,7 @@ import uuid
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import PATHS, SEED
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, SEED
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.utils.utils_burst_discovery import (
@@ -62,7 +63,7 @@ def precompute_vectorized_phash_within_identity(
         # Extract local data
         local_phashes = group[phash_col].tolist()
         local_emb_rows = group[emb_row_col].values
-        local_filepaths = group["filepath"].values
+        local_filenames = group["filename"].values
         
         # 2. Create Binary Matrix (M images x 64 bits)
         # Filter out Nones first
@@ -105,8 +106,8 @@ def precompute_vectorized_phash_within_identity(
                 "identity_id": str(ident),
                 "src_emb_row": int(local_emb_rows[orig_i[k]]),
                 "dst_emb_row": int(local_emb_rows[orig_j[k]]),
-                "src_filepath": str(local_filepaths[orig_i[k]]),
-                "dst_filepath": str(local_filepaths[orig_j[k]]),
+                "src_filename": str(local_filenames[orig_i[k]]),
+                "dst_filename": str(local_filenames[orig_j[k]]),
                 "phash_dist": int(final_dists[k]),
             })
 
@@ -204,7 +205,7 @@ def assign_burst_groups_from_filtered_edges(
     min_cluster_size: int = 2,
     identity_col: str = "identity_id",
     emb_row_col: str = "emb_row",
-    filepath_col: str = "filepath",
+    filename_col: str = "filename",
     group_id_prefix: str = "burst",
 ) -> dict:
     meta = meta_df.reset_index(drop=True).copy()
@@ -247,7 +248,7 @@ def assign_burst_groups_from_filtered_edges(
             # mark all clustered members as burst members (no rep yet)
             meta.loc[comp_mask, "burst_role"] = "burst_member"
 
-            burst_filepaths.extend(meta.loc[comp_mask, filepath_col].tolist())
+            burst_filepaths.extend(meta.loc[comp_mask, filename_col].tolist())
 
     summary = {
         "num_images": int(len(meta)),
@@ -341,7 +342,7 @@ def run_burst_grouping_from_precomputed_candidates(
         min_cluster_size=min_cluster_size,
         identity_col="identity_id",
         emb_row_col="emb_row",
-        filepath_col="filepath",
+        filename_col="filename",
     )
 
     out = assigned["summary"].copy()
@@ -387,7 +388,7 @@ def set_values_typed(dataset, view, df: pd.DataFrame, field_name: str, field_cls
 def apply_burst_groups_to_fiftyone(
     dataset,  
     meta_assignments: pd.DataFrame,
-    filepath_col: str = "filepath",
+    filename_col: str = "filename",
     group_col: str = "burst_group_id",
     size_col: str = "burst_cluster_size",
     role_col: str = "burst_role",
@@ -397,8 +398,8 @@ def apply_burst_groups_to_fiftyone(
     Mirrors dedup assignments into FiftyOne fields/tags for visual QA and manual inspection.
     """
     df = meta_assignments.copy()
-    df[filepath_col] = df[filepath_col].astype(str)
-    view_all = dataset.select_by(filepath_col, df[filepath_col].tolist())
+    df[filename_col] = df[filename_col].astype(str)
+    view_all = dataset.select_by(filename_col, df[filename_col].tolist())
 
     if group_col in df.columns:
         set_values_typed(dataset, view_all, df, group_col, fo.StringField)
@@ -409,10 +410,10 @@ def apply_burst_groups_to_fiftyone(
 
     if role_col in df.columns:
         role_series = _series_nan_to_none(df[role_col])
-        burst_fps = df.loc[role_series == "burst_member", filepath_col].astype(str).tolist()
+        burst_fps = df.loc[role_series == "burst_member", filename_col].astype(str).tolist()
 
         if burst_fps:
-            dataset.select_by(filepath_col, burst_fps).tag_samples(burst_tag)
+            dataset.select_by(filename_col, burst_fps).tag_samples(burst_tag)
 
     dataset.save()
     print(f"Applied burst groups to {len(df)} samples.")
@@ -654,5 +655,7 @@ if __name__ == "__main__":
         fo_wrapper.get_dataset(),
         pd.read_parquet(final_dir / "burst_assignments.parquet"),
     )
-    fo_wrapper.export_manifest(PATHS.data_export / "burst")
+    export_dir = DATA_STORE.write_root / "fiftyone" / "burst"
+    fo_wrapper.export_manifest(export_dir)
+    rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
     print("\n[Done] Identifying and Grouping Bursts Complete.")

@@ -69,8 +69,8 @@ Trend: You expect a negative correlation (Higher confidence = Simpler, more focu
 
 
 import pandas as pd
-from jaguar.config import PATHS
-from jaguar.utils.utils import ensure_dir
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, RESULTS_STORE
+from jaguar.utils.utils import ensure_dir, resolve_path
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
@@ -410,18 +410,18 @@ def compute_failure_summary_all_models(refs_all: pd.DataFrame) -> pd.DataFrame:
     out_rows = []
 
     for model, df_m in refs_all.groupby("model"):
-        easy = df_m[df_m["pair_type"] == "easy_pos"][["query_idx","ref_idx","pair_sim","control_rank"]].copy()
+        easy = df_m[df_m["pair_type"] == "easy_pos"][["query_idx","ref_idx","pair_sim","rank_in_gallery"]].copy()
         easy = easy.rename(columns={
             "ref_idx": "easy_ref_idx",
             "pair_sim": "easy_sim",
-            "control_rank": "easy_rank",
+            "rank_in_gallery": "easy_rank",
         })
 
-        hard = df_m[df_m["pair_type"] == "hard_neg"][["query_idx","ref_idx","pair_sim","control_rank"]].copy()
+        hard = df_m[df_m["pair_type"] == "hard_neg"][["query_idx","ref_idx","pair_sim","rank_in_gallery"]].copy()
         hard = hard.rename(columns={
             "ref_idx": "hard_ref_idx",
             "pair_sim": "hard_sim",
-            "control_rank": "hard_rank",
+            "rank_in_gallery": "hard_rank",
         })
 
         merged = hard.merge(easy, on="query_idx", how="left")
@@ -464,17 +464,17 @@ def get_top1_failures_for_model(refs_model: pd.DataFrame) -> pd.DataFrame:
     RQ1 (Why does the model retrieve the wrong identity?).
 
     Purpose: Identify concrete top-1 failure cases for a single model/run:
-    - hard_neg is the top-1 candidate (control_rank==1)
+    - hard_neg is the top-1 candidate (rank_in_gallery==1)
     - easy_pos exists but appears later (easy_rank>1)
     Also computes sim_gap_wrong_minus_right = hard_sim - easy_sim.
     Output: Failure DataFrame sorted by largest similarity gap (worst confusions first).
     Why: Selects the exact cases you should visualize/explain (query + wrong + true match).
     """
-    easy = refs_model[refs_model["pair_type"]=="easy_pos"][["query_idx","ref_idx","pair_sim","control_rank"]].copy()
-    easy = easy.rename(columns={"ref_idx":"easy_ref_idx","pair_sim":"easy_sim","control_rank":"easy_rank"})
+    easy = refs_model[refs_model["pair_type"]=="easy_pos"][["query_idx","ref_idx","pair_sim","rank_in_gallery"]].copy()
+    easy = easy.rename(columns={"ref_idx":"easy_ref_idx","pair_sim":"easy_sim","rank_in_gallery":"easy_rank"})
 
-    hard = refs_model[refs_model["pair_type"]=="hard_neg"][["query_idx","ref_idx","pair_sim","control_rank"]].copy()
-    hard = hard.rename(columns={"ref_idx":"hard_ref_idx","pair_sim":"hard_sim","control_rank":"hard_rank"})
+    hard = refs_model[refs_model["pair_type"]=="hard_neg"][["query_idx","ref_idx","pair_sim","rank_in_gallery"]].copy()
+    hard = hard.rename(columns={"ref_idx":"hard_ref_idx","pair_sim":"hard_sim","rank_in_gallery":"hard_rank"})
 
     merged = hard.merge(easy, on="query_idx", how="left")
     failures = merged[(merged["hard_rank"]==1) & (merged["easy_rank"].notna()) & (merged["easy_rank"]>1)].copy()
@@ -556,10 +556,10 @@ def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) ->
     Why: Lets you compare what “hard positives” look like vs “easy positives”.
     """
     easy = pairs_df[pairs_df["pair_type"] == "easy_pos"].copy()
-    if "control_rank" not in easy.columns:
-        raise RuntimeError("Need control_rank. Fix mining first.")
+    if "rank_in_gallery" not in easy.columns:
+        raise RuntimeError("Need rank_in_gallery. Fix mining first.")
 
-    ranks = easy["control_rank"].astype(float).to_numpy()
+    ranks = easy["rank_in_gallery"].astype(float).to_numpy()
     t_low = float(np.quantile(ranks, q_low))
     t_high = float(np.quantile(ranks, q_high))
 
@@ -571,7 +571,7 @@ def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) ->
         else:
             return "easy_pos_mid"
 
-    easy["easypos_bucket"] = easy["control_rank"].apply(bucket)
+    easy["easypos_bucket"] = easy["rank_in_gallery"].apply(bucket)
     return easy, {"t_low": t_low, "t_high": t_high}
 
 
@@ -723,8 +723,8 @@ def save_failure_panels_with_overlays(
 
 
 if __name__ == "__main__":
-    run_root = PATHS.runs / "xai" / "similarity"
-    save_root = PATHS.results / "xai" / "similarity"
+    run_root = resolve_path("xai/similarity", EXPERIMENTS_STORE)
+    save_root = resolve_path("xai/similarity", RESULTS_STORE)
     ensure_dir(save_root)
     dataset_name = "jaguar_xai"
 
@@ -748,7 +748,7 @@ if __name__ == "__main__":
     summary_fail.to_csv(save_root / "failure_summary_all_models.csv", index=False)
 
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "splits_curated",      
+        resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=dataset_name,
         processing_fn=None,
         overwrite_db=False, 
@@ -758,12 +758,15 @@ if __name__ == "__main__":
 
     model_name = "MiewID" #TODO go over all folder by yourself
 
-    refs_path = run_root / f"{model_name}__val__n10__seed51" / "refs_n10.parquet"
-    runs_dir = run_root / f"{model_name}__val__n10__seed51" 
+    runs_dir = resolve_path(
+        f"xai/similarity/{model_name}__val__n10__seed51",
+        EXPERIMENTS_STORE,
+    )
+    refs_path = runs_dir / "refs_n10.parquet"
 
     pairs_df = pd.read_parquet(refs_path)  # refs_n10.parquet for ONE model
 
-    rank_col="control_rank" # TODO rank_in_gallery - umbenennenen 
+    rank_col="rank_in_gallery" # TODO rank_in_gallery - umbenennenen 
     
     # failures list (for RQ1)
     failures = get_top1_failures_for_model(pairs_df)

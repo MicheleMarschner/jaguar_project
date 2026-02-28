@@ -1,6 +1,6 @@
 import fiftyone as fo
-from jaguar.config import PATHS
-from jaguar.utils.utils import ensure_dir, save_npy
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
 import random 
 import pandas as pd
@@ -111,7 +111,7 @@ def get_group_aware_stratified_train_val_split(
     seed: int,
     identity_col: str = "identity_id",
     burst_group_col: str = "burst_group_id",
-    filepath_col: str = "filepath",
+    filepath_col: str = "filename",
 ):
     """
     Closed-set split helper: burst-preserving grouping + approximate identity stratification at group level.
@@ -244,6 +244,7 @@ def load_jaguar_from_FO_export(
     # Torch dataset reads the same samples.json and uses absolute paths inside it
     torch_ds = JaguarDataset(
         base_root=manifest_dir,
+        data_root=DATA_ROOT,
         filepath_key="filepath",
         transform=transform,
         processing_fn=processing_fn,
@@ -257,7 +258,7 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
     Returns embeddings as np.ndarray [N,D].
     Loads from disk if available; otherwise extracts and saves.
     """
-    folder = PATHS.data / "embeddings"
+    folder = resolve_path("embeddings", DATA_STORE)
     ensure_dir(folder)
 
     filename = f"embeddings_{model_wrapper.name}_{split}.npy"

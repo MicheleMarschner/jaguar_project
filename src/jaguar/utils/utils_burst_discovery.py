@@ -16,11 +16,10 @@ import pandas as pd
 from PIL import Image
 import imagehash
 from sklearn.metrics.pairwise import cosine_similarity
-from jaguar.utils.utils import ensure_dir, json_default, save_parquet
+from jaguar.utils.utils import ensure_dir, json_default, save_parquet, to_abs, to_rel_path
 import numpy as np
 import json
 import cv2
-
 
 
 def build_meta_from_jaguar_dataset(torch_ds) -> pd.DataFrame:
@@ -33,12 +32,13 @@ def build_meta_from_jaguar_dataset(torch_ds) -> pd.DataFrame:
     for i, s in enumerate(torch_ds.samples):
         filepath = s[torch_ds.filepath_key]
         filename = s.get(torch_ds.filename_key) or Path(filepath).name
+        packed = to_rel_path(torch_ds._resolve_path(filepath))
 
         row = {
             "emb_row": i,      
             "ds_idx": i,       
-            "filepath": str(torch_ds._resolve_path(filepath)),
-            "filepath_rel": str(filepath),
+            "filepath_root": packed["root"],
+            "filepath_rel": packed["rel"],
             "filename": filename,
         }
 
@@ -63,10 +63,16 @@ def _compute_phash(filepath: str | Path, hash_size: int = 8):
     return imagehash.phash(img, hash_size=hash_size)
 
 
-def _compute_phash_for_dataset(meta_df: pd.DataFrame, filepath_col: str = "filepath", hash_size: int = 8) -> list:
+def _compute_phash_for_dataset(meta_df: pd.DataFrame, hash_size: int = 8) -> list:
     phashes = []
-    for fp in tqdm(meta_df[filepath_col].tolist(), desc="pHash"):
+    for root, rel in tqdm(
+        meta_df[["filepath_root", "filepath_rel"]].itertuples(index=False, name=None),
+        desc="pHash",
+        total=len(meta_df),
+    ):
+        fp = None
         try:
+            fp = to_abs(root, rel)
             phashes.append(_compute_phash(fp, hash_size=hash_size))
         except Exception as e:
             print(f"pHash failed for {fp}: {e}")
@@ -74,13 +80,13 @@ def _compute_phash_for_dataset(meta_df: pd.DataFrame, filepath_col: str = "filep
     return phashes
 
 
-def add_phash_columns(meta_df: pd.DataFrame, filepath_col: str = "filepath", hash_size: int = 8) -> pd.DataFrame:
+def add_phash_columns(meta_df: pd.DataFrame, hash_size: int = 8) -> pd.DataFrame:
     """
     Adds pHash object + hex columns. Keep object column for in-memory sweeps.
     Save hex column to disk.
     """
     out = meta_df.copy()
-    out["phash"] = _compute_phash_for_dataset(out, filepath_col=filepath_col, hash_size=hash_size)
+    out["phash"] = _compute_phash_for_dataset(out, hash_size=hash_size)
     out["phash_hex"] = [str(h) if h is not None else None for h in out["phash"]]
     return out
 
@@ -99,19 +105,25 @@ def _compute_sharpness(filepath: str | Path) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def _compute_sharpness_for_dataset(meta_df: pd.DataFrame, filepath_col: str = "filepath") -> list[float]:
+def _compute_sharpness_for_dataset(meta_df: pd.DataFrame) -> list[float]:
     vals = []
-    for fp in tqdm(meta_df[filepath_col].tolist(), desc="Sharpness"):
+    for root, rel in tqdm(
+        meta_df[["filepath_root", "filepath_rel"]].itertuples(index=False, name=None),
+        desc="Sharpness",
+        total=len(meta_df),
+    ):
+        fp = None
         try:
+            fp = to_abs(root, rel)
             vals.append(_compute_sharpness(fp))
         except Exception as e:
             print(f"Sharpness failed for {fp}: {e}")
             vals.append(-1.0)
     return vals
 
-def add_sharpness_column(meta_df: pd.DataFrame, filepath_col: str = "filepath") -> pd.DataFrame:
+def add_sharpness_column(meta_df: pd.DataFrame) -> pd.DataFrame:
     out = meta_df.copy()
-    out["sharpness"] = _compute_sharpness_for_dataset(out, filepath_col=filepath_col)
+    out["sharpness"] = _compute_sharpness_for_dataset(out)
     return out
 
 
@@ -142,8 +154,8 @@ def save_image_feature_cache(out_dir, file_path, meta_features: pd.DataFrame, co
 
 def load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name):
     if not meta_img_file.exists():
-        meta_img_features = add_phash_columns(jag_meta, filepath_col="filepath", hash_size=phash_size)
-        meta_img_features = add_sharpness_column(meta_img_features, filepath_col="filepath")
+        meta_img_features = add_phash_columns(jag_meta, hash_size=phash_size)
+        meta_img_features = add_sharpness_column(meta_img_features)
         save_image_feature_cache(
             out_dir=out_dir,
             file_path=meta_img_file, 

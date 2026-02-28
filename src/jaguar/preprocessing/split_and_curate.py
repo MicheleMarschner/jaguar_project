@@ -42,7 +42,8 @@ Notes / assumptions:
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
-from jaguar.utils.utils import ensure_dir, save_parquet
+from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
+from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
@@ -50,7 +51,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import DEVICE, PATHS, SEED
+from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, SEED
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_jaguar_from_FO_export, load_or_extract_embeddings
 from jaguar.utils.utils_split_and_curate import (
@@ -139,7 +140,7 @@ def make_closed_set_splits(
         seed=seed,
         identity_col=identity_col,
         burst_group_col="burst_group_id",
-        filepath_col="filepath",
+        filepath_col="filename",
     )
 
     out["split_tmp"] = None
@@ -253,12 +254,13 @@ def apply_post_split_curation(
 
     # Merge meta data onto split DF for easy access
     # After this merge, `out` carries per-image sharpness needed for ranking within subclusters.
-    cols_to_merge = ["sharpness", "phash", "filepath"]
+    cols_to_merge = ["emb_row", "sharpness", "phash_hex"]
     out = out.merge(
-        meta_img_df[cols_to_merge], 
-        on="filepath", 
-        how="left"
+        meta_img_df[cols_to_merge],
+        on="emb_row",
+        how="left",
     )
+    out["phash"] = out["phash_hex"].apply(lambda x: imagehash.hex_to_hash(x) if pd.notna(x) else None)
 
     out["keep_curated"] = False
     out["curation_reason"] = "dropped"
@@ -352,7 +354,7 @@ def set_values_typed(dataset, view, df: pd.DataFrame, field_name: str, field_cls
 def apply_curation_assignments_to_fiftyone(
     dataset,
     final_df: pd.DataFrame,
-    filepath_col: str = "filepath",
+    filepath_col: str = "filename",
     split_col: str = "split_final",   # or split_tmp
     keep_col: str = "keep_curated",
     reason_col: str = "curation_reason",
@@ -452,7 +454,7 @@ def run_phash_sweep(
 
     results_df = pd.DataFrame(results)
 
-    file_path = save_dir / "pHash_threshold_sweep"
+    file_path = save_dir / "pHash_threshold_sweep.parquet"
     save_parquet(file_path, results_df)
     print(f"Sweep summary saved → {file_path}")
 
@@ -465,7 +467,7 @@ def main():
     TRAIN_K_PER_BURST = 1      # Keep 1 best image per duplicate group in Train        
     VAL_K_PER_BURST = 50        # Keep ALL (or high K) images in Val to test robustness       
     dataset_name = "jaguar_burst"
-    manifest_dir = PATHS.data_export / "burst"  
+    manifest_dir = resolve_path("fiftyone/burst", DATA_STORE) 
     strategy = "closed_set"                 # "open_set" or "closed_set"
     dedup_policy = "drop_duplicates"        # "keep_all", "drop_duplicates"
     stem = f"{dataset_name}__str_{strategy}__pol_{dedup_policy}__k{TRAIN_K_PER_BURST}"
@@ -483,7 +485,7 @@ def main():
     embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
     
     # Load Metadata (Sharpness/pHash)
-    meta_img_file = PATHS.runs / "bursts" / "meta_img_features.parquet"
+    meta_img_file = resolve_path("bursts/meta_img_features.parquet", EXPERIMENTS_STORE)
     if not meta_img_file.exists():
         raise FileNotFoundError("Run burst discovery first to generate meta features.")
     meta_img_df = pd.read_parquet(meta_img_file)
@@ -552,7 +554,7 @@ def main():
         "val_k": VAL_K_PER_BURST,
         "intra_burst_phash_threshold": INTRA_BURST_PHASH_THRESH,
         "dataset_name": dataset_name,
-        "base_dedup_manifest": str(manifest_dir),
+        "base_dedup_manifest": to_rel_path(manifest_dir),
     }
 
     summary = summarize_splits(final_df)
@@ -571,10 +573,10 @@ def main():
         dataset=fo_wrapper.get_dataset(),
         final_df=final_df,
     )
-    print("FO dataset name:", fo_wrapper.get_dataset().name)
     print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
-    print("Export dir exists already?", Path(manifest_dir).exists())
-    fo_wrapper.export_manifest(PATHS.data_export / "splits_curated")
+    export_dir = DATA_STORE.write_root / "fiftyone" / "splits_curated"
+    fo_wrapper.export_manifest(export_dir)
+    rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
     
 
 if __name__ == "__main__":

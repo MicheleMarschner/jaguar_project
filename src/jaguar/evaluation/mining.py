@@ -133,7 +133,6 @@ def easy_positive(
 
 
 # Challenging same-ID pair: tests intra-identity variation (pose, lighting, occlusion, background).
-# Often more informative than easy positives for XAI/CAM comparisons.
 def hard_positive(
     i: int,
     sim: np.ndarray,

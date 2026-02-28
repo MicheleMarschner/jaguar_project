@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 
 from jaguar.config import PATHS
-from jaguar.datasets.FiftyOneDataset import FODataset
+from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
 from jaguar.utils.utils_eda import (
     analyze_images, 
     basic_integrity_report, 
@@ -171,7 +171,7 @@ def main():
     csv_file = PATHS.data / "raw/jaguar-re-id/train.csv"
     test_csv_file = PATHS.data / "raw/jaguar-re-id/test.csv"
     
-    '''
+    
     ### add labels to fiftyOne
     def build_fn():
         return build_from_csv_labels(
@@ -180,8 +180,7 @@ def main():
             csv_path=csv_file,
             overwrite_db=True,
         )
-
-    
+    '''
     fo_wrapper = get_or_create_manifest_dataset(
         dataset_name=FO_DATASET_NAME,
         manifest_dir=manifest_dir,

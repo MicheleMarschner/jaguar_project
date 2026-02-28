@@ -165,7 +165,7 @@ if __name__ == "__main__":
             all_embs.append(batch_emb)
 
         embs = np.vstack(all_embs)
-        np.save(str(emb_path), embs)
+        save_npy(str(emb_path), embs)
         print(f"[Info] Saved embeddings to {emb_path} shape={embs.shape}")
 
         assert embs.shape[0] == len(filepaths), "Embeddings must align with dataset order!"

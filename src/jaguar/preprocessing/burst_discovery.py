@@ -10,9 +10,9 @@ import imagehash
 import fiftyone as fo
 
 from jaguar.config import PATHS, SEED
-from jaguar.utils.utils import ensure_dir, json_default
+from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
-from jaguar.utils.utils_deduplication import (
+from jaguar.utils.utils_burst_discovery import (
     phash_distance, 
     build_meta_from_jaguar_dataset, 
     load_or_create_meta_img_file, 
@@ -28,10 +28,7 @@ def precompute_vectorized_phash_within_identity(
     phash_col: str = "phash",
     emb_row_col: str = "emb_row",
 ) -> pd.DataFrame:
-    """
-    Optimized 'All-Pairs' generator using Vectorization.
-    100x faster than nested python loops.
-    """
+    
     # 1. Prepare Data
     meta = meta_df.reset_index(drop=True)
     meta[identity_col] = meta[identity_col].astype(str)
@@ -294,8 +291,8 @@ def save_burst_group_artifacts(
         meta_save["phash_hex"] = [str(h) if h is not None else None for h in meta_save["phash"]]
         meta_save = meta_save.drop(columns=["phash"])
 
-    meta_parquet = out_dir / "burst_assignments.parquet"
-    meta_save.to_parquet(meta_parquet, index=False)
+    meta_path = out_dir / "burst_assignments.parquet"
+    save_parquet(meta_path, meta_save)
 
     if "burst_group_id" in meta_save.columns:
         clustered = meta_save[meta_save["burst_group_id"].notna()].copy()
@@ -305,13 +302,13 @@ def save_burst_group_artifacts(
                 .size()
                 .reset_index(name="cluster_size")
             )
-            cluster_summary.to_parquet(out_dir / "cluster_summary.parquet", index=False)
+            save_parquet(out_dir / "cluster_summary.parquet", cluster_summary)
 
     if candidate_edges_df is not None and len(candidate_edges_df) > 0:
-        candidate_edges_df.to_parquet(out_dir / "candidate_edges_raw.parquet", index=False)
+        save_parquet(out_dir / "candidate_edges_raw.parquet", candidate_edges_df)
 
     if filtered_edges_df is not None and len(filtered_edges_df) > 0:
-        filtered_edges_df.to_parquet(out_dir / "candidate_edges_filtered.parquet", index=False)
+        save_parquet(out_dir / "candidate_edges_filtered.parquet", filtered_edges_df)
 
     with open(out_dir / "summary.json", "w") as f:
         json.dump(summary_dict, f, indent=2, default=json_default)
@@ -538,7 +535,7 @@ def load_or_create_phash_diagnostics(
             max_cross_pairs_total=max_cross_pairs_total,
             seed=seed,
         )
-        diag_df.to_parquet(out_file, index=False)
+        save_parquet(out_file, diag_df)
 
     # Determine Safe Threshold
     safe_rows = diag_df[diag_df['cross_links'] == 0]
@@ -592,7 +589,7 @@ if __name__ == "__main__":
             meta_df=meta_img_features,
             identity_col="identity_id",
         )
-        cand_raw.to_parquet(cand_file, index=False)
+        save_parquet(cand_file, cand_raw)
         print(f"[Info] Saved candidates: {cand_file}")
     else:
         print(f"[Info] Loading candidates: {cand_file}")
@@ -614,7 +611,7 @@ if __name__ == "__main__":
     # 5. FINAL THRESHOLD-SPECIFIC DIR (now threshold is known)
     final_dir = out_dir / f"burst_groups__within{MAX_WITHIN}__cross{MAX_CROSS}__ph{SAFE_THRESHOLD}"
     ensure_dir(final_dir)
-    diag_df.to_parquet(final_dir / "phash_diagnostics.parquet", index=False)
+    save_parquet(final_dir / "phash_diagnostics.parquet", diag_df)
 
     # 6. RUN DEDUPLICATION
     print(f"\n[Run] Grouping Bursts (pHash <= {SAFE_THRESHOLD})...")

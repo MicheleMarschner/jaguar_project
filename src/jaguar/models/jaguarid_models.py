@@ -82,7 +82,7 @@ class JaguarIDModel(nn.Module):
         
         with torch.no_grad():
             # Create dummy input based on actual model requirements
-            dummy = torch.randn(1, 3, input_res, input_res).to(device)
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)      ### !TODO Does this needs to be fixed?
             out = self.backbone(dummy)
             if isinstance(out, (tuple, list)): out = out[0]
             if out.ndim > 2: out = out.mean(dim=(2, 3))

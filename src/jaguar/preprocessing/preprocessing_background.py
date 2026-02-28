@@ -49,9 +49,6 @@ class ImageProcessor:
     @staticmethod
     def original(img: Image.Image, sample: dict, base_root: Path, **kwargs) -> Image.Image:
         # "Original" in the experiment sense = always return RGB.
-        # If input is an RGBA cutout, restore a neutral background so downstream models still get 3 channels.
-        if img.mode == "RGBA":
-            return rgba_on_solid_bg(img, color=(128, 128, 128))
         return img.convert("RGB")
 
     @staticmethod

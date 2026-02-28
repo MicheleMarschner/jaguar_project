@@ -39,8 +39,10 @@ Notes / assumptions:
   is the split + (optional) intra-burst curation described above.
 """
 
+from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
+from jaguar.utils.utils import ensure_dir, save_parquet
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
@@ -51,7 +53,7 @@ import fiftyone as fo
 from jaguar.config import DEVICE, PATHS, SEED
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_jaguar_from_FO_export, load_or_extract_embeddings
-from jaguar.utils.utils_split_data import (
+from jaguar.utils.utils_split_and_curate import (
     build_split_table_from_torch_dataset,
     print_keep_drop_summary,
     print_top_changed_bursts,
@@ -390,17 +392,86 @@ def apply_curation_assignments_to_fiftyone(
 
 
 
+def run_phash_sweep(
+    split_df,
+    meta_img_df,
+    embeddings,
+    thresholds,
+    train_k,
+    val_k,
+    save_dir=None,
+):
+    """
+    Runs the post-split curation for multiple pHash thresholds and 
+    returns a summary of kept/dropped counts per split.
+
+    thresholds: list of int, e.g. [2, 3, 4, 5]
+    """
+
+    results = []
+
+    for th in thresholds:
+        print(f"\n===== SWEEP: pHash threshold = {th} =====")
+        curated = apply_post_split_curation(
+            split_df=split_df,
+            meta_img_df=meta_img_df,
+            embeddings=embeddings,
+            train_k=train_k,
+            val_k=val_k,
+            phash_threshold=th,
+        )
+
+        # Compute stats
+        df = curated.copy()
+        df["kept"] = df["keep_curated"]
+        df["dropped"] = ~df["keep_curated"]
+
+        def summarize_for(split_name):
+            sub = df[df["split_tmp"] == split_name]
+            kept = int(sub["kept"].sum())
+            drop = int(sub["dropped"].sum())
+            total = len(sub)
+            pct_drop = drop / total if total > 0 else 0.0
+            return kept, drop, total, pct_drop
+
+        train_stats = summarize_for("train")
+        val_stats = summarize_for("val")
+
+        results.append({
+            "phash_threshold": th,
+            "train_kept": train_stats[0],
+            "train_dropped": train_stats[1],
+            "train_total": train_stats[2],
+            "train_drop_pct": round(train_stats[3], 4),
+
+            "val_kept": val_stats[0],
+            "val_dropped": val_stats[1],
+            "val_total": val_stats[2],
+            "val_drop_pct": round(val_stats[3], 4),
+        })
+
+    results_df = pd.DataFrame(results)
+
+    file_path = save_dir / "pHash_threshold_sweep"
+    save_parquet(file_path, results_df)
+    print(f"Sweep summary saved → {file_path}")
+
+    return results_df
+
+
+
 def main():
     # Configuration
     TRAIN_K_PER_BURST = 1      # Keep 1 best image per duplicate group in Train        
     VAL_K_PER_BURST = 50        # Keep ALL (or high K) images in Val to test robustness       
-    INTRA_BURST_PHASH_THRESH = 4 # strict-ish near-duplicate grouping inside bursts (not pixel-identical)
     dataset_name = "jaguar_burst"
     manifest_dir = PATHS.data_export / "burst"  
     strategy = "closed_set"                 # "open_set" or "closed_set"
     dedup_policy = "drop_duplicates"        # "keep_all", "drop_duplicates"
     stem = f"{dataset_name}__str_{strategy}__pol_{dedup_policy}__k{TRAIN_K_PER_BURST}"
+    
     out_root = PATHS.runs / "splits" / f"{stem}"
+    ensure_dir(out_root)
     
     # Load Data
     print(f"Loading {dataset_name}...")
@@ -412,9 +483,9 @@ def main():
     embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
     
     # Load Metadata (Sharpness/pHash)
-    meta_img_file = PATHS.runs / "deduplication" / "meta_img_features.parquet"
+    meta_img_file = PATHS.runs / "bursts" / "meta_img_features.parquet"
     if not meta_img_file.exists():
-        raise FileNotFoundError("Run deduplication first to generate meta features.")
+        raise FileNotFoundError("Run burst discovery first to generate meta features.")
     meta_img_df = pd.read_parquet(meta_img_file)
     
     # Build Split Table
@@ -436,6 +507,24 @@ def main():
     # choose which images are eligible for splitting based on dedup policy. This controls whether 
     # training/validation sees all burst members or only deduplicated data.
     if dedup_policy == "drop_duplicates": 
+        # Instead of running only one threshold → run sweep
+        PHASH_SWEEP = [2, 3, 4, 5, 6]   # your choice
+
+        sweep_out = run_phash_sweep(
+            split_df=split_df,
+            meta_img_df=meta_img_df,
+            embeddings=embeddings,
+            thresholds=PHASH_SWEEP,
+            train_k=TRAIN_K_PER_BURST,
+            val_k=VAL_K_PER_BURST,
+            save_dir=out_root
+        )
+
+        print("\n===== Sweep Results =====")
+        print(sweep_out)
+
+        INTRA_BURST_PHASH_THRESH = 4 # strict-ish near-duplicate grouping inside bursts (not pixel-identical)
+
         final_df = apply_post_split_curation(
             split_df=split_df,
             meta_img_df=meta_img_df,
@@ -476,12 +565,15 @@ def main():
         config=config,
     )
     print(f"\nDone. Artifacts saved to {out_root}")
-
+    
     # Change in FiftyOne and export
     apply_curation_assignments_to_fiftyone(
         dataset=fo_wrapper.get_dataset(),
         final_df=final_df,
     )
+    print("FO dataset name:", fo_wrapper.get_dataset().name)
+    print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
+    print("Export dir exists already?", Path(manifest_dir).exists())
     fo_wrapper.export_manifest(PATHS.data_export / "splits_curated")
     
 

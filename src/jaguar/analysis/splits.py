@@ -5,7 +5,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
-import math
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir

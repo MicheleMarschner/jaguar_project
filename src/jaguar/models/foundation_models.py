@@ -1,4 +1,5 @@
 import os
+from jaguar.utils.utils import save_npy
 import torch
 import numpy as np
 from PIL import Image
@@ -133,7 +134,7 @@ class FoundationModelWrapper:
                 transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
-                "layer_getter": lambda m: m.stages[-1].blocks[-1],
+                "layer_getter": lambda m: m.features[-1][-1],
                 "reshape_transform": None 
             },
         },
@@ -189,8 +190,8 @@ class FoundationModelWrapper:
                 transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
-                "layer_getter": lambda m: m.blocks[-1].norm1,
-                "reshape_transform": vit_reshape_transform
+                "layer_getter": lambda m: m.backbone.conv_head,
+                "reshape_transform": None
             }
         }
     }
@@ -261,7 +262,7 @@ class FoundationModelWrapper:
         os.makedirs(folder, exist_ok=True)
         filename = f"embeddings_{self.name}_{split}.npy"
         path = os.path.join(folder, filename)
-        np.save(path, embeddings)
+        save_npy(path, embeddings)
         print(f"[Info] Saved embeddings to {path}")
         return path
 

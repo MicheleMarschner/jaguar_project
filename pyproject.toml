@@ -24,7 +24,7 @@ dependencies = [
   "pillow==11.3.0",
   "wandb==0.23.1",
   "python-dotenv==1.2.1",
-  "fiftyone==1.11.0",
+  "fiftyone==1.13.1",
   "grad-cam==1.5.5",
   "transformers==4.51.0",
   "faiss-cpu==1.13.2",

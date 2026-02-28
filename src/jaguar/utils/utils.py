@@ -4,12 +4,12 @@ import torch
 import numpy as np
 from dataclasses import fields
 from pathlib import Path
-import wandb
 import random
+import pandas as pd
 
 from typing import Sequence
 
-from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS, Paths, IN_COLAB
+from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS, Paths
 
 
 def ensure_dir(p: Path) -> None:
@@ -164,3 +164,17 @@ def json_default(obj):
     if isinstance(obj, Path):
         return str(obj)
     return str(obj)
+
+
+def save_npy(path: Path, arr: np.ndarray) -> None:
+    ensure_dir(path.parent)
+    np.save(path, arr)
+
+
+def save_parquet(path: Path, df: pd.DataFrame) -> None:
+    ensure_dir(path.parent)
+    df.to_parquet(path, index=False)
+
+
+def load_parquet(path: Path) -> pd.DataFrame:
+    return pd.read_parquet(path)

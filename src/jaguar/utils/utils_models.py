@@ -1,3 +1,5 @@
+from jaguar.config import PATHS
+from jaguar.utils.utils import save_npy
 import torch
 import numpy as np
 import timm
@@ -201,3 +203,26 @@ def swin_reshape_transform(tensor):
         return tensor.permute(0, 3, 1, 2)
     return tensor
 
+
+def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
+    """
+    Returns embeddings as np.ndarray [N,D].
+    Loads from disk if available; otherwise extracts and saves.
+    """
+    folder = PATHS.data / "embeddings"
+    folder.mkdir(parents=True, exist_ok=True)
+
+    filename = f"embeddings_{model_wrapper.name}_{split}.npy"
+    path = folder / filename
+
+    if path.exists():
+        emb = np.load(path)
+        print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
+        return emb
+
+    print(f"[Info] Embeddings not found at {path}. Extracting...")
+    imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
+    emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
+    save_npy(path, emb)
+    print(f"[Info] Saved embeddings to {path}")
+    return emb

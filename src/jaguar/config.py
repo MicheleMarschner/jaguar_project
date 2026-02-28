@@ -52,12 +52,24 @@ def get_device(prefer_name: str | None = None):
     return torch.device(f"cuda:{best_idx}")
 
 def is_colab() -> bool:
-    # Most reliable: module only present in Colab
-    try:
-        import google.colab  # type: ignore
+    return "COLAB_GPU" in os.environ or "COLAB_TPU_ADDR" in os.environ
+    
+def is_kaggle() -> bool:
+    if Path("/kaggle/input").exists():
         return True
-    except Exception:
-        return False
+    return False
+
+def find_project_root(start: Path) -> Path:
+    """
+    Robust project root detection: walk upward until we find pyproject.toml or configs/.
+    Falls back to parents[2] to keep your current behavior if markers are missing.
+    """
+    start = start.resolve()
+    for p in [start, *start.parents]:
+        if (p / "pyproject.toml").exists() or (p / "configs").exists():
+            return p
+    return start.parents[2]
+
 
 @dataclass(frozen=True)
 class Paths:
@@ -67,34 +79,52 @@ class Paths:
     data_export: Path
     results: Path
     runs: Path
-    configs_file : Path
+    configs : Path
+    checkpoints: Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-IN_COLAB = is_colab()
-ROUND = "round_1"
+# --- Roots (stable scheme) ---
+ROUND = os.environ.get("JAGUAR_ROUND", "round_1")
+# Code root (auto)
+PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
-if IN_COLAB:
-    PATHS = Paths(
-        data_train=Path(os.environ["DATA_TRAIN_ROOT"]),
-        data_test=Path(os.environ["DATA_TEST_ROOT"]),
-        data=Path(os.environ["DATA_ROOT"]),
-        data_export=Path(os.environ["DATA_EXPORT_ROOT"]),
-        results=Path(os.environ["RESULTS_ROOT"]),
-        runs=Path(os.environ["RUNS_ROOT"]),
-        configs_file=Path(os.environ["CONFIGS_ROOT"]),
-    )
-    
+# Data root (portable): set this in Kaggle + local
+# Kaggle example:
+#   os.environ["JAGUAR_DATA_ROOT"] = "/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data"
+DATA_ROOT_ENV = os.environ.get("JAGUAR_DATA_ROOT")
+if DATA_ROOT_ENV is None:
+    # Local fallback: keep your old layout as a default *only* if env var not set
+    DATA_ROOT = PROJECT_ROOT / f"data/{ROUND}"
 else:
-    PATHS = Paths(
-        data_train=PROJECT_ROOT / f"data/{ROUND}/raw/jaguar-re-id/train/train",
-        data_test=PROJECT_ROOT / f"data/{ROUND}/raw/jaguar-re-id/test/test",
-        data_export=PROJECT_ROOT / f"data/{ROUND}/fiftyone",
-        data=PROJECT_ROOT / f"data/{ROUND}",
-        results=PROJECT_ROOT / f"results/{ROUND}",
-        runs=PROJECT_ROOT / f"experiments/{ROUND}",
-        configs_file=PROJECT_ROOT / f"configs",
-    )
+    DATA_ROOT = Path(DATA_ROOT_ENV)
+
+# Work root (where outputs go). On Kaggle, always writable.
+WORK_ROOT_ENV = os.environ.get("JAGUAR_WORK_ROOT")
+if WORK_ROOT_ENV is not None:
+    WORK_ROOT = Path(WORK_ROOT_ENV)
+else:
+    WORK_ROOT = Path("/kaggle/working") if Path("/kaggle/working").exists() else PROJECT_ROOT
+
+# Optional: separate persistent checkpoints input (read-only). If not set, just write to WORK_ROOT.
+CHECKPOINTS_ROOT_ENV = os.environ.get("JAGUAR_CHECKPOINTS_ROOT")
+CHECKPOINTS_ROOT = Path(CHECKPOINTS_ROOT_ENV) if CHECKPOINTS_ROOT_ENV else (WORK_ROOT / "checkpoints")
+
+
+# --- Derive your existing PATHS exactly as your code expects ---
+PATHS = Paths(
+    data_train=DATA_ROOT / "raw/jaguar-re-id/train/train",
+    data_test=DATA_ROOT / "raw/jaguar-re-id/test/test",
+    data=DATA_ROOT / "raw",
+    data_export=DATA_ROOT / "fiftyone",
+
+    # outputs always go to WORK_ROOT (Kaggle-safe)
+    results=WORK_ROOT / "results" / ROUND,
+    runs=WORK_ROOT / "experiments" / ROUND,
+    checkpoints=CHECKPOINTS_ROOT / ROUND,
+
+    # configs live with code
+    configs=PROJECT_ROOT / "configs",
+)
 
 DEVICE = get_device(prefer_name="RTX")  
 NUM_WORKERS = 0

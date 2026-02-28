@@ -1,6 +1,6 @@
 import fiftyone as fo
 from jaguar.config import PATHS
-from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils import ensure_dir, save_npy
 import numpy as np
 import random 
 import pandas as pd
@@ -271,6 +271,6 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
     print(f"[Info] Embeddings not found at {path}. Extracting...")
     imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
     emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
-    np.save(path, emb)
+    save_npy(path, emb)
     print(f"[Info] Saved embeddings to {path}")
     return emb

@@ -10,7 +10,7 @@ import math
 from typing import Any, Optional, Sequence
 
 from jaguar.utils.utils import denormalize_image, ensure_dir, tensor_img_to_hwc01
-from jaguar.utils.utils_explainer import normalize_heatmap
+from jaguar.utils.utils_xai import normalize_heatmap
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 

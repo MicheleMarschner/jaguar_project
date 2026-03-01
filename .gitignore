@@ -14,3 +14,6 @@ notebooks/wandb
 
 miewid/*.pth
 miewid/*.pth
+
+wandb.md
+comments.md

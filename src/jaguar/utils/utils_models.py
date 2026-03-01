@@ -1,10 +1,7 @@
-"""
-Utility functions to load foundation models for ReID.
-These are placeholders; replace with actual model imports / checkpoints.
-"""
-
+from jaguar.config import DATA_STORE, PATHS
+from jaguar.utils.utils import resolve_path, save_npy
 import torch
-import numpy
+import numpy as np
 import timm
 import functools
 from transformers import AutoModel
@@ -43,12 +40,12 @@ def load_megadescriptor_model(size="L"):
 # ----------------------------
 def load_dino_model(model_name: str, model_size: str, patch_size: int, pretrained: bool = True, with_register_tokens: bool = False):
     """
-    Load DINO or DINOv2 ViT models via torch.hub.
+    Load DINO, DINOv2 or DINOv3 ViT models via torch.hub.
 
     Args:
-        model_name: "dino" or "dinov2"
-        model_size: "small" or "base"
-        patch_size: patch size (DINO: 8 or 16, DINOv2: 14)
+        model_name: "dino", "dinov2 or dinov3"
+        model_size: "small", "base" or "large"
+        patch_size: patch size (DINO: 8 or 16, DINOv2: 14, DINOv3: 16)
         pretrained: load pretrained weights (default True)
         with_register_tokens: only for DINOv2, whether to include register tokens
     """
@@ -69,6 +66,26 @@ def load_dino_model(model_name: str, model_size: str, patch_size: int, pretraine
             repo_model,
             trust_repo=True,
             pretrained=pretrained,
+        )
+    elif model_name.lower() == "dinov3":
+        assert patch_size == 16, "DINOv3 only supports patch size 16"
+        assert model_size.lower() in ("small", "base", "large"), "DINOv3 supports small, base, or large"
+        size_to_entry = {
+            "small": "dinov3_vits16",
+            "base":  "dinov3_vitb16",
+            "large": "dinov3_vitl16",
+        }
+        repo_model = size_to_entry[model_size.lower()]
+
+        # DINOv3 does not use the DINOv2 `_reg` naming style
+        if with_register_tokens:
+            print("Warning: with_register_tokens is ignored for DINOv3.")
+        print(f"Loading DINOv3 ViT-{model_size.capitalize()} patch{patch_size}")
+        model = torch.hub.load(
+            "facebookresearch/dinov3",
+            repo_model,
+            trust_repo=True,
+            pretrained=pretrained,  # if this fails in your setup, use explicit weights=... instead
         )
     else:
         raise ValueError(f"Model {model_name} not supported")
@@ -136,6 +153,9 @@ def load_eva_02():
     eva_model.eval() 
     return eva_model   
 
+# ----------------------------
+# MIEWv3 ID 
+# ----------------------------
 def load_miewid():
     # Force low_cpu_mem_usage=False to avoid the Meta device/AttributeError bug
     miew_model = AutoModel.from_pretrained(
@@ -145,3 +165,64 @@ def load_miewid():
     )
     miew_model.eval()
     return miew_model
+
+
+# --- Helper functions for GradCAM on Transformers ---
+def vit_reshape_transform(tensor):
+    """
+    Reshapes ViT (EVA-02, DINO) tokens [B, N, C] -> [B, C, H, W]
+    """
+    n_tokens = tensor.shape[1]
+    
+    # default: assume 1 CLS token
+    start_index = 1
+    spatial_tokens = n_tokens - 1
+    
+    # Check for DINOv2 with registers (usually 4 registers + 1 CLS = 5)
+    # If the standard math (tokens-1) isn't a perfect square, try (tokens-5)
+    if int(np.sqrt(spatial_tokens)) ** 2 != spatial_tokens:
+        if int(np.sqrt(n_tokens - 5)) ** 2 == (n_tokens - 5):
+            start_index = 5
+    
+    result = tensor[:, start_index:, :] 
+    
+    # Calculate grid size dynamically
+    target_len = result.shape[1]
+    grid_size = int(np.sqrt(target_len))
+    
+    # [B, N, C] -> [B, C, N] -> [B, C, H, W]
+    result = result.transpose(1, 2)
+    result = result.reshape(tensor.size(0), result.size(1), grid_size, grid_size)
+    return result
+
+
+def swin_reshape_transform(tensor):
+    # Swin output is usually already spatial but channel-last in some implementations
+    # Check your specific Swin implementation. Usually: [B, H, W, C] -> [B, C, H, W]
+    if len(tensor.shape) == 4:
+        return tensor.permute(0, 3, 1, 2)
+    return tensor
+
+
+def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
+    """
+    Returns embeddings as np.ndarray [N,D].
+    Loads from disk if available; otherwise extracts and saves.
+    """
+    folder = resolve_path("embeddings", DATA_STORE)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    filename = f"embeddings_{model_wrapper.name}_{split}.npy"
+    path = folder / filename
+
+    if path.exists():
+        emb = np.load(path)
+        print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
+        return emb
+
+    print(f"[Info] Embeddings not found at {path}. Extracting...")
+    imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
+    emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
+    save_npy(path, emb)
+    print(f"[Info] Saved embeddings to {path}")
+    return emb

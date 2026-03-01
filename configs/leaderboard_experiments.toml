@@ -31,3 +31,9 @@ lr_min = 0.000009
 lr_ramp_ep = 15
 lr_sus_ep = 0
 lr_decay = 0.8
+
+[data]
+dataset_name = "jaguar_init"
+val_split = 0.2
+use_balanced_sampler = true  # Parameter for imbalance
+num_workers = 2

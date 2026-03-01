@@ -11,6 +11,7 @@ class JaguarDataset(Dataset):
     def __init__(
         self,
         base_root: Union[str, Path],
+        data_root: Path | None = None,
         transform: Optional[Callable] = None,
         processing_fn: Optional[Callable[[Image.Image, Dict[str, Any]], Image.Image]] = None,
         is_test: bool = False,
@@ -19,6 +20,7 @@ class JaguarDataset(Dataset):
         filename_key: str = "filename",
     ):
         self.base_root = Path(base_root)
+        self.data_root = Path(data_root).resolve() if data_root is not None else None
         self.transform = transform
         self.processing_fn = processing_fn
         self.is_test = is_test
@@ -57,7 +59,22 @@ class JaguarDataset(Dataset):
 
     def _resolve_path(self, p: str) -> Path:
         pp = Path(p)
-        return pp if pp.is_absolute() else (self.base_root / pp)
+
+        # if absolute but doesn't exist on this machine: try rebasing to data_root by filename
+        if pp.is_absolute():
+            if pp.exists():
+                return pp
+            if self.data_root is not None:
+                # last-resort: filename under train/test folders
+                return self.data_root / "raw/jaguar-re-id/train/train" / pp.name
+            return pp
+
+        # relative: prefer data_root
+        if self.data_root is not None:
+            return self.data_root / pp
+
+        return self.base_root / pp
+
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         s = dict(self.samples[idx])

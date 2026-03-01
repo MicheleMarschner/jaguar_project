@@ -84,7 +84,7 @@ class JaguarIDModel(nn.Module):
         
         with torch.no_grad():
             # Create dummy input based on actual model requirements
-            dummy = torch.randn(1, 3, input_res, input_res).to(device)
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)      ### !TODO Does this needs to be fixed?
             out = self.backbone(dummy)
             if isinstance(out, (tuple, list)): out = out[0]
             if out.ndim > 2: out = out.mean(dim=(2, 3))
@@ -167,8 +167,8 @@ if __name__ == "__main__":
 
     # Load Dataset
     _, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export,
-        dataset_name="jaguar_stage0",
+        PATHS.data_export / "init",
+        dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
     )
@@ -196,7 +196,7 @@ if __name__ == "__main__":
         torch_ds, 
         batch_size=32, 
         shuffle=False, 
-        num_workers=4,
+        num_workers=2,
         pin_memory=True
     )
     example = next(iter(loader))

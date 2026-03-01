@@ -1,11 +1,12 @@
 import os
+from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms.v2 as transforms
 from torchvision.transforms import InterpolationMode
 
-from jaguar.config import PATHS
+from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
 from jaguar.utils.utils_models import (
     load_megadescriptor_model,
     load_dino_model,  # For DINO/DINOv2
@@ -16,10 +17,9 @@ from jaguar.utils.utils_models import (
     load_eva_02,
     load_miewid
 )
-from jaguar.utils.utils_explainer import (
+from jaguar.utils.utils_models import (
     vit_reshape_transform, 
-    swin_reshape_transform, 
-    lrp_zennit_input_relevance
+    swin_reshape_transform
 )
 
 class PadToSquare:
@@ -42,7 +42,7 @@ class FoundationModelWrapper:
                 transforms.Resize((384, 384), interpolation=InterpolationMode.BILINEAR),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]),
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
                 # This automatically creates the exact transform the model was trained with
                 # config = timm.data.resolve_data_config({}, model=model)
                 # transform = timm.data.create_transform(**config, is_training=False)
@@ -59,7 +59,7 @@ class FoundationModelWrapper:
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
@@ -73,8 +73,36 @@ class FoundationModelWrapper:
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
                 # DINOv2 works well with 518 resize/crop; 224 also works but can be weaker for fine detail.
+            ]),
+            "grad_cam": {
+                "layer_getter": lambda m: m.blocks[-1].norm1,
+                "reshape_transform": vit_reshape_transform
+            }
+        },
+        "DINOv3-Base": {
+            "loader": lambda: load_dino_model("dinov3", "base", patch_size=16, pretrained=True, with_register_tokens=False),
+            "input_size": 224,
+            "transform": transforms.Compose([
+                transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
+                transforms.ToImage(),
+                transforms.ToDtype(torch.float32, scale=True),
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD),
+            ]),
+            "grad_cam": {
+                "layer_getter": lambda m: m.blocks[-1].norm1,
+                "reshape_transform": vit_reshape_transform
+            }
+        },
+        "DINOv3-Large": {
+            "loader": lambda: load_dino_model("dinov3", "large", patch_size=16, pretrained=True, with_register_tokens=False),
+            "input_size": 224,
+            "transform": transforms.Compose([
+                transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
+                transforms.ToImage(),
+                transforms.ToDtype(torch.float32, scale=True),
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD),
             ]),
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
@@ -88,7 +116,7 @@ class FoundationModelWrapper:
                 transforms.Resize((518, 518), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
                 # transforms.Resize(518, 518)
             ]),
             "grad_cam": {
@@ -103,16 +131,11 @@ class FoundationModelWrapper:
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
-                "layer_getter": lambda m: m.stages[-1].blocks[-1],
+                "layer_getter": lambda m: m.features[-1][-1],
                 "reshape_transform": None 
-            },
-            "lrp": { 
-                "backend": "zennit",
-                "composite": "epsilon_plus",
-                "canonizer": None, 
             },
         },
         "EfficientNet-B4": {
@@ -122,16 +145,11 @@ class FoundationModelWrapper:
                 transforms.Resize((380, 380), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
                 "layer_getter": lambda m: m.features[-1],
                 "reshape_transform": None
-            },
-            "lrp": { 
-                "backend": "zennit",
-                "composite": "epsilon_plus",
-                "canonizer": None,
             },
         },
         "Swin-Transformer": {
@@ -141,7 +159,7 @@ class FoundationModelWrapper:
                 transforms.Resize((224, 224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
                 "layer_getter": lambda m: m.features[-1][-1].norm1,
@@ -155,7 +173,7 @@ class FoundationModelWrapper:
                 transforms.Resize((224,224), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
@@ -169,11 +187,11 @@ class FoundationModelWrapper:
                 transforms.Resize((440,440), interpolation=InterpolationMode.BICUBIC),
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
-                transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225])
+                transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
             ]),
             "grad_cam": {
-                "layer_getter": lambda m: m.blocks[-1].norm1,
-                "reshape_transform": vit_reshape_transform
+                "layer_getter": lambda m: m.backbone.conv_head,
+                "reshape_transform": None
             }
         }
     }
@@ -240,20 +258,40 @@ class FoundationModelWrapper:
         print(f"[Info] Extracted embeddings shape: {emb_np.shape}")
         return emb_np
 
-    def save_embeddings(self, embeddings: np.ndarray, split="training", folder=PATHS.data / "embeddings"):
+    def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
         os.makedirs(folder, exist_ok=True)
         filename = f"embeddings_{self.name}_{split}.npy"
         path = os.path.join(folder, filename)
-        np.save(path, embeddings)
+        save_npy(path, embeddings)
         print(f"[Info] Saved embeddings to {path}")
         return path
 
-    def load_embeddings(self, split="training", folder=PATHS.data / "embeddings"):
+    def load_embeddings(self, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
         filename = f"embeddings_{self.name}_{split}.npy"
         path = os.path.join(folder, filename)
         emb = np.load(path)
         print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
         return emb
+    
+    def get_embeddings_tensor(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        x: [B,3,H,W] already preprocessed tensor on self.device
+        returns: [B,D] torch tensor (keeps graph if x.requires_grad=True)
+        """
+        out = self.model.get_embeddings(x) if hasattr(self.model, "get_embeddings") else self.model(x)
+
+        if isinstance(out, dict):
+            out = out.get("embeddings") or next(iter(out.values()))
+        elif isinstance(out, (tuple, list)):
+            out = out[0]
+
+        if out.ndim == 1:
+            out = out.unsqueeze(0)
+        return out
     
     def get_grad_cam_config(self):
         """
@@ -266,32 +304,10 @@ class FoundationModelWrapper:
         target_layers = [config["layer_getter"](self.model)]
         
         return target_layers, config["reshape_transform"]
-    
-    def get_lrp_explainer(self):
-        cfg = self.registry_entry.get("lrp")
-        if cfg is None:
-            raise NotImplementedError(f"LRP not configured for {self.name}")
 
-        if cfg.get("backend") != "zennit":
-            raise NotImplementedError("Only zennit backend implemented")
-
-        composite = cfg.get("composite", "epsilon_plus")
-        canonizers = cfg.get("canonizer", None)
-
-        def explain(x: torch.Tensor, target_idx: int) -> np.ndarray:
-            return lrp_zennit_input_relevance(
-                model=self.model,
-                x=x,
-                target_idx=target_idx,
-                composite=composite,
-                canonizers=canonizers,
-            )
-
-        return explain
     
 if __name__ == "__main__":
-    from PIL import Image
-    import numpy as np
+    
     # Create a dummy image
     dummy_img = Image.fromarray((np.random.rand(224,224,3)*255).astype(np.uint8))
     # Initialize model wrapper

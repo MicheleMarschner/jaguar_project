@@ -1,0 +1,5 @@
+model,explainer,pair_type,complexity,faith,sanity
+MiewID,GradCAM,easy_pos,0.525 ± 0.124,0.360 ± 0.065,0.064 ± 0.163
+MiewID,GradCAM,hard_neg,0.456 ± 0.048,0.421 ± 0.085,0.094 ± 0.168
+MiewID,IG,easy_pos,0.649 ± 0.044,0.322 ± 0.069,-0.003 ± 0.005
+MiewID,IG,hard_neg,0.656 ± 0.046,0.376 ± 0.058,-0.001 ± 0.006

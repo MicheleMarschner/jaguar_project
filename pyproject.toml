@@ -26,7 +26,7 @@ dependencies = [
   "python-dotenv==1.2.1",
   "fiftyone==1.13.1",
   "grad-cam==1.5.5",
-  "transformers==4.51.0",
+  "transformers==4.39.3", # "transformers==4.51.0",
   "faiss-cpu==1.13.2",
   "timm",
   "quantus==0.6.0",

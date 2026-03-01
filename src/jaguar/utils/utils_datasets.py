@@ -1,18 +1,41 @@
 import fiftyone as fo
-from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
+from tqdm import tqdm
+from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS
 from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
 import random 
 import pandas as pd
+import torch 
 
-from torch.utils.data import Sampler
+from torch.utils.data import Sampler, DataLoader, Dataset
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
+from PIL import Image
+from PIL import Image
 
 from jaguar.datasets.FiftyOneDataset import FODataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 
+class PreprocessedDataset(Dataset):
+    """
+    A simple wrapper that applies the model_wrapper's preprocessing 
+    to each sample before the DataLoader tries to batch them.
+    """
+    def __init__(self, original_ds, preprocess_fn):
+        self.ds = original_ds
+        self.preprocess_fn = preprocess_fn
+
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, idx):
+        sample = self.ds[idx]
+        # Apply preprocessing here (inside the worker process)
+        # This includes resizing, so all images will now have the same size.
+        sample["img"] = self.preprocess_fn(sample["img"])
+        return sample
+    
 class BalancedBatchSampler(Sampler):
     """
     Returns batches of size (P * K) where:
@@ -224,6 +247,9 @@ def load_jaguar_from_FO_export(
     transform=None,
     processing_fn=None,
     overwrite_db=False,
+    full_ds=True,
+    include_duplicates=False,
+    parquet_path:str=None,
 ):
     """
     - If dataset exists in FiftyOne DB: load it
@@ -241,23 +267,41 @@ def load_jaguar_from_FO_export(
             overwrite_db=overwrite_db,
         )
 
-    # Torch dataset reads the same samples.json and uses absolute paths inside it
-    torch_ds = JaguarDataset(
+    if full_ds:
+        # Load full dataset based on samples.json
+        torch_ds = JaguarDataset(
+            base_root=manifest_dir,
+            data_root=DATA_ROOT,
+            split_parquet=parquet_path,
+            mode="train",
+            transform=transform,
+            processing_fn=processing_fn,
+            include_duplicates=include_duplicates,
+        )
+        return fo_ds, torch_ds
+    
+    # Train dataset 
+    torch_ds_train = JaguarDataset(
         base_root=manifest_dir,
         data_root=DATA_ROOT,
-        filepath_key="filepath",
+        mode="train",
         transform=transform,
         processing_fn=processing_fn,
+        include_duplicates=include_duplicates,
     )
+    
+    # Validation dataset 
+    torch_ds_val = JaguarDataset(
+        base_root=manifest_dir,
+        data_root=DATA_ROOT,
+        mode="val",
+        transform=transform,
+        processing_fn=processing_fn,
+        include_duplicates=include_duplicates,
+    )
+    return fo_ds, torch_ds_train, torch_ds_val
 
-    return fo_ds, torch_ds 
-
-
-def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
-    """
-    Returns embeddings as np.ndarray [N,D].
-    Loads from disk if available; otherwise extracts and saves.
-    """
+def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_size=32, num_workers=4):
     folder = resolve_path("embeddings", DATA_STORE)
     ensure_dir(folder)
 
@@ -270,8 +314,31 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
         return emb
 
     print(f"[Info] Embeddings not found at {path}. Extracting...")
-    imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
-    emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
+
+    # Wrap the dataset so preprocessing happens on the fly
+    wrapped_ds = PreprocessedDataset(torch_ds, model_wrapper.preprocess)
+
+    # Create DataLoader from the wrapped dataset
+    dataloader = DataLoader(
+        wrapped_ds, 
+        batch_size=batch_size, 
+        num_workers=num_workers, 
+        pin_memory=True, 
+        shuffle=False
+    )
+
+    all_embeddings = []
+    # Process batches
+    for batch in tqdm(dataloader, desc="Extracting embeddings"):
+        imgs = batch["img"]
+        # Extract embeddings (usually moves data to GPU internally)
+        batch_emb = model_wrapper.extract_embeddings(imgs)  
+        # Ensure it's a numpy array before storing to save RAM
+        if torch.is_tensor(batch_emb):
+            batch_emb = batch_emb.cpu().numpy()
+        all_embeddings.append(batch_emb)
+
+    emb = np.concatenate(all_embeddings, axis=0)
     save_npy(path, emb)
-    print(f"[Info] Saved embeddings to {path}")
+    print(f"[Info] Saved embeddings to {path}, shape={emb.shape}")
     return emb

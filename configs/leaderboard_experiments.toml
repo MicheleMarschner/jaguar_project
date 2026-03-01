@@ -8,13 +8,14 @@ m = 0.50
 
 [data]
 dataset_name = "jaguar_stage0"
+parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
 val_split = 0.2
 # Parameter for imbalance
 use_balanced_sampler = true
 num_workers = 4
 
 [training]
-experiment_name = "jaguar_reid_v1"
+experiment_name = "round_1"
 config_folder = "miewid"
 epochs = 20
 batch_size = 32
@@ -31,9 +32,3 @@ lr_min = 0.000009
 lr_ramp_ep = 15
 lr_sus_ep = 0
 lr_decay = 0.8
-
-[data]
-dataset_name = "jaguar_init"
-val_split = 0.2
-use_balanced_sampler = true  # Parameter for imbalance
-num_workers = 2

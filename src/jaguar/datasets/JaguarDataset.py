@@ -1,6 +1,7 @@
 import torch
 import json
 from pathlib import Path
+import numpy as np
 from typing import Callable, Optional, Any, Dict, List, Union
 
 from PIL import Image
@@ -87,9 +88,10 @@ class JaguarDataset(Dataset):
         if self.processing_fn is not None:
             img = self.processing_fn(img, s)
         
-        # Remove alpha channel for later tranformation and modeling (models expect 3 channels)
+        # Default mode uses background if no processing function is given 
         if img.mode == "RGBA":
-            img = img.convert("RGB")
+            r, g, b, _a = img.split()
+            img = Image.merge("RGB", (r, g, b))
 
         if self.transform is not None:
             img = self.transform(img)
@@ -111,3 +113,101 @@ class JaguarDataset(Dataset):
             out["label_idx"] = self.labels_idx[idx] # numeric index
 
         return out
+    
+
+
+# ---------------------------------------------------------
+# 1. SPECIALIZED DATASET (Inherits from your JaguarDataset)
+# ---------------------------------------------------------
+class MaskAwareJaguarDataset(JaguarDataset):
+    def __init__(self, 
+                 jaguar_model,
+                 *args, **kwargs):
+        
+        super().__init__(*args, **kwargs)
+        
+        # 1. Access the inner wrapper configuration
+        # We assume jaguar_model has 'backbone_wrapper'
+        wrapper = jaguar_model.backbone_wrapper
+        config = wrapper.MODEL_REGISTRY[wrapper.name] # Or wrapper.MODEL_REGISTRY[wrapper.model_name], wrapper.get_config()
+        
+        self.input_size = config.get("input_size", 256)
+        self.mean = config.get("mean", [0.485, 0.456, 0.406])
+        self.std = config.get("std", [0.229, 0.224, 0.225])
+        
+        # 2. Resize RGBA (Image + Mask together)
+        self.resize_rgba = transforms.Resize(
+            (self.input_size, self.input_size), 
+            interpolation=transforms.InterpolationMode.BILINEAR
+        )
+        
+        # 3. Normalize RGB (After masking)
+        self.to_tensor_norm = transforms.Compose([
+            transforms.ToImage(),
+            transforms.ToDtype(torch.float32, scale=True),
+            transforms.Normalize(self.mean, self.std)
+        ])
+        
+        self.alpha_threshold = 128
+        self.mask_fill_color = (128, 128, 128)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        s = self.samples[idx]
+        img_path = self._resolve_path(s[self.filepath_key])
+        
+        # Load RGBA
+        try:
+            rgba = Image.open(img_path).convert("RGBA")
+        except Exception as e:
+            print(f"Error loading {img_path}: {e}")
+            return None # Skip or handle error
+        
+        # Resize
+        rgba = self.resize_rgba(rgba)
+
+        rgba_np = np.array(rgba)          # (H,W,4)
+        rgb0 = rgba_np[..., :3]
+        a_np = rgba_np[..., 3]
+
+        bg0 = rgb0[a_np == 0]
+        print("[DBG] file:", Path(img_path).name,
+            "| alpha0%:", float((a_np == 0).mean()),
+            "| bg_rgb_max:", bg0.max(axis=0) if bg0.size else None,
+            "| bg_rgb_mean:", bg0.mean(axis=0) if bg0.size else None)
+
+        # Now create rgb_np (equivalent RGB image)
+        r, g, b, a = rgba.split()
+        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
+
+        bg2 = rgb_np[a_np == 0]
+        print("[DBG] after merge | bg_rgb_max:", bg2.max(axis=0) if bg2.size else None)
+
+        # Split Mask
+        r, g, b, a = rgba.split()
+        fg_mask = np.array(a) > self.alpha_threshold
+        
+        # Create Variants
+        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
+        
+        img_orig = rgb_np.copy()
+        
+        img_bg_masked = rgb_np.copy()
+        img_bg_masked[~fg_mask] = self.mask_fill_color # Keep Jaguar
+        
+        img_fg_masked = rgb_np.copy()
+        img_fg_masked[fg_mask] = self.mask_fill_color # Keep Background
+        
+        # Normalize
+        def process(arr):
+            return self.to_tensor_norm(Image.fromarray(arr))
+
+        return {
+            "t_orig": process(img_orig),
+            "t_bg_masked": process(img_bg_masked),
+            "t_fg_masked": process(img_fg_masked),
+            "label_idx": self.labels_idx[idx] if not self.is_test else -1,
+            "filepath": str(img_path),
+            "id": str(s.get("ground_truth", {}).get("label", "unknown"))
+        }
+
+

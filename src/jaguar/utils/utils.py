@@ -194,7 +194,6 @@ def resolve_path(rel: str, store) -> Path:
     return Path(store.write_root) / rel
 
 
-
 PathRoot = Literal["data", "runs", "results"]
 
 def to_abs(root: PathRoot, rel: str) -> Path:
@@ -207,8 +206,10 @@ def to_abs(root: PathRoot, rel: str) -> Path:
         return PATHS.results / rel
     raise ValueError(root)
 
+
 def to_abs_path(obj: dict) -> Path:
     return to_abs(obj["root"], obj["rel"])
+
 
 def to_rel_path(p: str | Path) -> dict:
     p = Path(p)
@@ -230,12 +231,3 @@ def to_rel_path(p: str | Path) -> dict:
 
     # fallback: store only filename (last resort)
     return {"root": "data", "rel": p.name}
-    root = obj["root"]
-    rel = obj["rel"].replace("\\", "/").lstrip("/")
-    if root == "data":
-        return DATA_ROOT / rel
-    if root == "runs":
-        return PATHS.runs / rel
-    if root == "results":
-        return PATHS.results / rel
-    raise ValueError(root)

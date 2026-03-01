@@ -17,13 +17,15 @@ from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
 from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
 from jaguar.utils.utils import resolve_path
 from jaguar.utils.utils_eda import (
+    alpha_background_table_scene,
     analyze_images, 
     basic_integrity_report, 
     check_filename_and_folder_consistency, 
     class_distribution, 
     identity_filter_summary,
     merge_sharpness_with_image_stats,
-    get_top_bottom_by_column
+    get_top_bottom_by_column,
+    plot_bg_label_counts,
 )
 from jaguar.utils.utils_visualization import (
     plot_identity_distribution, 
@@ -76,6 +78,13 @@ def run_eda(data_path: Path, train_file: Path, test_file: Path) -> None:
             img_stats_df,
             save_path=(save_dir / "image_dimensions.png")
         )
+
+    alpha_df = alpha_background_table_scene(train_df, img_dir=PATHS.data_train, filename_col="filename")
+    alpha_df.to_csv(save_dir / "alpha_background_table.csv", index=False)
+    print(alpha_df["label"].value_counts())
+
+    alpha_df = alpha_background_table_scene(train_df, img_dir=PATHS.data_train, filename_col="filename")
+    plot_bg_label_counts(alpha_df, save_dir / "cutout_background_counts.png")
 
     # 5) CSV ↔ filesystem consistency (catch missing/extra files and naming issues early)
     check_filename_and_folder_consistency(train_df, data_path=PATHS.data_train)

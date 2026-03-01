@@ -1,0 +1,41 @@
+{
+  "n_samples": 10,
+  "sample_indices": [
+    588,
+    429,
+    1741,
+    388,
+    559,
+    1582,
+    1060,
+    58,
+    256,
+    707
+  ],
+  "data": {
+    "dataset_name": "jaguar_init",
+    "manifest_dir": {
+      "root": "data",
+      "rel": "fiftyone/init"
+    }
+  },
+  "model": {
+    "checkpoint_path": "",
+    "num_classes": 31,
+    "model_backbone": "MegaDescriptor-L",
+    "head_type": "arcface"
+  },
+  "masking": {
+    "alpha_threshold": 128,
+    "mask_fill_color": [
+      128,
+      128,
+      128
+    ]
+  },
+  "outputs": {
+    "logits_csv": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/experiments/round_1/xai/background_sensitivity/classification_sensitivity__MegaDescriptor-L_arcface__n10.csv",
+    "similarity_csv": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/experiments/round_1/xai/background_sensitivity/similarity_stability__MegaDescriptor-L_arcface__n10.csv",
+    "heatmaps_dir": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/results/round_1/xai/background_sensitivity/heatmaps"
+  }
+}

@@ -207,6 +207,10 @@ def build_habitat_backgrounds(
 
 if __name__ == "__main__":
 
+    ##### evalues for background:
+    ##### apply as processing_fn to dataset (like a transform)
+    ##### "original", "random_bg", "black_bg", "gray_bg", "white_bg", "blur_bg"    
+
     out_dir = resolve_path("backgrounds", DATA_STORE)
 
     # Assumes cutout alpha masks are stored alongside/raw-equivalent filenames in PATHS.data_train.

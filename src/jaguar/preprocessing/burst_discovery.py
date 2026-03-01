@@ -10,7 +10,7 @@ import uuid
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, SEED
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.utils.utils_burst_discovery import (
@@ -552,36 +552,30 @@ def load_or_create_phash_diagnostics(
 
 
 
-if __name__ == "__main__":
-    # --- CONFIG ---
-    MIN_CLUSTER_SIZE = 2
-    MAX_WITHIN = 500
-    MAX_CROSS = 10000
-    dataset_name = "jaguar_init"
+def discover_bursts(BURST_MIN_CLUSTER_SIZE, BURST_MAX_WITHIN, BURST_MAX_CROSS, SEED, phash_size=8):
 
     # SETUP
+    fo_dataset_name = "jaguar_init"
     out_dir = PATHS.runs / "bursts"
     ensure_dir(out_dir)
-
     meta_img_file = out_dir / "meta_img_features.parquet"
     cand_file = out_dir / "candidate_edges_all_pairs.parquet"  # optionally include phash_size/cap in name
-    phash_size = 8
 
     # diagnostics cache path (threshold-independent)
     diagnostics_cache_dir = out_dir / "diagnostics_cache"
     ensure_dir(diagnostics_cache_dir)
-    diag_file = diagnostics_cache_dir / f"phash_diagnostics__within{MAX_WITHIN}__cross{MAX_CROSS}__seed{SEED}.parquet"
+    diag_file = diagnostics_cache_dir / f"phash_diagnostics__within{BURST_MAX_WITHIN}__cross{BURST_MAX_CROSS}__seed{SEED}.parquet"
 
     # 1. LOAD DATA & MODEL
     fo_wrapper, torch_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "init", dataset_name=dataset_name, processing_fn=None
+        PATHS.data_export / "init", dataset_name=fo_dataset_name, processing_fn=None
     )
     print(f"[Info] Dataset: {len(torch_ds)}")
 
     jag_meta = build_meta_from_jaguar_dataset(torch_ds)
 
     # 2. LOAD/COMPUTE META FEATURES
-    meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, dataset_name)
+    meta_img_features = load_or_create_meta_img_file(out_dir, meta_img_file, jag_meta, phash_size, fo_dataset_name)
     meta_img_features["identity_id"] = meta_img_features["identity_id"].astype(str)
 
     # 3. PRECOMPUTE CANDIDATES (ALL-PAIRS WITHIN IDENTITY)
@@ -597,30 +591,30 @@ if __name__ == "__main__":
         cand_raw = pd.read_parquet(cand_file)
 
     # 4. FIND SAFE THRESHOLD (ZERO COLLISIONS)
-    diag_df, SAFE_THRESHOLD = load_or_create_phash_diagnostics(
+    diag_df, PHASH_THRESHOLD_BURSTS = load_or_create_phash_diagnostics(
         meta_df=meta_img_features,
         out_file=diag_file,
         thresholds=list(range(0, 21)),
         identity_col="identity_id",
         phash_col="phash",
         phash_hex_col="phash_hex",
-        max_within_pairs_per_identity=MAX_WITHIN,
-        max_cross_pairs_total=MAX_CROSS,
+        max_within_pairs_per_identity=BURST_MAX_WITHIN,
+        max_cross_pairs_total=BURST_MAX_CROSS,
         seed=SEED,
     )
 
     # 5. FINAL THRESHOLD-SPECIFIC DIR (now threshold is known)
-    final_dir = out_dir / f"burst_groups__within{MAX_WITHIN}__cross{MAX_CROSS}__ph{SAFE_THRESHOLD}"
+    final_dir = out_dir / f"burst_groups__within{BURST_MAX_WITHIN}__cross{BURST_MAX_CROSS}__ph{PHASH_THRESHOLD_BURSTS}"
     ensure_dir(final_dir)
     save_parquet(final_dir / "phash_diagnostics.parquet", diag_df)
 
     # 6. RUN DEDUPLICATION
-    print(f"\n[Run] Grouping Bursts (pHash <= {SAFE_THRESHOLD})...")
+    print(f"\n[Run] Grouping Bursts (pHash <= {PHASH_THRESHOLD_BURSTS})...")
     result = run_burst_grouping_from_precomputed_candidates(
         meta_df=meta_img_features,
         candidate_edges_raw_df=cand_raw,
-        phash_threshold=SAFE_THRESHOLD,
-        min_cluster_size=MIN_CLUSTER_SIZE,
+        phash_threshold=PHASH_THRESHOLD_BURSTS,
+        min_cluster_size=BURST_MIN_CLUSTER_SIZE,
     )
 
     # 7. SAVE FINAL ARTIFACTS
@@ -638,13 +632,13 @@ if __name__ == "__main__":
         },
         config_dict={
             "method": "phash_only_safe_all_pairs_within_identity",
-            "dataset_name": dataset_name,
+            "fo_dataset_name": fo_dataset_name,
             "phash_size": phash_size,
-            "max_within_pairs_per_identity": MAX_WITHIN,
-            "max_cross_pairs_total": MAX_CROSS,
+            "max_within_pairs_per_identity": BURST_MAX_WITHIN,
+            "max_cross_pairs_total": BURST_MAX_CROSS,
             "seed": SEED,
-            "phash_threshold": SAFE_THRESHOLD,
-            "min_cluster_size": MIN_CLUSTER_SIZE,
+            "phash_threshold": PHASH_THRESHOLD_BURSTS,
+            "min_cluster_size": BURST_MIN_CLUSTER_SIZE,
         },
         candidate_edges_df=cand_raw,
         filtered_edges_df=result["filtered_edges_df"],
@@ -659,3 +653,12 @@ if __name__ == "__main__":
     fo_wrapper.export_manifest(export_dir)
     rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
     print("\n[Done] Identifying and Grouping Bursts Complete.")
+
+
+if __name__ == "__main__":
+    BURST_MIN_CLUSTER_SIZE = 2
+    BURST_MAX_WITHIN = 500 
+    BURST_MAX_CROSS = 10000
+    SEED = 51
+    
+    discover_bursts(BURST_MIN_CLUSTER_SIZE, BURST_MAX_WITHIN, BURST_MAX_CROSS, SEED)

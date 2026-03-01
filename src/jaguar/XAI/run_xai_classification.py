@@ -1,22 +1,23 @@
 import json
-
-from jaguar.utils.utils import ensure_dir, save_parquet
-from jaguar.utils.utils_xai import MaskAwareJaguarDataset
+from jaguar.utils.utils_xai import manual_gradcam_class
 import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 import cv2
+from PIL import Image
+import matplotlib.pyplot as plt
 from collections import defaultdict
 import torch.nn.functional as F
-from pytorch_grad_cam import GradCAM
+from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
-from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
-from jaguar.config import IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, SEED
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE, SEED
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.models.jaguarid_models import JaguarIDModel
+from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
+from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
 
 
 
@@ -122,7 +123,7 @@ def select_random_datasubset_balanced(
 
     id_to_indices = defaultdict(list)
     for idx, y in enumerate(labels):
-        id_to_indices[int(y)].append(idx)
+        id_to_indices[str(y)].append(idx)
 
     # deterministic shuffle within each identity
     for y in id_to_indices:
@@ -153,85 +154,113 @@ def select_random_datasubset_balanced(
 
 
 def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
-    """
-    Generates GradCAM overlays for spurious cases.
+    """"
+    Generates GradCam overlays for spurious cases
     """
     output_dir = Path(output_dir) / "heatmaps"
     ensure_dir(output_dir)
-    
-    # 1. Resolve Target Layer
-    # Access the registry via the inner wrapper
+
     wrapper = model.backbone_wrapper
-    config = wrapper.get_config()
-    layer_getter = config["grad_cam"]["layer_getter"]
-    
-    # Apply getter to the BACKBONE, not the full JaguarIDModel
-    target_layer = layer_getter(model.backbone) 
-    
-    # Setup CAM: construct CAM on the full model, but target the inner layer
-    cam = GradCAM(model=model, target_layers=[target_layer])
-    
-    # Pick top 5 spurious examples
+    grad_cam_cfg = wrapper.registry_entry["grad_cam"]
+    layer_getter = grad_cam_cfg["layer_getter"]
+    reshape_transform = grad_cam_cfg["reshape_transform"]
+    target_layer = layer_getter(model.backbone)
+
+    eigen_cam = EigenCAM(model=model, target_layers=[target_layer], reshape_transform=reshape_transform)
+
     spurious = df_results[df_results["is_spurious"] == True].head(5)
     if spurious.empty:
-        print("No spurious cases found! Showing random examples.")
         spurious = df_results.head(5)
-        
     target_files = set(spurious["filepath"].values)
-    
-    print(f"Generating visuals for {len(target_files)} images...")
-    
+
     for batch in dataloader:
         for i in range(len(batch["filepath"])):
             fname = Path(batch["filepath"][i]).name
-            if fname in target_files:
-                
-                # Prepare Inputs
-                inputs = {
-                    "Orig": batch["t_orig"][i].unsqueeze(0).to(device),
-                    "Jaguar": batch["t_bg_masked"][i].unsqueeze(0).to(device),
-                    "BG": batch["t_fg_masked"][i].unsqueeze(0).to(device)
-                }
-                
-                imgs_vis = []
-                
-                for title, tensor in inputs.items():
-                    # Generate CAM
-                    target_cls = batch["label_idx"][i].item()
-                    targets = [ClassifierOutputTarget(target_cls)]
-                    
-                    grayscale_cam = cam(input_tensor=tensor, targets=targets)[0, :]
-                    
-                    # Un-norm for display
-                    img_disp = tensor.squeeze().cpu().permute(1,2,0).numpy()
-                    mean = np.array(IMGNET_MEAN).reshape(1,1,3)
-                    std  = np.array(IMGNET_STD).reshape(1,1,3)
-                    img_disp = img_disp * std + mean
-                    img_disp = np.clip(img_disp, 0, 1)
-                    
-                    vis = show_cam_on_image(img_disp, grayscale_cam, use_rgb=True)
-                    imgs_vis.append(vis)
-                
-                combined = np.hstack(imgs_vis)
-                cv2.imwrite(str(output_dir / f"cam_logits__{Path(fname).stem}.png"), combined)
+            if fname not in target_files:
+                continue
+
+            cls = int(batch["label_idx"][i].item())
+
+            inputs = {
+                "Orig": batch["t_orig"][i].unsqueeze(0).to(device),
+                "Jaguar": batch["t_bg_masked"][i].unsqueeze(0).to(device),
+                "BG": batch["t_fg_masked"][i].unsqueeze(0).to(device),
+            }
+
+            plain_row = []
+            eigen_row = []
+            grad_row  = []
+
+            for _, tensor in inputs.items():
+                # tensor: [1,3,H,W] normalized, exactly what CAM uses
+                x = tensor[0].detach().cpu()  # [3,H,W]
+
+                # ---- image used by CAM (unnormalize) ----
+                mean = torch.tensor(IMGNET_MEAN)[:, None, None]
+                std  = torch.tensor(IMGNET_STD)[:, None, None]
+                img = (x * std + mean).clamp(0, 1).permute(1, 2, 0).numpy()  # [H,W,3] in [0,1]
+                H, W = img.shape[:2]
+
+                # ---- EigenCAM heatmap ----
+                e_map = eigen_cam(input_tensor=tensor)[0, :]                  # [h,w]
+                e_map = cv2.resize(e_map, (W, H), interpolation=cv2.INTER_LINEAR)
+                e_vis = show_cam_on_image(img, e_map, use_rgb=True)
+
+                # ---- Manual GradCAM heatmap ----
+                g_map = manual_gradcam_class(model, target_layer, tensor, cls)  # [h,w]
+                g_map = cv2.resize(g_map, (W, H), interpolation=cv2.INTER_LINEAR)
+                g_vis = show_cam_on_image(img, g_map, use_rgb=True)
+
+                # =========================
+                # CHECK 3: does displayed img have background pixels (from file RGB under alpha==0)?
+                # =========================
+                rgba = Image.open(batch["filepath"][i]).convert("RGBA").resize((W, H), Image.BILINEAR)
+                a = np.array(rgba.getchannel("A"))
+                bg_mask = (a == 0)
+
+                img_u8 = (img * 255).astype(np.uint8)
+                bg_pix = img_u8[bg_mask]
+
+                print(
+                    f"[CHK3] {Path(batch['filepath'][i]).name} | variant={'??'} "
+                    f"| bg_pix_max={bg_pix.max(axis=0) if bg_pix.size else None} "
+                    f"| bg_pix_mean={bg_pix.mean(axis=0) if bg_pix.size else None}"
+                )
+
+                plain_row.append((img * 255).astype(np.uint8))
+                eigen_row.append(e_vis)
+                grad_row.append(g_vis)
+
+            top = np.hstack(plain_row)
+            eigen_grid = np.vstack([top, np.hstack(eigen_row)])
+            grad_grid  = np.vstack([top, np.hstack(grad_row)])
+
+            stem = Path(fname).stem
+            cv2.imwrite(str(output_dir / f"cam_grid__eigen__{stem}.png"), eigen_grid)
+            cv2.imwrite(str(output_dir / f"cam_grid__grad__{stem}.png"), grad_grid)
+
+
 
 
 if __name__ == "__main__":
     BATCH_SIZE = 16
-    backbone_name = "MegaDescriptor-L"
+    backbone_name = "MiewID"
     head_type = "arcface"
     n_samples = 10
     dataset_name = "jaguar_init"
-    manifest_dir = PATHS.data_export / "init"
-    checkpoint_path = ""
+    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
+    checkpoint_path = PATHS.checkpoints / "jaguar_reid_v1_epoch_16.pth"
 
-    save_path = PATHS.runs / "xai/background_sensitivity"
+    save_path = resolve_path("xai/background_sensitivity", EXPERIMENTS_STORE)
     ensure_dir(save_path)
-    results_path = PATHS.results / "xai/background_sensitivity"
+    results_path = resolve_path("xai/background_sensitivity", RESULTS_STORE)
     ensure_dir(results_path)
     
     # Load Sample List
     _, temp_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
+    labels_all = [str(x) for x in temp_ds.labels]
+    unique_ids = sorted(set(labels_all))
+    label2idx = {lab: i for i, lab in enumerate(unique_ids)}
     torch_idx = select_random_datasubset_balanced(temp_ds, n=n_samples, seed=SEED, k_per_id=5)
     samples_list = [temp_ds.samples[i] for i in torch_idx]
 
@@ -244,7 +273,13 @@ if __name__ == "__main__":
         head_type=head_type,
         device=str(DEVICE)
     )
-    # model.load_state_dict(torch.load("path/to/weights.pt"))       ## TODO!
+    
+    # load model weights
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    tmp_state = ckpt["model_state_dict"]
+    state = {k.replace("module.", "", 1): v for k, v in tmp_state.items()}
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    print("full model missing:", len(missing), "unexpected:", len(unexpected))
     model = model.to(DEVICE).eval()
 
     # Create Final Dataset
@@ -261,8 +296,9 @@ if __name__ == "__main__":
 
     # Run Stability (ReID) anaylsis on similarity (cosine)
     similarity_res = compute_embedding_stability(model, loader, DEVICE)
-    similarity_res.to_csv(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.csv", index=False)
     
+    # save results
+    similarity_res.to_csv(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.csv", index=False)
     save_parquet(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet", logits_res)
     save_parquet(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet", similarity_res)
 
@@ -274,7 +310,7 @@ if __name__ == "__main__":
             "manifest_dir": to_rel_path(manifest_dir),
         },
         "model": {
-            "checkpoint_path": checkpoint_path,
+            "checkpoint_path": to_rel_path(checkpoint_path),
             "num_classes":  num_classes,
             "model_backbone": backbone_name,
             "head_type": head_type,
@@ -284,9 +320,9 @@ if __name__ == "__main__":
             "mask_fill_color": xai_ds.mask_fill_color
         },
         "outputs": {
-            "logits_csv": str(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.csv"),
-            "similarity_csv": str(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.csv"),
-            "heatmaps_dir": str(results_path / "heatmaps"),
+            "logits_parquet": to_rel_path(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet"),
+            "similarity_parquet": to_rel_path(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet"),
+            "heatmaps_dir": to_rel_path(results_path / "heatmaps"),
         },
     }
 

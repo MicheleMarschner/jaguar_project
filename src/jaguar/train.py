@@ -7,6 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import PATHS, DEVICE 
+from jaguar.utils.utils_scheduler import JaguardIdScheduler
 
 class JaguarTrainer:
     def __init__(self, model, train_loader, val_loader, config):
@@ -20,15 +21,15 @@ class JaguarTrainer:
         self.experiment_name = config['training']['experiment_name']
         self.config_folder = config['training']['config_folder']
         
-        self.optimizer = optim.AdamW(
+        self.optimizer = optim.Adam( #optim.AdamW
             filter(lambda p: p.requires_grad, model.parameters()),
-            lr=config['training']['lr'],
-            weight_decay=config['training']['weight_decay']
+            lr=config["scheduler_params"]["lr_start"],
+            # weight_decay=config['training']['weight_decay']
         )
-        
-        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=config['training']['epochs']
-        )
+        self.scheduler = JaguardIdScheduler(self.optimizer, **dict(config["scheduler_params"]))
+        # self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
+        #     self.optimizer, T_max=config['training']['epochs']
+        # )
         
         self.save_dir = Path(config['training']['save_dir'])
         self.save_dir.mkdir(parents=True, exist_ok=True)

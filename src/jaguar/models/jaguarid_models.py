@@ -62,6 +62,8 @@ class JaguarIDModel(nn.Module):
         device: str = "cuda",
         emb_dim: int = 512,
         freeze_backbone: bool = True,
+        loss_s: float = 30.0,
+        loss_m: float = 0.5,
     ):
         super().__init__()
         self.device = device
@@ -98,7 +100,7 @@ class JaguarIDModel(nn.Module):
         # Select head + loss
         if self.head_type == "arcface":
             self.head = BaseMarginHead(emb_dim, num_classes)
-            self.criterion = ArcFaceLoss()
+            self.criterion = ArcFaceLoss(loss_s, loss_m)
         elif self.head_type == "cosface":
             self.head = BaseMarginHead(emb_dim, num_classes)
             self.criterion = CosFaceLoss()

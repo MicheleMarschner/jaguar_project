@@ -39,6 +39,9 @@ Notes / assumptions:
   is the split + (optional) intra-burst curation described above.
 """
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd

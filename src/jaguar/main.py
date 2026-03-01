@@ -57,7 +57,7 @@ def main():
     num_classes = len(unique_labels)
     print(f"[Info] Identities: {num_classes} | Total Images: {len(full_ds)}")
 
-    # 4. Initialize Model
+    # Initialize Model
     model = JaguarIDModel(
         backbone_name=config['model']['backbone_name'],
         num_classes=num_classes,

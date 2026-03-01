@@ -3,16 +3,34 @@ backbone_name = "MiewID"
 head_type = "arcface"
 emb_dim = 512
 freeze_backbone = true
+s = 30.0
+m = 0.50
+
+[data]
+dataset_name = "jaguar_stage0"
+val_split = 0.2
+# Parameter for imbalance
+use_balanced_sampler = true
+num_workers = 4
 
 [training]
 experiment_name = "jaguar_reid_v1"
 config_folder = "miewid"
 epochs = 20
 batch_size = 32
-lr = 0.0005
-weight_decay = 0.0001
+# lr = 0.0005
+# weight_decay = 0.0001
 seed = 42
-use_balanced_sampler = true  # Set to true to handle class imbalance
+# Set to true to handle class imbalance
+use_balanced_sampler = true
+
+[scheduler_params]
+lr_start = 0.00001
+lr_max = 0.001
+lr_min = 0.000009 
+lr_ramp_ep = 15
+lr_sus_ep = 0
+lr_decay = 0.8
 
 [data]
 dataset_name = "jaguar_init"

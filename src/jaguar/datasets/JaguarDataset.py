@@ -1,5 +1,9 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 import torch
 import json
+import pandas as pd
 from pathlib import Path
 import numpy as np
 from typing import Callable, Optional, Any, Dict, List, Union
@@ -8,15 +12,19 @@ from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transforms
 
+from jaguar.config import PROJECT_ROOT, PATHS, DATA_ROOT
 class JaguarDataset(Dataset):
     def __init__(
         self,
         base_root: Union[str, Path],
-        data_root: Path | None = None,
+        data_root: Optional[Path] = None,
         transform: Optional[Callable] = None,
         processing_fn: Optional[Callable[[Image.Image, Dict[str, Any]], Image.Image]] = None,
         is_test: bool = False,
-        samples_list: Optional[List[Dict[str, Any]]] = None,
+        # New Arguments
+        mode: str = "train", # "train" or "val"
+        split_parquet: Optional[Union[str, Path]] = None,
+        include_duplicates: bool = True,
         filepath_key: str = "filepath",
         filename_key: str = "filename",
     ):
@@ -28,29 +36,71 @@ class JaguarDataset(Dataset):
         self.filepath_key = filepath_key
         self.filename_key = filename_key
         self.epoch = 0
+        self.mode = mode
+        
+        if self.data_root is None:
+            raise ValueError("data_root must be provided")
+        
+        if split_parquet is not None:
+            # Load split information from parquet
+            df = pd.read_parquet(split_parquet)
+            
+            # Filter by mode (train vs val)
+            mask = df['split_final'] == mode
+            
+            # Filter duplicates if requested
+            if not include_duplicates:
+                # keep_curated is string 'true'/'false' in your CSV sample, 
+                # but usually boolean in parquet. Handling both:
+                mask &= (df['keep_curated'].astype(str).str.lower() == 'true')
+            
+            df = df[mask].copy()
 
-        if samples_list is not None:
-            self.samples = samples_list
-        else:
+            # Convert dataframe to the expected samples format
+            self.samples = []
+            for _, row in df.iterrows():
+                self.samples.append({
+                    self.filepath_key: row['filename'], # Only store "train_XXXX.png"
+                    "ground_truth": {"label": row['identity_id']}
+                })
+        elif split_parquet is None and not self.is_test:
+            # Fallback to original JSON loading logic
             with open(self.base_root / "samples.json", "r") as f:
                 data = json.load(f)
-            self.samples = data["samples"] if isinstance(data, dict) and "samples" in data else data
 
+            raw_samples = data["samples"] if isinstance(data, dict) and "samples" in data else data
+
+            self.samples = []
+            for s in raw_samples:
+                self.samples.append({
+                    self.filepath_key: s.get("filename") or Path(s["filepath"]).name,
+                    "ground_truth": {
+                        "label": s["ground_truth"]["label"]
+                    }
+                })
+                self.samples.append(s.get("filename") or Path(s["filepath"]).name)
+        elif self.is_test:
+            test_dir = self.data_root / "raw/jaguar-re-id/test/test"
+            if not test_dir.exists():
+                raise FileNotFoundError(f"Test directory not found: {test_dir}")
+            self.samples = []
+            # Collect all image files
+            for img_path in sorted(test_dir.glob("*.png")):
+                filename = img_path.name  # e.g. "000123.png"
+                self.samples.append({
+                    self.filepath_key: filename, # Only store "train_XXXX.png"
+                    "ground_truth": {"label": ""}
+                })
+            print(f"[JaguarDataset] Loaded {len(self.samples)} test images.")
+                
+        # Setup Labels
         if self.is_test:
             self.labels = [""] * len(self.samples)
         else:
             self.labels = [str(s["ground_truth"]["label"]) for s in self.samples]
-
-        self.idx_by_id: Dict[str, List[int]] = {}
-        # if not self.is_test:
-        #     for i, sid in enumerate(self.labels):
-        #         self.idx_by_id.setdefault(sid, []).append(i)
-        if not self.is_test:
-            # Map label string → index
-            unique_labels = sorted(list(set([str(s["ground_truth"]["label"]) for s in self.samples])))
+            unique_labels = sorted(list(set(self.labels)))
             self.label_to_idx = {l: i for i, l in enumerate(unique_labels)}
-            # Also store numeric labels
-            self.labels_idx = [self.label_to_idx[str(s["ground_truth"]["label"])] for s in self.samples]
+            self.labels_idx = [self.label_to_idx[l] for l in self.labels]
 
     def __len__(self):
         return len(self.samples)
@@ -60,30 +110,22 @@ class JaguarDataset(Dataset):
 
     def _resolve_path(self, p: str) -> Path:
         pp = Path(p)
-
-        # if absolute but doesn't exist on this machine: try rebasing to data_root by filename
-        if pp.is_absolute():
-            if pp.exists():
-                return pp
-            if self.data_root is not None:
-                # last-resort: filename under train/test folders
-                return self.data_root / "raw/jaguar-re-id/train/train" / pp.name
+        if pp.is_absolute() and pp.exists():
             return pp
-
-        # relative: prefer data_root
-        if self.data_root is not None:
-            return self.data_root / pp
-
-        return self.base_root / pp
-
-
+        # If relative or absolute doesn't exist, use data_root (data/round_1/...)
+        if self.data_root is not None and self.mode in ("train", "val"):
+            return self.data_root / "raw/jaguar-re-id/train/train" / pp.name
+        elif self.data_root is not None and self.mode=="test":
+            return self.data_root / "raw/jaguar-re-id/test/test" / pp.name
+        return pp
+    
     def __getitem__(self, idx: int) -> Dict[str, Any]:
         s = dict(self.samples[idx])
         s["_epoch"] = self.epoch
         s.setdefault("filename", s.get(self.filename_key) or Path(s[self.filepath_key]).name)
 
         img_path = self._resolve_path(s[self.filepath_key])
-        img = Image.open(img_path).convert("RGBA") #.convert("RGBA") do we need the alpha channel?
+        img = Image.open(img_path).convert("RGBA") # do we need the alpha channel? 
 
         if self.processing_fn is not None:
             img = self.processing_fn(img, s)
@@ -209,5 +251,68 @@ class MaskAwareJaguarDataset(JaguarDataset):
             "filepath": str(img_path),
             "id": str(s.get("ground_truth", {}).get("label", "unknown"))
         }
+        
+if __name__ == "__main__":
+    # Define your paths based on your folder structure
+    base_path = Path(f"{PROJECT_ROOT}/experiments/round_1")
+    data_path = DATA_ROOT
+    parquet_path = base_path / "splits" / "jaguar_burst__str_closed_set__pol_drop_duplicates__k1" / "full_split.parquet"
+
+    # Check if files exist before running
+    if not parquet_path.exists():
+        print(f"Error: Parquet file not found at {parquet_path}")
+        exit(1)
+
+    print(f"--- Dataset Test Start ---\n")
+
+    # Test Training Split (Filtered: Curated Only)
+    print("Test 1: Training mode (include_duplicates=False)")
+    train_ds = JaguarDataset(
+        base_root=base_path,
+        data_root=data_path,
+        mode="train",
+        split_parquet=parquet_path,
+        include_duplicates=False
+    )
+    print(f"Total curated train samples: {len(train_ds)}")
+    print(f"Total unique identities: {len(train_ds.label_to_idx)}")
+    
+    if len(train_ds) > 0:
+        sample = train_ds[0]
+        print(f"Sample index 0 Filename: {sample['filename']}")
+        print(f"Sample index 0 Label: {sample['label']} (Mapped ID: {sample['label_idx']})")
+        print(f"Full Resolved Path: {sample['filepath']}")
+        print(f"Image Tensor Shape: {sample['img'].shape}")
+    print("-" * 40)
+
+    # Test Validation Split
+    print("Test 2: Validation mode")
+    val_ds = JaguarDataset(
+        base_root=base_path,
+        data_root=data_path,
+        mode="val",
+        split_parquet=parquet_path
+    )
+    print(f"Total validation samples: {len(val_ds)}")
+    if len(val_ds) > 0:
+        print(f"Validation sample index 0: {val_ds[0]['filename']}")
+    print("-" * 40)
+
+    # Test Training Split (Unfiltered: Includes Duplicates)
+    print("Test 3: Training mode (include_duplicates=True)")
+    train_ds_all = JaguarDataset(
+        base_root=base_path,
+        data_root=data_path,
+        mode="train",
+        split_parquet=parquet_path,
+        include_duplicates=True
+    )
+    print(f"Total train samples (curated + duplicates): {len(train_ds_all)}")
+    
+    # Quick math check to see if duplicates were actually filtered in Test 1
+    diff = len(train_ds_all) - len(train_ds)
+    print(f"Detected {diff} duplicate samples filtered out in Test 1.")
+
+    print(f"\n--- Dataset Test Complete ---")
 
 

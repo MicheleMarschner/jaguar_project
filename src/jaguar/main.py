@@ -6,7 +6,7 @@ import tomllib
 import torch
 from torch.utils.data import DataLoader, Subset, random_split
 
-from jaguar.config import PATHS, DEVICE, PROJECT_ROOT
+from jaguar.config import PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
     load_jaguar_from_FO_export,
@@ -38,6 +38,10 @@ def main():
     # Load Config
     with open(PATHS.configs / f"{args.config}.toml", "rb") as f:
         config = tomllib.load(f)
+        
+    round_name = config["training"]["experiment_name"]
+    parquet_file_path = config["data"]["parquet_path"]
+    parquet_root = f"{WORK_ROOT}/experiments/{round_name}/{parquet_file_path}"
 
     # Optionally override experiment name inside config
     if args.experiment_name is not None:
@@ -45,17 +49,20 @@ def main():
         config["experiment"]["name"] = args.experiment_name
 
     # Load Dataset (Existing loading logic...)
-    _, full_ds = load_jaguar_from_FO_export(
+    _, train_ds, val_ds = load_jaguar_from_FO_export(
         PATHS.data_export / "init",
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
+        parquet_path=parquet_root,
+        full_ds=False,
     )
 
     # Calculate Identities
-    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in full_ds.samples])))
+    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in train_ds.samples])))
     num_classes = len(unique_labels)
-    print(f"[Info] Identities: {num_classes} | Total Images: {len(full_ds)}")
+    print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Training Images: {len(train_ds)}")
+    print(f"Validation Images: {len(val_ds)}")
 
     # Initialize Model
     model = JaguarIDModel(
@@ -67,28 +74,19 @@ def main():
         freeze_backbone=config['model']['freeze_backbone']
     )
     
-    # Setup train/val splits  
-    full_ds.transform = model.backbone_wrapper.transform 
-    train_idx, val_idx, all_labels = get_stratified_train_val_split(
-        full_ds, 
-        val_split=config['data']['val_split'], 
-        seed=config['training']['seed']
-    )
+    # Set Transforms from the Model Backbone
+    train_ds.transform = model.backbone_wrapper.transform
+    val_ds.transform = model.backbone_wrapper.transform
 
-    train_ds = Subset(full_ds, train_idx)
-    val_ds = Subset(full_ds, val_idx)
-
-    # Extract labels specific to the training subset for the sampler
-    train_subset_labels = [all_labels[i] for i in train_idx]
-
-    # Initialize Balanced Sampler
+    # Initialize Balanced Sampler for Re-ID
+    # We use train_ds.labels_idx which contains numeric IDs for every sample
     custom_batch_sampler = BalancedBatchSampler(
-        labels=train_subset_labels,
+        labels=train_ds.labels_idx,
         batch_size=config['training']['batch_size'],
-        samples_per_class=4 # P=8, K=4 for a batch size of 32
+        samples_per_class=config['training'].get('samples_per_class', 4) 
     )
 
-    # Create DataLoaders. Note: If using a sampler, 'shuffle' must be False
+    # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
         batch_sampler=custom_batch_sampler,
@@ -100,8 +98,45 @@ def main():
         val_ds,
         batch_size=config['training']['batch_size'],
         shuffle=False,
-        num_workers=config['data']['num_workers']
+        num_workers=config['data']['num_workers'],
+        pin_memory=True
     )
+    
+    # # Setup train/val splits  
+    # full_ds.transform = model.backbone_wrapper.transform 
+    # train_idx, val_idx, all_labels = get_stratified_train_val_split(
+    #     full_ds, 
+    #     val_split=config['data']['val_split'], 
+    #     seed=config['training']['seed']
+    # )
+
+    # train_ds = Subset(full_ds, train_idx)
+    # val_ds = Subset(full_ds, val_idx)
+
+    # # Extract labels specific to the training subset for the sampler
+    # train_subset_labels = [all_labels[i] for i in train_idx]
+
+    # # Initialize Balanced Sampler
+    # custom_batch_sampler = BalancedBatchSampler(
+    #     labels=train_subset_labels,
+    #     batch_size=config['training']['batch_size'],
+    #     samples_per_class=4 # P=8, K=4 for a batch size of 32
+    # )
+
+    # # Create DataLoaders. Note: If using a sampler, 'shuffle' must be False
+    # train_loader = DataLoader(
+    #     train_ds,
+    #     batch_sampler=custom_batch_sampler,
+    #     num_workers=config['data']['num_workers'],
+    #     pin_memory=True
+    # )
+
+    # val_loader = DataLoader(
+    #     val_ds,
+    #     batch_size=config['training']['batch_size'],
+    #     shuffle=False,
+    #     num_workers=config['data']['num_workers']
+    # )
     # Start Training Loop
     config['training']['save_dir'] = PROJECT_ROOT
     trainer = JaguarTrainer(model, train_loader, val_loader, config)

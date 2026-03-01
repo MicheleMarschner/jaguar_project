@@ -1,4 +1,6 @@
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import numpy as np
@@ -248,12 +250,17 @@ class FoundationModelWrapper:
             else:
                 tensors.append(img)
         batch = torch.stack(tensors).to(self.device)
+        
+        #TO-DO: re-check whether we need the part commented out 
         with torch.no_grad():
-            # assume the model has `get_embeddings` method
-            if hasattr(self.model, "get_embeddings"):
-                emb = self.model.get_embeddings(batch)
-            else:
-                emb = self.model(batch)  # fallback: use raw output
+            # Process the batch in one go
+            emb = self.model(batch)  # Direct call for embedding extraction
+        # with torch.no_grad():
+        #     # assume the model has `get_embeddings` method
+        #     if hasattr(self.model, "get_embeddings"):
+        #         emb = self.model.get_embeddings(batch)
+        #     else:
+        #         emb = self.model(batch)  # fallback: use raw output
         emb_np = emb.cpu().numpy()
         print(f"[Info] Extracted embeddings shape: {emb_np.shape}")
         return emb_np
@@ -309,9 +316,9 @@ class FoundationModelWrapper:
 if __name__ == "__main__":
     
     # Create a dummy image
-    dummy_img = Image.fromarray((np.random.rand(224,224,3)*255).astype(np.uint8))
+    dummy_img = Image.fromarray((np.random.rand(384,384,3)*255).astype(np.uint8))
     # Initialize model wrapper
-    model_wrapper = FoundationModelWrapper("DINO-Small", device="cpu")
+    model_wrapper = FoundationModelWrapper("MegaDescriptor-L", device="cpu")
     # Extract embeddings
     embeddings = model_wrapper.extract_embeddings([dummy_img])
     print("Embeddings:", embeddings.shape)

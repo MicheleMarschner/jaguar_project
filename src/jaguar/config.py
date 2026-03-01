@@ -107,24 +107,17 @@ IN_COLAB = is_colab()
 IN_KAGGLE = is_kaggle()
 ROUND = "round_1"
 
-# NOTE: DATA_ROOT should be set explicitly for portability.
-# Local example:
-#   export JAGUAR_DATA_ROOT=/Users/.../jaguar_data
-# Kaggle example:
-#   os.environ["JAGUAR_DATA_ROOT"]="/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data"
 DATA_ROOT = Path(
     os.environ.get("JAGUAR_DATA_ROOT", str(PROJECT_ROOT / f"data/{ROUND}"))
 ).resolve()
 
-# NOTE: WORK_ROOT is where you write everything you generate (results/runs/checkpoints/artifacts).
-# Kaggle: /kaggle/working (writable)
-# Local: default to PROJECT_ROOT
+
 if IN_KAGGLE and "JAGUAR_WORK_ROOT" not in os.environ:
     WORK_ROOT = Path("/kaggle/working").resolve()
 else:
     WORK_ROOT = Path(os.environ.get("JAGUAR_WORK_ROOT", str(PROJECT_ROOT))).resolve()
 
-# NOTE: keep your PATHS interface unchanged, but make Kaggle-safe by writing to WORK_ROOT.
+
 PATHS = Paths(
     data_train=DATA_ROOT / "raw/jaguar-re-id/train/train",
     data_test=DATA_ROOT / "raw/jaguar-re-id/test/test",
@@ -141,7 +134,7 @@ PATHS = Paths(
 # - Kaggle: optional read cache dataset mounted at /kaggle/input/jaguar-artifacts, write_root under /kaggle/working
 _experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_1")   
 _results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_1") 
-_data_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data")   # dein DATA dataset root (enthält fiftyone/, embeddings/, ...)    
+_data_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data")   
 
 _experiments_read_roots = []
 _results_read_roots = []
@@ -155,7 +148,7 @@ if IN_KAGGLE:
     if _data_cache.exists():
         _data_read_roots.append(_data_cache)
 
-# immer auch "aktueller Run" als fallback lesen können
+
 _experiments_read_roots.append(PATHS.runs)
 _results_read_roots.append(PATHS.results)
 _data_read_roots.append(PATHS.runs / "data")
@@ -170,15 +163,11 @@ RESULTS_STORE = ArtifactStore(
     write_root=PATHS.results,
 )
 
-# schreiben:
-# - lokal: in DATA_ROOT (weil writeable)
-# - kaggle: in runs/data (weil /kaggle/input read-only)
 _data_write_root = DATA_ROOT if not IN_KAGGLE else (PATHS.runs / "data")
 DATA_STORE = ArtifactStore(
     read_roots=tuple(_data_read_roots),
     write_root=_data_write_root,
 )
-
 
 
 DEVICE = get_device(prefer_name="RTX")

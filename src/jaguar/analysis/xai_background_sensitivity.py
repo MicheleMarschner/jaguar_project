@@ -29,9 +29,9 @@ import matplotlib.pyplot as plt
 
 from jaguar.XAI.run_xai_classification import select_random_datasubset_balanced
 from jaguar.config import DEVICE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
-from jaguar.utils.utils_xai import MaskAwareJaguarDataset
 
 _RUN_RE = re.compile(r"^(?P<model>.+)__(?P<split>.+)__n(?P<n>\d+)__seed(?P<seed>\d+)$")
 
@@ -517,9 +517,18 @@ if __name__ == "__main__":
         bg_all,
         value_bg_removed_col="stability_jaguar_only",
         value_fg_removed_col="stability_bg_only",
-        margin_col_name="spurious_margin",
+        margin_col_name="spurious_margin_emb",
     )
     emb_summary.to_csv(save_dir / "embedding_spuriousness_summary.csv", index=False)
+
+    cls_summary, cls_long = summarize_spuriousness_generic(
+        cls_all,
+        value_bg_removed_col="score_jaguar_only_logp",
+        value_fg_removed_col="score_bg_only_logp",
+        margin_col_name="spurious_margin_logp",
+    )
+    cls_summary.to_csv(save_dir / "cls_spuriousness_summary_logp.csv", index=False)
+    cls_long.to_csv(save_dir / "cls_spuriousness_long_logp.csv", index=False)
 
     plot_margin_box(
         emb_long,

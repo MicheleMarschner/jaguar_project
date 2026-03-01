@@ -38,86 +38,6 @@ from jaguar.utils.utils_datasets import JaguarDataset
 ##  )
 
 
-# ---------------------------------------------------------
-# 1. SPECIALIZED DATASET (Inherits from your JaguarDataset)
-# ---------------------------------------------------------
-
-class MaskAwareJaguarDataset(JaguarDataset):
-    def __init__(self, 
-                 jaguar_model,
-                 *args, **kwargs):
-        
-        super().__init__(*args, **kwargs)
-        
-        # 1. Access the inner wrapper configuration
-        # We assume jaguar_model has 'backbone_wrapper'
-        wrapper = jaguar_model.backbone_wrapper
-        config = wrapper.get_config() # Or wrapper.MODEL_REGISTRY[wrapper.model_name]
-        
-        self.input_size = config.get("input_size", 256)
-        self.mean = config.get("mean", [0.485, 0.456, 0.406])
-        self.std = config.get("std", [0.229, 0.224, 0.225])
-        
-        # 2. Resize RGBA (Image + Mask together)
-        self.resize_rgba = transforms.Resize(
-            (self.input_size, self.input_size), 
-            interpolation=transforms.InterpolationMode.BILINEAR
-        )
-        
-        # 3. Normalize RGB (After masking)
-        self.to_tensor_norm = transforms.Compose([
-            transforms.ToImage(),
-            transforms.ToDtype(torch.float32, scale=True),
-            transforms.Normalize(self.mean, self.std)
-        ])
-        
-        self.alpha_threshold = 128
-        self.mask_fill_color = (128, 128, 128)
-
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        s = self.samples[idx]
-        img_path = self._resolve_path(s[self.filepath_key])
-        
-        # Load RGBA
-        try:
-            rgba = Image.open(img_path).convert("RGBA")
-        except Exception as e:
-            print(f"Error loading {img_path}: {e}")
-            return None # Skip or handle error
-
-        # Resize
-        rgba = self.resize_rgba(rgba)
-        
-        # Split Mask
-        r, g, b, a = rgba.split()
-        fg_mask = np.array(a) > self.alpha_threshold
-        
-        # Create Variants
-        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
-        
-        img_orig = rgb_np.copy()
-        
-        img_bg_masked = rgb_np.copy()
-        img_bg_masked[~fg_mask] = self.mask_fill_color # Keep Jaguar
-        
-        img_fg_masked = rgb_np.copy()
-        img_fg_masked[fg_mask] = self.mask_fill_color # Keep Background
-        
-        # Normalize
-        def process(arr):
-            return self.to_tensor_norm(Image.fromarray(arr))
-
-        return {
-            "t_orig": process(img_orig),
-            "t_bg_masked": process(img_bg_masked),
-            "t_fg_masked": process(img_fg_masked),
-            "label_idx": self.labels_idx[idx] if not self.is_test else -1,
-            "filepath": str(img_path),
-            "id": str(s.get("ground_truth", {}).get("label", "unknown"))
-        }
-
-
-
 class SimilarityForward(torch.nn.Module):
     """
     Returns scalar similarity per sample:
@@ -175,6 +95,39 @@ class EmbeddingForwardWrapper(torch.nn.Module):
         if hasattr(self.base_model, "get_embeddings"):
             return self.base_model.get_embeddings(x)
         return self.base_model(x)
+
+
+def manual_gradcam_class(model, target_layer, x, class_idx):
+    acts = []
+    grads = []
+
+    def fwd_hook(m, inp, out):
+        acts.append(out)
+
+    def bwd_hook(m, gin, gout):
+        grads.append(gout[0])
+
+    h1 = target_layer.register_forward_hook(fwd_hook)
+    h2 = target_layer.register_full_backward_hook(bwd_hook)
+
+    x = x.clone().detach().requires_grad_(True)
+    model.zero_grad(set_to_none=True)
+
+    logits = model(x)              # [1, C]
+    score = logits[0, class_idx]   # scalar
+    score.backward()
+
+    h1.remove(); h2.remove()
+
+    A = acts[0]      # [1, K, H, W]
+    dA = grads[0]    # [1, K, H, W]
+
+    w = dA.mean(dim=(2,3), keepdim=True)          # [1, K, 1, 1]
+    cam = (w * A).sum(dim=1, keepdim=True)        # [1, 1, H, W]
+    cam = F.relu(cam)
+    cam = cam - cam.min()
+    cam = cam / (cam.max() + 1e-12)
+    return cam[0,0].detach().cpu().numpy()
 
 
 def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Image, maximize: bool = True):

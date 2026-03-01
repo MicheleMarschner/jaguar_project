@@ -37,6 +37,7 @@ from PIL import Image
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from typing import Iterable
 
@@ -167,9 +168,8 @@ def identity_filter_summary(
 
     return summary
 
-# ----------------------------
-# EDA: image properties
-# ----------------------------
+
+
 # Reads image headers (and mode) to build a lightweight technical profile of the dataset.
 # Failed loads are tracked to surface corrupted/missing files.
 def analyze_images(
@@ -303,3 +303,82 @@ def get_top_bottom_by_column(
     top_n = tmp.sort_values(col, ascending=False).head(n).copy()
     bottom_n = tmp.sort_values(col, ascending=True).head(n).copy()
     return top_n, bottom_n
+
+
+
+def alpha_background_table_scene(
+    train_df: pd.DataFrame,
+    img_dir: Path,
+    filename_col: str = "filename",
+    alpha0_thresh: float = 0.01,      # >1% transparent => cutout
+    min_bg_mean: float = 5.0,         # bg not black
+    min_bg_std: float = 10.0,         # bg has texture/variation
+) -> pd.DataFrame:
+    rows = []
+    for _, r in tqdm(train_df.iterrows(), total=len(train_df), desc="EDA alpha/bg scene"):
+        fp = img_dir / str(r[filename_col])
+        try:
+            rgba = Image.open(fp).convert("RGBA")
+            arr = np.array(rgba)
+            rgb = arr[..., :3].astype(np.float32)
+            a   = arr[..., 3]
+
+            alpha0_frac = float((a == 0).mean())
+            is_cutout = alpha0_frac > alpha0_thresh
+
+            bg_present_scene = False
+            bg_mean = np.nan
+            bg_std  = np.nan
+
+            if is_cutout:
+                bg = rgb[a == 0]  # Nx3
+                if bg.size:
+                    bg_mean = float(bg.mean())
+                    bg_std  = float(bg.std())  # variation across bg pixels/channels
+                    bg_present_scene = (bg_mean >= min_bg_mean) and (bg_std >= min_bg_std)
+
+            label = (
+                "no_cutout" if not is_cutout else
+                ("cutout_bg_present" if bg_present_scene else "cutout_bg_missing")
+            )
+
+            rows.append({
+                "filename": fp.name,
+                "alpha0_frac": alpha0_frac,
+                "label": label,
+                "bg_mean": bg_mean,
+                "bg_std": bg_std,
+            })
+        except Exception as e:
+            rows.append({
+                "filename": fp.name,
+                "alpha0_frac": np.nan,
+                "label": "error",
+                "bg_mean": np.nan,
+                "bg_std": np.nan,
+                "error": str(e),
+            })
+
+    return pd.DataFrame(rows)
+
+
+
+def plot_bg_label_counts(alpha_df, save_path):
+    """
+    Bar chart for alpha/background categories.
+    Expects alpha_df to have a 'label' column like:
+      - 'no_cutout'
+      - 'cutout_bg_present'
+      - 'cutout_bg_missing'
+      - (optional) 'error'
+    """
+    counts = alpha_df["label"].value_counts()
+
+    plt.figure(figsize=(7, 4))
+    plt.bar(counts.index.astype(str), counts.values)
+    plt.ylabel("Number of images")
+    plt.title("Alpha cutout vs background availability")
+    plt.xticks(rotation=20, ha="right")
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150)
+    plt.close()

@@ -78,7 +78,6 @@ class JaguarDataset(Dataset):
                         "label": s["ground_truth"]["label"]
                     }
                 })
-                self.samples.append(s.get("filename") or Path(s["filepath"]).name)
         elif self.is_test:
             test_dir = self.data_root / "raw/jaguar-re-id/test/test"
             if not test_dir.exists():

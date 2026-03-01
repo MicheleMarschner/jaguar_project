@@ -1,5 +1,5 @@
 [model]
-backbone_name = "MiewID"
+backbone_name = "MegaDescriptor-L"
 head_type = "arcface"
 emb_dim = 512
 freeze_backbone = true
@@ -15,8 +15,8 @@ use_balanced_sampler = true
 num_workers = 4
 
 [training]
-experiment_name = "round_1"
-config_folder = "miewid"
+experiment_name = "round_2"
+config_folder = "megadescriptor"
 epochs = 20
 batch_size = 32
 # lr = 0.0005

@@ -53,8 +53,8 @@ def compute_validation_map():
     # ------------------------
     # CONFIG
     # ------------------------
-    BACKBONE_NAME = "MiewID"
-    CHECKPOINT_PATH = "/home/vanessa/Documents/repos/jaguar_project/miewid/jaguar_reid_v1_epoch_20.pth"
+    BACKBONE_NAME = "MegaDescriptor-L"
+    CHECKPOINT_PATH = "/home/vanessa/Documents/repos/jaguar_project/megadescriptor/round_2_epoch_9.pth"
     base_path = Path(f"{PROJECT_ROOT}/experiments/round_1")
     PARQUET_PATH = base_path / "splits" / "jaguar_burst__str_closed_set__pol_drop_duplicates__k1" / "full_split.parquet"
     EMB_DIM = 512

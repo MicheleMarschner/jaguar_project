@@ -13,7 +13,7 @@ wandb/
 notebooks/wandb
 
 miewid/*.pth
-miewid/*.pth
+megadescriptor/*.pth
 
 wandb.md
 comments.md

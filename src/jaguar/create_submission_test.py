@@ -13,6 +13,54 @@ from jaguar.config import PATHS, DEVICE, DATA_ROOT
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.datasets.JaguarDataset import JaguarDataset
 
+def compute_identity_balanced_map(test_df, sim_matrix, filename_to_idx, label_mapping):
+    """
+    Compute identity-balanced mAP for ReID.
+    
+    Parameters
+    ----------
+    test_df : pd.DataFrame
+        Test pairs CSV with columns ['row_id', 'query_image', 'gallery_image', 'identity'] 
+        identity column is the jaguar ID for gallery images
+    sim_matrix : np.ndarray
+        Precomputed similarity matrix of shape (num_images, num_images)
+    filename_to_idx : dict
+        Mapping from filename to row/column in sim_matrix
+    label_mapping : dict
+        Mapping from filename to ground truth identity label
+    """
+    # For each query image, compute AP
+    query_ids = test_df['query_image'].unique()
+    ap_per_identity = {}
+    
+    for q in query_ids:
+        q_idx = filename_to_idx[q]
+        q_label = label_mapping[q]  # jaguar identity
+        
+        # Rank all gallery images by similarity
+        sim_scores = sim_matrix[q_idx]
+        sorted_idx = np.argsort(-sim_scores)  # descending
+        sorted_filenames = [k for k,v in sorted(filename_to_idx.items(), key=lambda x: x[1])][sorted_idx]
+        
+        # Compute AP
+        rels = np.array([1 if label_mapping[f] == q_label else 0 for f in sorted_filenames])
+        num_rel = rels.sum()
+        if num_rel == 0:
+            continue
+        
+        precision_at_k = np.cumsum(rels) / (np.arange(len(rels)) + 1)
+        ap = (precision_at_k * rels).sum() / num_rel
+        
+        if q_label not in ap_per_identity:
+            ap_per_identity[q_label] = []
+        ap_per_identity[q_label].append(ap)
+    
+    # Identity-balanced mAP: mean AP per identity, then macro-average
+    identity_map = {k: np.mean(v) for k,v in ap_per_identity.items()}
+    ib_map = np.mean(list(identity_map.values()))
+    
+    return ib_map, identity_map
+
 
 def generate_submission():
 
@@ -186,6 +234,18 @@ def generate_submission():
     submission_df.to_csv(save_path, index=False)
 
     print(f"\n✅ Successfully saved submission to {save_path}")
+    
+    # --------------------------------------------------
+    # 10. COMPUTE IDENTITY-BALANCED mAP
+    # --------------------------------------------------
+    ib_map, identity_map = compute_identity_balanced_map(
+        test_df, sim_matrix, filename_to_idx, label_mapping
+    )
+
+    print(f"\nIdentity-Balanced mAP: {ib_map:.4f}")
+    # Optional: print per-identity AP
+    for ident, ap in list(identity_map.items())[:10]:  # first 10 identities
+        print(f"ID: {ident}, AP: {ap:.4f}")
 
 
 if __name__ == "__main__":

@@ -18,6 +18,51 @@ from sklearn.metrics.pairwise import cosine_similarity
 # print(results)
 ###############################################################
 
+def compute_ib_map_from_embeddings(labels, embeddings):
+    """
+    Compute identity-balanced mAP from embeddings and labels
+    Args:
+        labels: list of ground truth labels per image
+        embeddings: numpy array of shape (N, D)
+    Returns:
+        ib_map: identity-balanced mAP
+        identity_map: dict of per-identity mean AP
+    """
+    N = len(labels)
+    identity_map = {}
+
+    # Compute cosine similarity matrix
+    sim_matrix = embeddings @ embeddings.T
+    sim_matrix = sim_matrix / (np.linalg.norm(embeddings, axis=1, keepdims=True) *
+                               np.linalg.norm(embeddings, axis=1, keepdims=True).T)
+    np.fill_diagonal(sim_matrix, -1.0)  # exclude self-match
+    sim_matrix = np.clip(sim_matrix, 0, 1)
+
+    for i in range(N):
+        q_label = labels[i]
+
+        # Rank all others
+        scores = sim_matrix[i]
+        idx_rank = np.argsort(-scores)
+        ranked_labels = [labels[j] for j in idx_rank]
+
+        # Binary relevance
+        rels = np.array([1 if l == q_label else 0 for l in ranked_labels])
+        num_rel = rels.sum()
+        if num_rel == 0:
+            continue
+        precision_at_k = np.cumsum(rels) / (np.arange(len(rels)) + 1)
+        ap = (precision_at_k * rels).sum() / num_rel
+
+        if q_label not in identity_map:
+            identity_map[q_label] = []
+        identity_map[q_label].append(ap)
+
+    # Compute mean AP per identity
+    identity_map = {k: np.mean(v) for k, v in identity_map.items()}
+    ib_map = np.mean(list(identity_map.values()))
+    return ib_map, identity_map
+
 class ReIDEvalBundle:
     """
     Lightweight evaluation bundle for ReID.
@@ -135,75 +180,13 @@ class ReIDEvalBundle:
     # -------------------------------------------------
     # Core ReID Metrics
     # -------------------------------------------------
-    def average_precision_per_query(self):
-        """
-        Standard AP per query.
-        Returns list of APs (one per valid query).
-        """
-        ranked = self.ranked_indices()
-        labels = self.labels
-
-        ap_list = []
-
-        for i in range(len(labels)):
-            query_label = labels[i]
-            order = ranked[i]
-
-            # Remove self index if present at rank 0
-            order = order[order != i]
-
-            matches = (labels[order] == query_label).astype(int)
-            n_pos = matches.sum()
-
-            if n_pos == 0:
-                continue  # skip identities with only one sample
-
-            cumsum = np.cumsum(matches)
-            precision_at_k = cumsum / (np.arange(1, len(matches) + 1))
-            ap = np.sum(precision_at_k * matches) / n_pos
-            ap_list.append(ap)
-
-        return ap_list
-
     def mAP(self):
-        """
-        Standard mAP (mean AP over all queries).
-        """
-        aps = self.average_precision_per_query()
-        return float(np.mean(aps)) if len(aps) > 0 else 0.0
+        self.finetuned_embeddings()
+        ib_map, _ = compute_ib_map_from_embeddings(self.labels, self._finetuned_embeddings)
+        return ib_map  # now mAP and identity-balanced mAP are the same
 
     def identity_balanced_map(self):
-        """
-        Competition-style metric:
-        Macro-average AP per identity (each jaguar equally weighted).
-        """
-        ranked = self.ranked_indices()
-        labels = self.labels
-
-        identity_aps = {}
-
-        for i in range(len(labels)):
-            query_label = labels[i]
-            order = ranked[i]
-            order = order[order != i]
-
-            matches = (labels[order] == query_label).astype(int)
-            n_pos = matches.sum()
-
-            if n_pos == 0:
-                continue
-
-            cumsum = np.cumsum(matches)
-            precision_at_k = cumsum / (np.arange(1, len(matches) + 1))
-            ap = np.sum(precision_at_k * matches) / n_pos
-
-            identity_aps.setdefault(query_label, []).append(ap)
-
-        if not identity_aps:
-            return 0.0
-
-        identity_means = [np.mean(v) for v in identity_aps.values()]
-        return float(np.mean(identity_means))
+        return self.mAP()
 
     # -------------------------------------------------
     # Retrieval Metrics 
@@ -221,8 +204,8 @@ class ReIDEvalBundle:
 
         for i in range(total):
             query_label = labels[i]
-            top_k = ranked[i][:k]
-
+            # Exclude self index if it happens to be in top_k
+            top_k = ranked[i][ranked[i] != i][:k]  # remove query itself
             if query_label in labels[top_k]:
                 correct += 1
 
@@ -244,8 +227,7 @@ class ReIDEvalBundle:
 
         for i in range(len(labels)):
             query_label = labels[i]
-            order = ranked[i]
-            order = order[order != i]
+            order = ranked[i][ranked[i] != i]  # exclude self
 
             if k is not None:
                 order = order[:k]
@@ -266,17 +248,8 @@ class ReIDEvalBundle:
         return float(np.mean(ndcgs)) if ndcgs else 0.0
     
     def recall_at_k(self, k=5):
-        ranked = self.ranked_indices()
-        labels = self.labels
-
-        hits = 0
-        for i in range(len(labels)):
-            query_label = labels[i]
-            top_k = ranked[i][:k]
-            if query_label in labels[top_k]:
-                hits += 1
-
-        return hits / len(labels)
+        # Recall@k is equivalent to top-k accuracy
+        return self.top_k_accuracy(k)
     
     def intra_inter_distance(self):
         emb = self.finetuned_embeddings()

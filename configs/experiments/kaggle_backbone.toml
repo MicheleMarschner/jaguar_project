@@ -1,0 +1,22 @@
+[experiment]
+name = "kaggle_backbone"
+description = "Backbone ablation for Kaggle-oriented training runs."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_backbone"
+
+[[experiment.runs]]
+experiment_name = "backbone_eva02"
+backbone_name = "EVA-02"
+
+[[experiment.runs]]
+experiment_name = "backbone_megadescriptor_l"
+backbone_name = "MegaDescriptor-L"
+
+[[experiment.runs]]
+experiment_name = "backbone_dinov2_for_wildlife"
+backbone_name = "DINOv2_for_wildlife"
+
+[[experiment.runs]]
+experiment_name = "backbone_convnext_v2"
+backbone_name = "ConvNeXt-V2"

@@ -1,0 +1,23 @@
+[experiment]
+name = "kaggle_losses"
+description = "Classification loss/head ablation with fixed backbone and training setup."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_backbone"
+
+[[experiment.runs]]
+experiment_name = "loss_arcface"
+head_type = "arcface"
+
+[[experiment.runs]]
+experiment_name = "loss_cosface"
+head_type = "cosface"
+
+[[experiment.runs]]
+experiment_name = "loss_sphereface"
+head_type = "sphereface"
+m = 4
+
+[[experiment.runs]]
+experiment_name = "loss_softmax"
+head_type = "softmax"

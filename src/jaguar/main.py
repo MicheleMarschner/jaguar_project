@@ -1,16 +1,20 @@
 import os
+from pathlib import Path
+
+from jaguar.utils.utils import ensure_dir, set_seeds, write_json
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import argparse
 import tomllib
 from torch.utils.data import DataLoader
 
-from jaguar.config import PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
+from jaguar.config import DATA_ROOT, PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
+    build_processing_fn,
+    get_resize_for_epoch,
     load_jaguar_from_FO_export,
     BalancedBatchSampler,
-    TransformSubset,
     get_transforms,
 )
 from jaguar.train import JaguarTrainer
@@ -18,73 +22,106 @@ from jaguar.train import JaguarTrainer
 def parse_args():
     parser = argparse.ArgumentParser(description="Train JaguarID model")
     parser.add_argument(
-        "--config",
+        "--base_config",
         type=str,
-        default="leaderboard_experiments",
-        help="Path to the experiment config TOML file"
+        help="Path to the base config TOML file, relative to PATHS.configs and without .toml",
+    )
+    parser.add_argument(
+        "--experiment_config",
+        type=str,
+        help="Path to the experiment override TOML file, relative to PATHS.configs and without .toml",
     )
     parser.add_argument(
         "--experiment_name",
         type=str,
-        default=None,
-        help="Optional name of the experiment (used for logging/checkpoints)"
+        help="Optional name of the experiment (used for logging/checkpoints)",
     )
     return parser.parse_args()
+
+
+def load_toml_config(config_name: str) -> dict:
+    with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
+        return tomllib.load(f)
+
+
+def deep_update(base: dict, override: dict) -> dict:
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_update(result[key], value)
+        else:
+            result[key] = value
+    return result
+
 
 def main():
     # Parse CLI arguments
     args = parse_args()
 
-    # Load Config
-    with open(PATHS.configs / f"{args.config}.toml", "rb") as f:
-        config = tomllib.load(f)
-        
-    round_name = config["training"]["experiment_name"]
-    parquet_file_path = config["data"]["parquet_path"]
-    parquet_root = f"{WORK_ROOT}/experiments/{round_name}/{parquet_file_path}"
+    # Load and merge configs: base + experiment override
+    base_config = load_toml_config(args.base_config)
+    experiment_config = load_toml_config(args.experiment_config)
+
+    config = deep_update(base_config, experiment_config)
 
     # Optionally override experiment name inside config
     if args.experiment_name is not None:
-        config.setdefault("experiment", {})
-        config["experiment"]["name"] = args.experiment_name
+        config.setdefault("training", {})
+        config["training"]["experiment_name"] = args.experiment_name
 
-    is_full_ds = config["data"].get("full_ds", False)
+
+    checkpoints_dir = Path(config["training"]["save_dir"])
+    exp_name = config["training"]["experiment_name"]
+
+    # checkpoint directory (model files only)
+    config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
     
-    # Load Dataset (Existing loading logic...)
-    if is_full_ds:
-        parquet_root=None
-        # Load one large dataset and split it later
-        _, train_ds = load_jaguar_from_FO_export(
-            PATHS.data_export / "init",
-            dataset_name="jaguar_init",
-            overwrite_db=False,
-            parquet_path=parquet_root,
-            full_ds=True,
-            include_duplicates=config["data"]["include_duplicates"],
-        )
-    else:
-        # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
-        _, train_ds, val_ds = load_jaguar_from_FO_export(
-            PATHS.data_export / "init",
-            dataset_name="jaguar_init",
-            overwrite_db=False,
-            parquet_path=parquet_root,
-            full_ds=False,
-            include_duplicates=config["data"]["include_duplicates"],
-        )
-        
-    # _, train_ds, val_ds = load_jaguar_from_FO_export(
-    #     PATHS.data_export / "init",
-    #     dataset_name="jaguar_init",
-    #     processing_fn=None,
-    #     overwrite_db=False,
-    #     parquet_path=parquet_root,
-    #     full_ds=False,
-    # )
+    # run artifact directory (csv, parquet, metrics, configs, logs)
+    run_dir = PATHS.runs / exp_name
+    ensure_dir(run_dir)
+
+    print("\n[RUN]")
+    print("experiment_name:", exp_name)
+    print("run_dir:", run_dir)
+            
+    parquet_file_path = config["data"]["split_data_path"]
+    parquet_root = DATA_ROOT / f"{parquet_file_path}"
+
+    set_seeds(config["training"]["seed"])
+
+    train_processing_fn = build_processing_fn(config, split="train")
+    val_processing_fn = build_processing_fn(config, split="val")
+
+    pr_cfg = config.get("progressive_resizing", {})
+    pr_enabled = pr_cfg.get("enabled", False)
+    pr_sizes = pr_cfg.get("sizes", [])
+    pr_stage_epochs = pr_cfg.get("stage_epochs", [])
+
+    if pr_enabled:
+        if len(pr_sizes) != len(pr_stage_epochs):
+            raise ValueError(
+                "progressive_resizing.sizes and progressive_resizing.stage_epochs must have the same length"
+            )
+        if sum(pr_stage_epochs) != config["training"]["epochs"]:
+            raise ValueError(
+                "Sum of progressive_resizing.stage_epochs must equal training.epochs"
+            )
+
+    current_resize = None
+    
+    # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
+    _, train_ds, val_ds = load_jaguar_from_FO_export(
+        PATHS.data_export / "init",
+        dataset_name="jaguar_init",
+        overwrite_db=False,
+        parquet_path=parquet_root,
+        train_processing_fn=train_processing_fn,
+        val_processing_fn=val_processing_fn,
+        include_duplicates=config["data"]["include_duplicates"],
+    )
 
     # Calculate Identities
-    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in train_ds.samples])))
-    num_classes = len(unique_labels)
+    num_classes = len(train_ds.label_to_idx)
 
     # Initialize Model
     model = JaguarIDModel(
@@ -93,32 +130,29 @@ def main():
         head_type=config['model']['head_type'],
         device=DEVICE,
         emb_dim=config['model']['emb_dim'],
-        freeze_backbone=config['model']['freeze_backbone']
+        freeze_backbone=config['model']['freeze_backbone'],
+        loss_s=config["model"].get("s", 30.0),
+        loss_m=config["model"].get("m", 0.5),
     )
-    
-    if is_full_ds: 
-        print("[Data] Splitting full dataset...")
-        train_idx, val_idx, _ = get_stratified_train_val_split(
-            train_ds, 
-            val_split=config['data']['val_split'], 
-            seed=config['training']['seed']
-        )
-        # Create Subsets for train/val splits
-        train_ds_old = train_ds
-        train_subset = Subset(train_ds, train_idx)
-        val_subset = Subset(train_ds, val_idx)
-        
-        # Apply Transforms via wrapper and modify/apply transforms from the Model Backbone
-        train_ds = TransformSubset(train_subset, get_transforms(config, model.backbone_wrapper, is_training=True))
-        val_ds = TransformSubset(val_subset, get_transforms(config, model.backbone_wrapper, is_training=False))
-        # Labels for Sampler (must align with numeric indices in train_idx)
-        train_labels = [train_ds_old.labels_idx[i] for i in train_idx]
-    else:
+
+    if pr_enabled:
+        current_resize = get_resize_for_epoch(1, pr_sizes, pr_stage_epochs)
+        print(f"[ProgressiveResizing] Initial input size: {current_resize}")
+
         # Apply transforms directly to pre-split datasets
+        train_ds.transform = get_transforms(
+            config, model.backbone_wrapper, is_training=True, input_size_override=current_resize
+        )
+        val_ds.transform = get_transforms(
+            config, model.backbone_wrapper, is_training=False, input_size_override=current_resize
+        )
+    else:
         train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)        
-        # Labels for Sampler
-        train_labels = train_ds.labels_idx
+        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
+            
+    # Labels for Sampler
+    train_labels = train_ds.labels_idx
+        
     
     print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Train: {len(train_ds)} | Val: {len(val_ds)}")
 
@@ -194,11 +228,34 @@ def main():
         config['training']['save_dir'] = PROJECT_ROOT
     trainer = JaguarTrainer(model, train_loader, val_loader, config)
     
-    best_score = 0.0   
+    best_score = 0.0 
+    best_metrics = None
+    best_epoch = None 
+    history = []
+
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
     monitor_metric = config["training"].get("monitor_metric", "mAP")
     for epoch in range(1, config['training']['epochs'] + 1):
+        if pr_enabled:
+            epoch_resize = get_resize_for_epoch(epoch, pr_sizes, pr_stage_epochs)
+            if epoch_resize != current_resize:
+                current_resize = epoch_resize
+                print(f"\n[ProgressiveResizing] Switching input size to {current_resize} at epoch {epoch}")
+
+                train_ds.transform = get_transforms(
+                    config,
+                    model.backbone_wrapper,
+                    is_training=True,
+                    input_size_override=current_resize,
+                )
+                val_ds.transform = get_transforms(
+                    config,
+                    model.backbone_wrapper,
+                    is_training=False,
+                    input_size_override=current_resize,
+                )
+                
         avg_loss = trainer.train_epoch(epoch)
         metrics = trainer.validate()
         
@@ -215,6 +272,8 @@ def main():
         current_score = metrics[monitor_metric]
         if current_score > best_score:
             best_score = current_score
+            best_metrics = metrics
+            best_epoch = epoch
             patience_counter = 0
             trainer.save_checkpoint(epoch, metrics)
         else:
@@ -224,11 +283,43 @@ def main():
             trainer.scheduler.step(metrics['mAP'])
         else:  
             trainer.scheduler.step()
+
+        ##!TODO laut chatty sollte obere block hiermit ersetzt werden as OneCycleLR per batch
+        #if config["scheduler"]["type"] == "ReduceLROnPlateau":
+        #    trainer.scheduler.step(metrics["mAP"])
+        #elif config["scheduler"]["type"] != "OneCycleLR":
+        #    trainer.scheduler.step()
+
+        current_lr = trainer.optimizer.param_groups[0]["lr"]
+
+        history.append({
+            "epoch": epoch,
+            "train_loss": float(avg_loss),
+            "val_mAP": float(metrics["mAP"]),
+            "val_pairwise_AP": float(metrics["pairwise_AP"]),
+            "val_rank1": float(metrics["rank1"]),
+            "val_sim_gap": float(metrics["sim_gap"]),
+            "lr": float(current_lr),
+            "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
+        })
         
         if config["training"].get("early_stopping", False):
             if patience_counter >= patience:
                 print(f"\nEarly stopping triggered after {epoch} epochs.")
                 break
+                
+    final_results = {
+        "experiment_name": config["training"]["experiment_name"],
+        "best_epoch": best_epoch,
+        "monitor_metric": monitor_metric,
+        "best_score": best_score,
+        "metrics": best_metrics,
+    }
+
+    write_json(final_results, run_dir / "metrics.json")
+    write_json(history, run_dir / "history.json")
+    write_json(config, run_dir / "experiment_config.json")
+        
 
 if __name__ == "__main__":
     main()

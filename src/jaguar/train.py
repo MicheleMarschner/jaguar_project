@@ -6,7 +6,7 @@ import tomli_w
 import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
-from muon import Muon
+#from muon import Muon
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import PATHS, DEVICE 
@@ -78,7 +78,7 @@ class JaguarTrainer:
                 self.optimizer,
                 max_lr=sched_cfg['lr_max'],
                 total_steps=sched_cfg.get('total_steps', None),
-                epochs=sched_cfg.get('epochs', None),
+                epochs=sched_cfg.get('epochs', config["training"]["epochs"]),
                 steps_per_epoch=len(self.train_loader),
             )
         elif sched_type == "ReduceLROnPlateau":
@@ -110,6 +110,9 @@ class JaguarTrainer:
             
             loss.backward()
             self.optimizer.step()
+
+            if self.config["scheduler"]["type"] == "OneCycleLR":            ## !TODO check in with Vanessa if ok!
+                self.scheduler.step()
             
             running_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -143,10 +146,10 @@ class JaguarTrainer:
         return bundle.compute_all()
 
     def save_checkpoint(self, epoch, metrics):
-        path = self.save_dir / self.config_folder / f"{self.experiment_name}"
+        path = self.save_dir
         os.makedirs(path, exist_ok=True)
         save_path = path / "best_model.pth"
-        torch.save({
+        torch.save({                                                ## !TODO should be in experiments folder!!
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
@@ -156,7 +159,7 @@ class JaguarTrainer:
         print(f"[Info] Saved checkpoint: {save_path}")
         
         # save final runtime config
-        config_save_path = path / "config_leaderboard_exp.toml"
+        config_save_path = path / "config_leaderboard_exp.toml"         ## !TODO here or in main - should be in experiments folder!!
         with open(config_save_path, "wb") as f:
             tomli_w.dump(self.config, f)
 

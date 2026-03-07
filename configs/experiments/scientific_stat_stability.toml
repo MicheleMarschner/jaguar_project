@@ -1,0 +1,26 @@
+[experiment]
+name = "kaggle_seed_stability"
+description = "Statistical stability study across random seeds."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_backbone"
+
+[[experiment.runs]]
+experiment_name = "base_seed_42"
+seed = 42
+
+[[experiment.runs]]
+experiment_name = "seed_51"
+seed = 51
+
+[[experiment.runs]]
+experiment_name = "seed_1337"
+seed = 1337
+
+[[experiment.runs]]
+experiment_name = "seed_2026"
+seed = 2026
+
+[[experiment.runs]]
+experiment_name = "seed_7"
+seed = 7

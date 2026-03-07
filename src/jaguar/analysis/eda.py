@@ -35,19 +35,14 @@ from jaguar.utils.utils_visualization import (
     show_image_gallery
 )
 
-FO_DATASET_NAME = "jaguar_init"
-
 # ----------------------------
 # EDA Analysis
 # ----------------------------
 
-def run_eda(data_path: Path, train_file: Path, test_file: Path) -> None:
+def run_eda(train_file: Path, test_file: Path, save_dir: Path, artifacts_dir: Path) -> None:
     # Load raw metadata tables (train labels + benchmark test pairing file)
     train_df = pd.read_csv(train_file)
     test_df = pd.read_csv(test_file)
-
-    artifacts_dir = resolve_path("bursts", EXPERIMENTS_STORE)   # upstream image-feature artifacts (e.g., sharpness)
-    save_dir = PATHS.results / "eda"               # EDA outputs used for reporting + later decisions
 
     # configs for later
     n_examples = 10
@@ -126,81 +121,3 @@ def run_eda(data_path: Path, train_file: Path, test_file: Path) -> None:
         title=f"Top {n_examples} Lowest Resolution Images",
         save_path=save_dir / f"top{n_examples}_lowest_resolution_gallery.png",
     )
-
-
-def build_from_csv_labels(
-    dataset_name: str,
-    train_dir: Path,
-    csv_path: Path,
-    overwrite_db: bool = True,
-) -> FODataset:
-    """
-    Build a FiftyOne dataset from the raw training CSV.
-
-    Project role:
-    - creates a labeled visual dataset for inspection/EDA in FiftyOne
-    - stores train split tag + filename metadata on each sample
-    - acts as a bridge from Kaggle-style CSV labels to project-internal dataset tooling
-    """
-    df = pd.read_csv(csv_path)
-    
-    print(train_dir, csv_path)
-
-    # basic validation
-    assert {"filename", "ground_truth"}.issubset(df.columns), f"CSV columns are {list(df.columns)}"
-    assert df["filename"].nunique() == len(df), "Duplicate filenames in CSV"
-
-    fo_wrapper = FODataset(dataset_name=dataset_name, overwrite=overwrite_db)
-
-    samples = []
-    missing = 0
-
-    for _, r in df.iterrows():
-        p = train_dir / str(r["filename"])
-        if not p.exists():
-            missing += 1
-            continue
-        
-        label = str(r["ground_truth"])
-        s = fo_wrapper.create_sample(filepath=p, label=label, tags=["train"])
-        print(s)
-        s["split"] = "train"
-        s["filename"] = p.name
-        samples.append(s)
-
-    if not samples:
-        raise RuntimeError("No samples created. Check train_dir and csv filenames.")
-
-    fo_wrapper.add_samples(samples)
-    print(f"Built FO dataset with {len(samples)} samples. Missing files: {missing}")
-    return fo_wrapper
-
-
-def main():
-    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
-    csv_file = PATHS.data / "jaguar-re-id/train.csv"
-    test_csv_file = PATHS.data / "jaguar-re-id/test.csv"
-    
-    
-    ### add labels to fiftyOne
-    def build_fn():
-        return build_from_csv_labels(
-            dataset_name=FO_DATASET_NAME,
-            train_dir=PATHS.data_train,
-            csv_path=csv_file,
-            overwrite_db=True,
-        )
-    '''
-    fo_wrapper = get_or_create_manifest_dataset(
-        dataset_name=FO_DATASET_NAME,
-        manifest_dir=manifest_dir,
-        build_fn=build_fn,
-        overwrite_load=False,
-    )
-    '''
-    run_eda(PATHS.data_train, train_file=csv_file, test_file=test_csv_file)
-
-    
-
-if __name__ == "__main__":
-    main()

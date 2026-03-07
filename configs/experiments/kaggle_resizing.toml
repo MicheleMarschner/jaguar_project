@@ -1,0 +1,16 @@
+[experiment]
+name = "kaggle_progressive_resizing"
+description = "Fixed resolution versus progressive resizing."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_backbone"
+
+[[experiment.runs]]
+experiment_name = "fixed_384"
+pr_enabled = false
+
+[[experiment.runs]]
+experiment_name = "progressive_224_384_512"
+pr_enabled = true
+pr_sizes = [224, 384, 512]
+pr_stage_epochs = [10, 10, 10]

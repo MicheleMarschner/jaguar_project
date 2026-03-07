@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 import torch
@@ -10,6 +11,12 @@ import pandas as pd
 from typing import Literal, Optional, Sequence
 
 from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
+
+
+
+def write_json(path: Path, obj):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
 
 
 def ensure_dir(p: Path) -> None:

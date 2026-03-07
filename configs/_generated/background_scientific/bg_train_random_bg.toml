@@ -1,0 +1,6 @@
+[training]
+experiment_name = "bg_train_random_bg"
+
+[preprocessing]
+train_background = "random_bg"
+val_background = "blur_bg"

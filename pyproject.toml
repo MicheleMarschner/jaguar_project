@@ -32,7 +32,9 @@ dependencies = [
   "quantus==0.6.0",
   "pyarrow==23.0.1",
   "ImageHash",
-  "seaborn==0.13.2"
+  "seaborn==0.13.2",
+  "tomli-w==1.2.0",
+  "muon"
 ]
 
 [project.optional-dependencies]

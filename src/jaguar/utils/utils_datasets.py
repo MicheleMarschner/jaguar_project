@@ -1,6 +1,9 @@
+from functools import partial
+
 import fiftyone as fo
 from tqdm import tqdm
 from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS
+from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
 import random 
@@ -20,14 +23,17 @@ from jaguar.datasets.FiftyOneDataset import FODataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD
 
+
+"""
 # --- Helper for different transforms on Subsets if full_ds is used ---
 class TransformSubset(torch.utils.data.Dataset):
-    def __init__(self, subset, transform=None):
+    def __init__(self, subset, transform=None, processing_fn=None):
         self.subset = subset
         self.transform = transform
         
     def __getitem__(self, index):
         sample = self.subset[index]
+
         if self.transform:
             # Assuming the dataset returns a dict with "img"
             sample["img"] = self.transform(sample["img"])
@@ -35,11 +41,21 @@ class TransformSubset(torch.utils.data.Dataset):
         
     def __len__(self):
         return len(self.subset)
+"""
 
-def get_transforms(config, model_wrapper, is_training=True):
+def get_resize_for_epoch(epoch: int, sizes: list[int], stage_epochs: list[int]) -> int:
+    cum = 0
+    for size, n_epochs in zip(sizes, stage_epochs):
+        cum += n_epochs
+        if epoch <= cum:
+            return size
+    return sizes[-1]
+
+
+def get_transforms(config, model_wrapper, is_training=True, input_size_override=None):
     # Extract model-specific requirements from the wrapper's registry
     registry_entry = model_wrapper.registry_entry
-    input_size = registry_entry["input_size"]
+    input_size = input_size_override or registry_entry["input_size"]
     # Default to BICUBIC if not specified
     interpolation = InterpolationMode.BICUBIC 
 
@@ -99,6 +115,33 @@ class PreprocessedDataset(Dataset):
         sample["img"] = self.preprocess_fn(sample["img"])
         return sample
     
+
+def build_processing_fn(config, split: str):
+    """
+    split: 'train' or 'val'
+    """
+    pre_cfg = config.get("preprocessing", {})
+    processor_name = pre_cfg.get(f"{split}_background", "original")
+
+    print(f"[DEBUG build_processing_fn] split={split}")
+    print(f"[DEBUG build_processing_fn] processor={processor_name}")
+
+    if processor_name == "original":
+        return None
+
+    processor = PROCESSORS[processor_name]
+
+    kwargs = {
+        "base_root": PATHS.data_export / "init",
+        "bg_dir": pre_cfg.get("bg_dir"),
+        "edge_softness": pre_cfg.get("edge_softness", 0),
+        "blur_radius": pre_cfg.get("blur_radius", 10),
+        "p_original": pre_cfg.get("p_original", 0.5),
+        "key_for_seed": pre_cfg.get("key_for_seed", "filename"),
+    }
+
+    return partial(processor, **kwargs)
+
 class BalancedBatchSampler(Sampler):
     """
     Returns batches of size (P * K) where:
@@ -309,15 +352,18 @@ def load_jaguar_from_FO_export(
     dataset_name="jaguar_init",
     transform=None,
     processing_fn=None,
+    train_processing_fn=None,
+    val_processing_fn=None,
     overwrite_db=False,
-    full_ds=True,
     include_duplicates=False,
-    parquet_path:str=None,
+    parquet_path: str = None,
 ):
     """
     - If dataset exists in FiftyOne DB: load it
     - Else: import from manifest_dir/samples.json into DB via load_manifest()
-    Returns: (fo_wrapper, fo_dataset, torch_dataset)
+    Returns:
+        - if full_ds=True:  (fo_ds, torch_ds)
+        - if full_ds=False: (fo_ds, torch_ds_train, torch_ds_val)
     """
     manifest_dir = Path(manifest_dir)
 
@@ -330,38 +376,28 @@ def load_jaguar_from_FO_export(
             overwrite_db=overwrite_db,
         )
 
-    if full_ds:
-        # Load full dataset based on samples.json
-        torch_ds = JaguarDataset(
-            base_root=manifest_dir,
-            data_root=DATA_ROOT,
-            split_parquet=parquet_path,
-            mode="train",
-            transform=transform,
-            processing_fn=processing_fn,
-            include_duplicates=include_duplicates,
-        )
-        return fo_ds, torch_ds
-    
-    # Train dataset 
+    # Pre-split train dataset
     torch_ds_train = JaguarDataset(
         base_root=manifest_dir,
         data_root=DATA_ROOT,
         mode="train",
+        split_parquet=parquet_path,
         transform=transform,
-        processing_fn=processing_fn,
+        processing_fn=train_processing_fn,
         include_duplicates=include_duplicates,
     )
-    
-    # Validation dataset 
+
+    # Pre-split validation dataset
     torch_ds_val = JaguarDataset(
         base_root=manifest_dir,
         data_root=DATA_ROOT,
         mode="val",
+        split_parquet=parquet_path,
         transform=transform,
-        processing_fn=processing_fn,
+        processing_fn=val_processing_fn,
         include_duplicates=include_duplicates,
     )
+
     return fo_ds, torch_ds_train, torch_ds_val
 
 def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_size=32, num_workers=4):

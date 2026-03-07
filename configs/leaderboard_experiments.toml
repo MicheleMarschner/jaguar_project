@@ -14,6 +14,15 @@ val_split = 0.2
 use_balanced_sampler = true
 num_workers = 4
 
+[preprocessing]
+train_background = "original"       ["original", "random_bg", "blur_bg", "mixed_original_random_bg"]
+val_background = "original"         ["original","blur_bg"]
+bg_dir = "/path/to/backgrounds"
+p_original = 0.5
+edge_softness = 2
+blur_radius = 10
+key_for_seed = "filename"
+
 [training]
 experiment_name = "round_2"
 config_folder = "megadescriptor"

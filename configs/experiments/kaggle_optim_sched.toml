@@ -1,0 +1,50 @@
+[experiment]
+name = "kaggle_optim_sched"
+description = "Optimizer and scheduler ablation with fixed backbone, loss, and data."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_backbone"
+
+[[experiment.runs]]
+experiment_name = "adamw__cosine"
+optimizer_type = "AdamW"
+optimizer_lr = 1e-5
+optimizer_weight_decay = 1e-3
+optimizer_betas = [0.9, 0.999]
+
+scheduler_type = "CosineAnnealingLR"
+scheduler_T_max = 30
+scheduler_lr_min = 1e-6
+
+[[experiment.runs]]
+experiment_name = "adamw__JaguardIdScheduler"
+optimizer_type = "AdamW"
+optimizer_lr = 1e-5
+optimizer_weight_decay = 1e-3
+optimizer_betas = [0.9, 0.999]
+
+scheduler_type = "JaguardIdScheduler"
+scheduler_lr_max = 1e-3
+scheduler_epochs = 30
+
+[[experiment.runs]]
+experiment_name = "muon__cosine"
+optimizer_type = "Muon"
+optimizer_lr = 1e-5
+optimizer_weight_decay = 1e-3
+optimizer_betas = [0.9, 0.999]
+
+scheduler_type = "CosineAnnealingLR"
+scheduler_T_max = 30
+scheduler_lr_min = 1e-6
+
+[[experiment.runs]]
+experiment_name = "muon__JaguardIdScheduler"
+optimizer_type = "Muon"
+optimizer_lr = 1e-5
+optimizer_weight_decay = 1e-3
+optimizer_betas = [0.9, 0.999]
+
+scheduler_type = "JaguardIdScheduler"
+scheduler_lr_max = 1e-3
+scheduler_epochs = 30

@@ -22,7 +22,7 @@ class JaguarTrainer:
         
         # Define experiments paths and folders 
         self.experiment_name = config['training']['experiment_name']
-        self.config_folder = config['training']['backbone_name'] #['config_folder'] 
+        self.config_folder = config['model']['backbone_name'] #['training']['config_folder'] 
         self.save_dir = Path(config['training']['save_dir'])
         self.save_dir.mkdir(parents=True, exist_ok=True)
         
@@ -160,4 +160,4 @@ class JaguarTrainer:
         with open(config_save_path, "wb") as f:
             tomli_w.dump(self.config, f)
 
-        print(f"[Info] Saved checkpoint: {save_path}")
+        print(f"[Info] Saved config file: {config_save_path}")

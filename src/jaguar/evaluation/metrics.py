@@ -4,6 +4,7 @@
 import numpy as np
 import torch
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics import average_precision_score
 
 ###############################################################
 # Example usage (after validation loop):
@@ -17,6 +18,30 @@ from sklearn.metrics.pairwise import cosine_similarity
 # results = bundle.compute_all()
 # print(results)
 ###############################################################
+
+def compute_pairwise_ap(labels, embeddings):
+    """
+    Pairwise AP: treats every pair of images as a binary classification:
+    same identity vs different identity.
+    """
+
+    N = len(labels)
+
+    sims = embeddings @ embeddings.T
+    sims = sims / (
+        np.linalg.norm(embeddings, axis=1, keepdims=True)
+        * np.linalg.norm(embeddings, axis=1, keepdims=True).T
+    )
+
+    y_true = []
+    y_scores = []
+
+    for i in range(N):
+        for j in range(i + 1, N):
+            y_true.append(int(labels[i] == labels[j]))
+            y_scores.append(sims[i, j])
+
+    return average_precision_score(y_true, y_scores)
 
 def compute_ib_map_from_embeddings(labels, embeddings):
     """
@@ -187,6 +212,10 @@ class ReIDEvalBundle:
 
     def identity_balanced_map(self):
         return self.mAP()
+    
+    def pairwise_ap(self):
+        emb = self.finetuned_embeddings()
+        return compute_pairwise_ap(self.labels, emb)
 
     # -------------------------------------------------
     # Retrieval Metrics 
@@ -331,6 +360,7 @@ class ReIDEvalBundle:
         map_score = self.mAP()
         rank1 = self.rank1()
         rank5 = self.rank5()
+        pair_ap = self.pairwise_ap()
 
         # Retrieval / ranking quality
         ndcg_k = self.ndcg(k=k_ndcg)
@@ -348,6 +378,7 @@ class ReIDEvalBundle:
             # --- Competition / primary ---
             "id_balanced_mAP": id_map,
             "mAP": map_score,
+            "pairwise_AP": pair_ap,
 
             # --- CMC / ReID standard ---
             "rank1": rank1,

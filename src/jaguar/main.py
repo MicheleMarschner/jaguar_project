@@ -196,23 +196,41 @@ def main():
         config['training']['save_dir'] = PROJECT_ROOT
     trainer = JaguarTrainer(model, train_loader, val_loader, config)
     
-    best_mAP = 0.0   
+    best_score = 0.0   
+    patience = config["training"].get("early_stopping_patience", 5)
+    patience_counter = 0
+    monitor_metric = config["training"].get("monitor_metric", "mAP")
     for epoch in range(1, config['training']['epochs'] + 1):
         avg_loss = trainer.train_epoch(epoch)
         metrics = trainer.validate()
         
         print(f"\nEpoch {epoch} Summary:")
-        print(f"Loss: {avg_loss:.4f} | mAP: {metrics['mAP']:.4f} | Rank-1: {metrics['rank1']:.4f}")
+        print(
+            f"Train Loss: {avg_loss:.4f} | "
+            f"Val mAP: {metrics['mAP']:.4f} | "
+            f"Val pairAP: {metrics['pairwise_AP']:.4f} | "
+            f"Val Rank1: {metrics['rank1']:.4f} | "
+            f"Val SimGap: {metrics['sim_gap']:.4f}"
+        )
         
         # Save best model
-        if metrics['mAP'] > best_mAP:
-            best_mAP = metrics['mAP']
+        current_score = metrics[monitor_metric]
+        if current_score > best_score:
+            best_score = current_score
+            patience_counter = 0
             trainer.save_checkpoint(epoch, metrics)
-
+        else:
+            patience_counter += 1
+            
         if config['scheduler']['type'] == "ReduceLROnPlateau":
             trainer.scheduler.step(metrics['mAP'])
         else:  
             trainer.scheduler.step()
+        
+        if config["training"].get("early_stopping", False):
+            if patience_counter >= patience:
+                print(f"\nEarly stopping triggered after {epoch} epochs.")
+                break
 
 if __name__ == "__main__":
     main()

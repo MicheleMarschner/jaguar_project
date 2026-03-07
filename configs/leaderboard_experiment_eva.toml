@@ -1,6 +1,6 @@
 [model]
 backbone_name = "EVA-02"
-head_type = "arcface"
+head_type = "arcface" # head+loss criterion
 emb_dim = 1024
 freeze_backbone = true
 s = 30.0
@@ -9,22 +9,25 @@ m = 0.50
 [data]
 dataset_name = "jaguar_stage0"
 parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
-val_split = 0.1 #0.2
+val_split = 0.05     #0.2
 # Set to true to handle class imbalance
-use_balanced_sampler = true
+use_balanced_sampler = false
 num_workers = 32
 full_ds = true
 include_duplicates = true
 
 [training]
+monitor_metric = "pairwise_AP"      # Options: "mAP", "pairwise_AP" 
 save_dir = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
-experiment_name = "round_eva_baseline_no_bs_vs_01"
+experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP"
 # config_folder = "megadescriptor"
 epochs = 30
 batch_size = 16
 lr = 2e-5
 weight_decay = 1e-3
 seed = 42
+early_stopping = true
+early_stopping_patience = 5
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.

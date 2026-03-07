@@ -149,7 +149,8 @@ def load_swin_transformer(size="base"):
 def load_eva_02():
     print("Loading EVA-02 model...")
     # num_classes=0 removes the classification head, returning features/embeddings
-    eva_model = timm.create_model('eva02_large_patch14_224.mim_in22k', pretrained=True, num_classes=0) 
+    # eva_model = timm.create_model('eva02_large_patch14_224.mim_in22k', pretrained=True, num_classes=0) 
+    eva_model = timm.create_model('eva02_large_patch14_448.mim_m38m_ft_in22k_in1k', pretrained=True, num_classes=0) 
     eva_model.eval() 
     return eva_model   
 

@@ -4,9 +4,8 @@ from torch.optim.lr_scheduler import _LRScheduler
 '''Module re-adapted from https://github.com/WildMeOrg/wbia-plugin-miew-id/blob/main/wbia_miew_id/schedulers/default_scheduler.py#L4'''
 
 class JaguardIdScheduler(_LRScheduler):
-    def __init__(self, optimizer, lr_start=5e-6, lr_max=1e-5,
-                 lr_min=1e-6, lr_ramp_ep=5, lr_sus_ep=0, lr_decay=0.8,
-                 last_epoch=-1):
+    def __init__(self, optimizer, type="JaguardIdScheduler", T_max=30, lr_start=5e-6, lr_max=1e-5, 
+                 lr_min=1e-6, lr_ramp_ep=5, lr_sus_ep=0, lr_decay=0.8, last_epoch=-1):
         self.lr_start = lr_start
         self.lr_max = lr_max
         self.lr_min = lr_min

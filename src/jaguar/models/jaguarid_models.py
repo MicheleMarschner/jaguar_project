@@ -20,6 +20,19 @@ from jaguar.utils.utils_losses import (
 # Heads
 # ---------------------------
 
+class GeM(nn.Module):
+    """Generalized Mean Pooling"""
+    def __init__(self, p=3.0, eps=1e-6):
+        super().__init__()
+        self.p = nn.Parameter(torch.ones(1) * p)
+        self.eps = eps
+
+    def forward(self, x):
+        return F.avg_pool2d(
+            x.clamp(min=self.eps).pow(self.p),
+            (x.size(-2), x.size(-1))
+        ).pow(1.0 / self.p)
+
 class BaseMarginHead(nn.Module):
     """Base class for margin-based heads like ArcFace, CosFace, SphereFace."""
     def __init__(self, in_features: int, num_classes: int):
@@ -67,14 +80,21 @@ class JaguarIDModel(nn.Module):
         freeze_backbone: bool = True,
         loss_s: float = 30.0,
         loss_m: float = 0.5,
+        use_gem: bool = False,      
+        gem_p: float = 3.0,    
+        use_projection: bool = True,     
     ):
         super().__init__()
         self.device = device
         self.head_type = head_type.lower()
-
+        # Initialize GeM if needed
+        self.use_gem = use_gem
+        if self.use_gem:
+            self.gem = GeM(p=gem_p)
         # Load foundation backbone
         self.backbone_wrapper = FoundationModelWrapper(backbone_name, device=device)
         self.backbone = self.backbone_wrapper.model
+        self.use_projection = use_projection
 
         # Freeze backbone if needed
         if freeze_backbone:
@@ -95,23 +115,29 @@ class JaguarIDModel(nn.Module):
 
         print(f"[JaguarID] Backbone: {backbone_name} | Input Res: {input_res} | Feature dim: {self.feature_dim}")
 
-        # Always create a neck (EmbeddingHead)
-        self.neck = EmbeddingHead(self.feature_dim, emb_dim)
+        # Optionally create a projector (EmbeddingHead)
+        if self.use_projection:
+            self.neck = EmbeddingHead(self.feature_dim, emb_dim)
+            head_input_dim = emb_dim
+        else:
+            self.neck = nn.Identity()
+            self.bn = nn.BatchNorm1d(self.feature_dim)
+            head_input_dim = self.feature_dim
 
         print(f"[JaguarID] Feature dim: {self.feature_dim}")
 
         # Select head + loss
         if self.head_type == "arcface":
-            self.head = BaseMarginHead(emb_dim, num_classes)
+            self.head = BaseMarginHead(head_input_dim, num_classes)
             self.criterion = ArcFaceLoss(loss_s, loss_m)
         elif self.head_type == "cosface":
-            self.head = BaseMarginHead(emb_dim, num_classes)
+            self.head = BaseMarginHead(head_input_dim, num_classes)
             self.criterion = CosFaceLoss()
         elif self.head_type == "sphereface":
-            self.head = BaseMarginHead(emb_dim, num_classes)
+            self.head = BaseMarginHead(head_input_dim, num_classes)
             self.criterion = SphereFaceLoss()
         elif self.head_type == "softmax":
-            self.head = LinearHead(emb_dim, num_classes)
+            self.head = LinearHead(head_input_dim, num_classes)
             self.criterion = nn.CrossEntropyLoss()
         elif self.head_type == "triplet":
             self.head = nn.Identity() # Triplet just uses the neck
@@ -127,10 +153,15 @@ class JaguarIDModel(nn.Module):
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
-            features = features.mean(dim=(2, 3))
+            if self.use_gem:
+                features = self.gem(features).flatten(1)
+            else:
+                features = features.mean(dim=(2, 3))
 
-        # Pass through the learned projection neck
+        # Pass through the learned projection neck or a batch normalization layer
         embeddings = self.neck(features)
+        if not self.use_projection:
+            embeddings = self.bn(embeddings)
         return F.normalize(embeddings, dim=1)
     
     def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
@@ -158,10 +189,15 @@ class JaguarIDModel(nn.Module):
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
-            features = features.mean(dim=(2, 3))
+            if self.use_gem:
+                features = self.gem(features).flatten(1)
+            else:
+                features = features.mean(dim=(2, 3))
             
-        # Pass through neck
+        # Pass through neck or a batch normalization layer
         embeddings = self.neck(features)
+        if not self.use_projection:
+            embeddings = self.bn(embeddings)
 
         # Triplet case (returns embeddings)
         if self.head_type == "triplet":
@@ -204,11 +240,12 @@ if __name__ == "__main__":
     # Initialize the full JaguarID Model
     # Baseline example: MegaDescriptor-L + ArcFace head
     model = JaguarIDModel(
-        backbone_name="MegaDescriptor-L", # DINOv2_for_wildlife, ConvNeXt-V2, EfficientNet-B4, Swin-Transformer, EVA-02, MegaDescriptor-L, MiewID
+        backbone_name="EVA-02", # DINOv2_for_wildlife, ConvNeXt-V2, EfficientNet-B4, Swin-Transformer, EVA-02, MegaDescriptor-L, MiewID
         num_classes=num_classes,
         head_type="arcface",
         device=str(DEVICE),
-        freeze_backbone=True  # Usually True if just evaluating foundation features
+        freeze_backbone=True,  # Usually True if just evaluating foundation features
+        use_gem=True,   # Set to True to use GeM pooling instead of avg pooling
     )
     model.eval()
     

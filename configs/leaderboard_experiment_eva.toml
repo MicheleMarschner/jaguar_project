@@ -1,0 +1,56 @@
+[model]
+backbone_name = "EVA-02"
+head_type = "arcface"
+emb_dim = 1024
+freeze_backbone = true
+s = 30.0
+m = 0.50
+
+[data]
+dataset_name = "jaguar_stage0"
+parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
+val_split = 0.1 #0.2
+# Parameter for imbalance
+use_balanced_sampler = true
+num_workers = 32
+full_ds = true
+include_duplicates = true
+
+[training]
+save_dir = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
+experiment_name = "round_eva_baseline_no_bs_vs_01"
+config_folder = "megadescriptor"
+epochs = 30
+batch_size = 16
+lr = 2e-5
+weight_decay = 1e-3
+seed = 42
+# Set to true to handle class imbalance
+use_balanced_sampler = true
+
+[optimizer]
+type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
+lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
+weight_decay = 1e-3
+momentum = 0.9          # Only used for SGD
+betas = [0.9, 0.999]    # Only used for Adam/AdamW
+
+[scheduler]
+type = "JaguardIdScheduler"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"
+T_max = 30                  # CosineAnnealingLR
+lr_start = 1e-5             # custom 
+lr_min = 9e-6               # Cosine or custom
+lr_max = 1e-3               # Custom or OneCycle
+lr_ramp_ep = 15             # Custom
+lr_sus_ep = 0               # Custom
+lr_decay = 0.8              # Custom
+
+[augmentation]
+apply_augmentations = true
+horizontal_flip = true
+affine_degrees = 15
+affine_translate = [0.15, 0.15]
+affine_scale = [0.85, 1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0.25

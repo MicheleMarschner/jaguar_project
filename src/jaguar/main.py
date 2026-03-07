@@ -10,6 +10,8 @@ from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
     load_jaguar_from_FO_export,
     BalancedBatchSampler,
+    TransformSubset,
+    get_transforms,
 )
 from jaguar.train import JaguarTrainer
 
@@ -46,21 +48,43 @@ def main():
         config.setdefault("experiment", {})
         config["experiment"]["name"] = args.experiment_name
 
+    is_full_ds = config["data"].get("full_ds", False)
+    
     # Load Dataset (Existing loading logic...)
-    _, train_ds, val_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "init",
-        dataset_name="jaguar_init",
-        processing_fn=None,
-        overwrite_db=False,
-        parquet_path=parquet_root,
-        full_ds=False,
-    )
+    if is_full_ds:
+        parquet_root=None
+        # Load one large dataset and split it later
+        _, train_ds = load_jaguar_from_FO_export(
+            PATHS.data_export / "init",
+            dataset_name="jaguar_init",
+            overwrite_db=False,
+            parquet_path=parquet_root,
+            full_ds=True,
+            include_duplicates=config["data"]["include_duplicates"],
+        )
+    else:
+        # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
+        _, train_ds, val_ds = load_jaguar_from_FO_export(
+            PATHS.data_export / "init",
+            dataset_name="jaguar_init",
+            overwrite_db=False,
+            parquet_path=parquet_root,
+            full_ds=False,
+            include_duplicates=config["data"]["include_duplicates"],
+        )
+        
+    # _, train_ds, val_ds = load_jaguar_from_FO_export(
+    #     PATHS.data_export / "init",
+    #     dataset_name="jaguar_init",
+    #     processing_fn=None,
+    #     overwrite_db=False,
+    #     parquet_path=parquet_root,
+    #     full_ds=False,
+    # )
 
     # Calculate Identities
     unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in train_ds.samples])))
     num_classes = len(unique_labels)
-    print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Training Images: {len(train_ds)}")
-    print(f"Validation Images: {len(val_ds)}")
 
     # Initialize Model
     model = JaguarIDModel(
@@ -72,14 +96,42 @@ def main():
         freeze_backbone=config['model']['freeze_backbone']
     )
     
+    if is_full_ds: 
+        print("[Data] Splitting full dataset...")
+        train_idx, val_idx, _ = get_stratified_train_val_split(
+            train_ds, 
+            val_split=config['data']['val_split'], 
+            seed=config['training']['seed']
+        )
+        # Create Subsets for train/val splits
+        train_ds_old = train_ds
+        train_subset = Subset(train_ds, train_idx)
+        val_subset = Subset(train_ds, val_idx)
+        
+        # Apply Transforms via wrapper and modify/apply transforms from the Model Backbone
+        train_ds = TransformSubset(train_subset, get_transforms(config, model.backbone_wrapper, is_training=True))
+        val_ds = TransformSubset(val_subset, get_transforms(config, model.backbone_wrapper, is_training=False))
+        # Labels for Sampler (must align with numeric indices in train_idx)
+        train_labels = [train_ds_old.labels_idx[i] for i in train_idx]
+    else:
+        # Apply transforms directly to pre-split datasets
+        train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
+        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)        
+        # Labels for Sampler
+        train_labels = train_ds.labels_idx
+    
+    print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Train: {len(train_ds)} | Val: {len(val_ds)}")
+
     # Set Transforms from the Model Backbone
-    train_ds.transform = model.backbone_wrapper.transform
-    val_ds.transform = model.backbone_wrapper.transform
+    # train_ds.transform = model.backbone_wrapper.transform
+    # val_ds.transform = model.backbone_wrapper.transform
+    # train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
+    # val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
 
     # Initialize Balanced Sampler for Re-ID
     # We use train_ds.labels_idx which contains numeric IDs for every sample
     custom_batch_sampler = BalancedBatchSampler(
-        labels=train_ds.labels_idx,
+        labels=train_labels, #train_ds.labels_idx,
         batch_size=config['training']['batch_size'],
         samples_per_class=config['training'].get('samples_per_class', 4) 
     )
@@ -87,7 +139,9 @@ def main():
     # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
-        batch_sampler=custom_batch_sampler,
+        batch_size=config['training']['batch_size'],
+        shuffle=True,
+        # batch_sampler=custom_batch_sampler,
         num_workers=config['data']['num_workers'],
         pin_memory=True
     )
@@ -136,10 +190,11 @@ def main():
     #     num_workers=config['data']['num_workers']
     # )
     # Start Training Loop
-    config['training']['save_dir'] = PROJECT_ROOT
+    if not config['training']['save_dir']:
+        config['training']['save_dir'] = PROJECT_ROOT
     trainer = JaguarTrainer(model, train_loader, val_loader, config)
     
-    best_mAP = 0.0
+    best_mAP = 0.0   
     for epoch in range(1, config['training']['epochs'] + 1):
         avg_loss = trainer.train_epoch(epoch)
         metrics = trainer.validate()
@@ -151,8 +206,11 @@ def main():
         if metrics['mAP'] > best_mAP:
             best_mAP = metrics['mAP']
             trainer.save_checkpoint(epoch, metrics)
-            
-        trainer.scheduler.step()
+
+        if config['scheduler']['type'] == "ReduceLROnPlateau":
+            trainer.scheduler.step(metrics['mAP'])
+        else:
+            trainer.scheduler.step()
 
 if __name__ == "__main__":
     main()

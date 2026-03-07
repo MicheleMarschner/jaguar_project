@@ -211,7 +211,7 @@ def main():
 
         if config['scheduler']['type'] == "ReduceLROnPlateau":
             trainer.scheduler.step(metrics['mAP'])
-        else:
+        else:  
             trainer.scheduler.step()
 
 if __name__ == "__main__":

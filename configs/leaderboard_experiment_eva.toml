@@ -10,7 +10,7 @@ m = 0.50
 dataset_name = "jaguar_stage0"
 parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
 val_split = 0.1 #0.2
-# Parameter for imbalance
+# Set to true to handle class imbalance
 use_balanced_sampler = true
 num_workers = 32
 full_ds = true
@@ -19,14 +19,12 @@ include_duplicates = true
 [training]
 save_dir = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
 experiment_name = "round_eva_baseline_no_bs_vs_01"
-config_folder = "megadescriptor"
+# config_folder = "megadescriptor"
 epochs = 30
 batch_size = 16
 lr = 2e-5
 weight_decay = 1e-3
 seed = 42
-# Set to true to handle class imbalance
-use_balanced_sampler = true
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.

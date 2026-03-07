@@ -1,8 +1,11 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+from jaguar.config import DATA_STORE
+from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import numpy as np
 
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.evaluation.metrics import ReIDEvalBundle
@@ -104,7 +107,7 @@ class JaguarIDModel(nn.Module):
         
         with torch.no_grad():
             # Create dummy input based on actual model requirements
-            dummy = torch.randn(1, 3, input_res, input_res).to(device)      ### !TODO Does this needs to be fixed?
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)      
             out = self.backbone(dummy)
             if isinstance(out, (tuple, list)): out = out[0]
             if out.ndim > 2: out = out.mean(dim=(2, 3))
@@ -160,6 +163,25 @@ class JaguarIDModel(nn.Module):
         if not self.use_projection:
             embeddings = self.bn(embeddings)
         return F.normalize(embeddings, dim=1)
+    
+    def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
+        os.makedirs(folder, exist_ok=True)
+        filename = f"embeddings_{self.backbone_wrapper.name}_{self.head_type}_{split}.npy"
+        path = os.path.join(folder, filename)
+        save_npy(path, embeddings)
+        print(f"[Info] Saved embeddings to {path}")
+        return path
+    
+    def load_embeddings(self, split="training", folder=None):
+        if folder is None:
+            folder = resolve_path("embeddings", DATA_STORE)
+        filename = f"embeddings_{self.backbone_wrapper.name}_{self.head_type}_{split}.npy"
+        path = os.path.join(folder, filename)
+        emb = np.load(path)
+        print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
+        return emb
 
     def forward(self, x, labels=None):
         features = self.backbone(x)

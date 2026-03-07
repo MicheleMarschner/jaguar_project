@@ -45,6 +45,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
+from sklearn.model_selection import ParameterGrid
 from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
 import numpy as np
@@ -60,7 +61,6 @@ from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_spl
 from jaguar.utils.utils_split_and_curate import (
     build_split_table_from_torch_dataset,
     print_keep_drop_summary,
-    print_top_changed_bursts,
     save_split_bundle,
     summarize_splits,
     
@@ -465,22 +465,25 @@ def run_phash_sweep(
 
 
 
-def main():
-    # Configuration
-    TRAIN_K_PER_BURST = 1      # Keep 1 best image per duplicate group in Train        
-    VAL_K_PER_BURST = 50        # Keep ALL (or high K) images in Val to test robustness       
-    dataset_name = "jaguar_burst"
+def create_splits_and_curate(
+        SPLIT_STRATEGY, 
+        INCLUDE_DUPLICATES, 
+        TRAIN_K_PER_DEDUP, 
+        VAL_K_PER_DEDUP, 
+        PHASH_THRESH_DEDUP, 
+        VAL_SIZE, 
+        SEED):
+
+    fo_dataset_name = "jaguar_burst"
     manifest_dir = resolve_path("fiftyone/burst", DATA_STORE) 
-    strategy = "closed_set"                 # "open_set" or "closed_set"
-    dedup_policy = "drop_duplicates"        # "keep_all", "drop_duplicates"
-    stem = f"{dataset_name}__str_{strategy}__pol_{dedup_policy}__k{TRAIN_K_PER_BURST}"
+    stem = f"str{SPLIT_STRATEGY}__dup{INCLUDE_DUPLICATES}__kTrain{TRAIN_K_PER_DEDUP}__kVal{VAL_K_PER_DEDUP}__p{PHASH_THRESH_DEDUP}"
     
     out_root = PATHS.runs / "splits" / f"{stem}"
     ensure_dir(out_root)
     
     # Load Data
-    print(f"Loading {dataset_name}...")
-    fo_wrapper, torch_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
+    print(f"Loading {fo_dataset_name}...")
+    fo_wrapper, torch_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=fo_dataset_name)
     
     # Load Embeddings
     model_name = "MegaDescriptor-L"
@@ -500,18 +503,18 @@ def main():
 
     # Generate Raw Splits
     # Assign train/val according to the evaluation protocol (closed-set = known identities; open-set = unseen identities).
-    print(f"Generating {strategy} splits...")
-    if strategy == "open_set":
-        split_df = make_open_set_splits(df_full, val_size=0.2, seed=SEED)
-    elif strategy == "closed_set":
-        split_df = make_closed_set_splits(df_full, val_size=0.2, seed=SEED)
+    print(f"Generating {SPLIT_STRATEGY} splits...")
+    if SPLIT_STRATEGY == "open_set":
+        split_df = make_open_set_splits(df_full, val_size=VAL_SIZE, seed=SEED)
+    elif SPLIT_STRATEGY == "closed_set":
+        split_df = make_closed_set_splits(df_full, val_size=VAL_SIZE, seed=SEED)
     else:
-        raise ValueError(f"Unknown strategy: {strategy}")
+        raise ValueError(f"Unknown strategy: {SPLIT_STRATEGY}")
 
     # Apply Post-Split Curation
     # choose which images are eligible for splitting based on dedup policy. This controls whether 
     # training/validation sees all burst members or only deduplicated data.
-    if dedup_policy == "drop_duplicates": 
+    if not INCLUDE_DUPLICATES: 
         # Instead of running only one threshold → run sweep
         PHASH_SWEEP = [2, 3, 4, 5, 6]   # your choice
 
@@ -520,29 +523,28 @@ def main():
             meta_img_df=meta_img_df,
             embeddings=embeddings,
             thresholds=PHASH_SWEEP,
-            train_k=TRAIN_K_PER_BURST,
-            val_k=VAL_K_PER_BURST,
+            train_k=TRAIN_K_PER_DEDUP,
+            val_k=VAL_K_PER_DEDUP,
             save_dir=out_root
         )
 
         print("\n===== Sweep Results =====")
         print(sweep_out)
 
-        INTRA_BURST_PHASH_THRESH = 4 # strict-ish near-duplicate grouping inside bursts (not pixel-identical)
-
         final_df = apply_post_split_curation(
             split_df=split_df,
             meta_img_df=meta_img_df,
             embeddings=embeddings,
-            train_k=TRAIN_K_PER_BURST,
-            val_k=VAL_K_PER_BURST,
-            phash_threshold=INTRA_BURST_PHASH_THRESH
+            train_k=TRAIN_K_PER_DEDUP,
+            val_k=VAL_K_PER_DEDUP,
+            phash_threshold=PHASH_THRESH_DEDUP
         )
-    elif dedup_policy == "keep_all":
+    else:
         final_df = split_df.copy()
         final_df["keep_curated"] = True
         final_df["curation_reason"] = "keep_all"
     
+    print(len(final_df))
     # Finalize columns
     # Contract: downstream training should filter on keep_curated == True.
     # The full table is kept for audit/debugging.
@@ -551,12 +553,12 @@ def main():
     print_keep_drop_summary(final_df)
 
     config = {
-        "strategy": strategy,
-        "dedup_policy": dedup_policy,
-        "train_k": TRAIN_K_PER_BURST,
-        "val_k": VAL_K_PER_BURST,
-        "intra_burst_phash_threshold": INTRA_BURST_PHASH_THRESH,
-        "dataset_name": dataset_name,
+        "strategy": SPLIT_STRATEGY,
+        "dedup_policy": INCLUDE_DUPLICATES,
+        "train_k": TRAIN_K_PER_DEDUP,
+        "val_k": VAL_K_PER_DEDUP,
+        "intra_burst_phash_threshold": PHASH_THRESH_DEDUP,
+        "fo_dataset_name": fo_dataset_name,
         "base_dedup_manifest": to_rel_path(manifest_dir),
     }
 
@@ -583,4 +585,22 @@ def main():
     
 
 if __name__ == "__main__":
-    main()
+
+    param_grid = {
+        "TRAIN_K_PER_DEDUP": [1],
+        "VAL_K_PER_DEDUP": [50],
+        "SPLIT_STRATEGY": ["open_set","closed_set"],
+        "INCLUDE_DUPLICATES": [True],
+        "PHASH_THRESH_DEDUP": [4]
+    }
+    
+    
+    for exp_config in ParameterGrid(param_grid):
+        create_splits_and_curate(
+            exp_config["SPLIT_STRATEGY"], 
+            exp_config["INCLUDE_DUPLICATES"], 
+            exp_config["TRAIN_K_PER_DEDUP"], 
+            exp_config["VAL_K_PER_DEDUP"], 
+            exp_config["PHASH_THRESH_DEDUP"], 
+            VAL_SIZE=0.2, 
+            SEED=SEED)

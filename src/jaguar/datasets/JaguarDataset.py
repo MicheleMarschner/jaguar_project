@@ -22,12 +22,12 @@ class JaguarDataset(Dataset):
         transform: Optional[Callable] = None,
         processing_fn: Optional[Callable[[Image.Image, Dict[str, Any]], Image.Image]] = None,
         is_test: bool = False,
-        # New Arguments
         mode: str = "train", # "train" or "val"
         split_parquet: Optional[Union[str, Path]] = None,
         include_duplicates: bool = True,
         filepath_key: str = "filepath",
         filename_key: str = "filename",
+        samples_list: Optional[List[Dict[str, Any]]] = None,
     ):
         self.base_root = Path(base_root)
         self.data_root = Path(data_root).resolve() if data_root is not None else None
@@ -42,7 +42,10 @@ class JaguarDataset(Dataset):
         if self.data_root is None:
             raise ValueError("data_root must be provided")
         
-        if split_parquet is not None:
+        if samples_list is not None:
+            self.samples = samples_list
+
+        elif split_parquet is not None:
             # Load split information from parquet
             df = pd.read_parquet(split_parquet)
             
@@ -64,6 +67,7 @@ class JaguarDataset(Dataset):
                     self.filepath_key: row['filename'], # Only store "train_XXXX.png"
                     "ground_truth": {"label": row['identity_id']}
                 })
+
         elif split_parquet is None and not self.is_test:
             # Fallback to original JSON loading logic
             with open(self.base_root / "samples.json", "r") as f:
@@ -79,6 +83,7 @@ class JaguarDataset(Dataset):
                         "label": s["ground_truth"]["label"]
                     }
                 })
+
         elif self.is_test:
             test_dir = self.data_root / "raw/jaguar-re-id/test/test"
             if not test_dir.exists():
@@ -92,7 +97,6 @@ class JaguarDataset(Dataset):
                     "ground_truth": {"label": ""}
                 })
             print(f"[JaguarDataset] Loaded {len(self.samples)} test images.")
-                
         # Setup Labels
         if self.is_test:
             self.labels = [""] * len(self.samples)
@@ -202,42 +206,28 @@ class MaskAwareJaguarDataset(JaguarDataset):
             rgba = Image.open(img_path).convert("RGBA")
         except Exception as e:
             print(f"Error loading {img_path}: {e}")
-            return None # Skip or handle error
-        
-        # Resize
-        rgba = self.resize_rgba(rgba)
+            return None
 
-        rgba_np = np.array(rgba)          # (H,W,4)
-        rgb0 = rgba_np[..., :3]
-        a_np = rgba_np[..., 3]
+        # split BEFORE resize to avoid RGBA premultiplication / blackening
+        rgb = rgba.convert("RGB")
+        alpha = rgba.getchannel("A")
 
-        bg0 = rgb0[a_np == 0]
-        print("[DBG] file:", Path(img_path).name,
-            "| alpha0%:", float((a_np == 0).mean()),
-            "| bg_rgb_max:", bg0.max(axis=0) if bg0.size else None,
-            "| bg_rgb_mean:", bg0.mean(axis=0) if bg0.size else None)
+        rgb = rgb.resize((self.input_size, self.input_size), Image.BILINEAR)
+        alpha = alpha.resize((self.input_size, self.input_size), Image.NEAREST)
 
-        # Now create rgb_np (equivalent RGB image)
-        r, g, b, a = rgba.split()
-        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
+        rgb_np = np.array(rgb)
+        a_np = np.array(alpha)
 
-        bg2 = rgb_np[a_np == 0]
-        print("[DBG] after merge | bg_rgb_max:", bg2.max(axis=0) if bg2.size else None)
+        fg_mask = a_np > self.alpha_threshold
 
-        # Split Mask
-        r, g, b, a = rgba.split()
-        fg_mask = np.array(a) > self.alpha_threshold
-        
-        # Create Variants
-        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
-        
         img_orig = rgb_np.copy()
-        
+
         img_bg_masked = rgb_np.copy()
-        img_bg_masked[~fg_mask] = self.mask_fill_color # Keep Jaguar
-        
+        img_bg_masked[~fg_mask] = self.mask_fill_color   # keep jaguar
+
         img_fg_masked = rgb_np.copy()
-        img_fg_masked[fg_mask] = self.mask_fill_color # Keep Background
+        img_fg_masked[fg_mask] = self.mask_fill_color    # keep background
+            
         
         # Normalize
         def process(arr):

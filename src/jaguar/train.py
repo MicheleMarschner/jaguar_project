@@ -2,6 +2,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
+import tomli_w
 import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
@@ -21,7 +22,7 @@ class JaguarTrainer:
         
         # Define experiments paths and folders 
         self.experiment_name = config['training']['experiment_name']
-        self.config_folder = config['training']['config_folder']
+        self.config_folder = config['training']['backbone_name'] #['config_folder'] 
         self.save_dir = Path(config['training']['save_dir'])
         self.save_dir.mkdir(parents=True, exist_ok=True)
         
@@ -55,8 +56,8 @@ class JaguarTrainer:
             self.optimizer = torch.optim.SGD(
                 params, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
             )
-        elif opt_name == "Muon":  # Muon accepts similar arguments to AdamW
-            self.optimizer = MuonOpt(
+        elif opt_cfg['type'] == "Muon":  # Muon accepts similar arguments to AdamW
+            self.optimizer = Muon(
                 params, lr=opt_cfg["lr"], weight_decay=opt_cfg.get("weight_decay", 0), betas=tuple(opt_cfg.get("betas", [0.9,0.999]))
             )
         else:
@@ -142,9 +143,9 @@ class JaguarTrainer:
         return bundle.compute_all()
 
     def save_checkpoint(self, epoch, metrics):
-        path = self.save_dir / self.config_folder 
+        path = self.save_dir / self.config_folder / f"{self.experiment_name}"
         os.makedirs(path, exist_ok=True)
-        save_path = path / f"{self.experiment_name}_epoch_{epoch}.pth"
+        save_path = path / "best_model.pth"
         torch.save({
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
@@ -152,4 +153,11 @@ class JaguarTrainer:
             'metrics': metrics,
             'config': self.config
         }, save_path)
+        print(f"[Info] Saved checkpoint: {save_path}")
+        
+        # save final runtime config
+        config_save_path = path / "config_leaderboard_exp.toml"
+        with open(config_save_path, "wb") as f:
+            tomli_w.dump(self.config, f)
+
         print(f"[Info] Saved checkpoint: {save_path}")

@@ -2,7 +2,7 @@
 backbone_name = "EVA-02"
 head_type = "arcface" # head+loss criterion
 emb_dim = 1024
-freeze_backbone = true
+freeze_backbone = true  # To unfreeze the backbone, set other relative parameters accordingly in [training]
 s = 30.0
 m = 0.50
 
@@ -19,15 +19,16 @@ include_duplicates = true
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP", "pairwise_AP" 
 save_dir = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
-experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP"
+experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone_cosineannealing"
 # config_folder = "megadescriptor"
 epochs = 30
 batch_size = 16
-lr = 2e-5
-weight_decay = 1e-3
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
+# ---Fine-tuning Params---
+unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
+unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
@@ -35,6 +36,7 @@ lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
 weight_decay = 1e-3
 momentum = 0.9          # Only used for SGD
 betas = [0.9, 0.999]    # Only used for Adam/AdamW
+backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
 
 [scheduler]
 type = "JaguardIdScheduler"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"

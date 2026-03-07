@@ -3,7 +3,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import argparse
 import tomllib
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from jaguar.config import PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
 from jaguar.models.jaguarid_models import JaguarIDModel
@@ -12,6 +12,7 @@ from jaguar.utils.utils_datasets import (
     BalancedBatchSampler,
     TransformSubset,
     get_transforms,
+    get_stratified_train_val_split,
 )
 from jaguar.train import JaguarTrainer
 

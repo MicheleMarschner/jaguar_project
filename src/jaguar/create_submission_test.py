@@ -65,7 +65,7 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/megadescriptor/round_eva_baseline_no_bs_vs_01_epoch_19.pth"
+    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/EVA-02/round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone/best_model.pth"
     TEST_CSV_PATH = "/home/vanessa/Documents/repos/jaguar_project/data/round_1/raw/jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"

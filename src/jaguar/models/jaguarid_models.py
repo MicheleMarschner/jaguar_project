@@ -146,6 +146,43 @@ class JaguarIDModel(nn.Module):
             raise ValueError(f"Unknown head type: {head_type}")
 
         self.to(device)
+        
+    def unfreeze_backbone_layers(self, num_blocks: int):
+        """
+        Unfreezes the last 'num_blocks' of the backbone.
+        Handles both ViT-style (blocks) and CNN-style (stages/layers) backbones.
+        """
+        if num_blocks <= 0:
+            return
+        #Identify the list of modules to choose from
+        modules_to_unfreeze = []
+      
+        # ViT / EVA / DINO / Swin style
+        if hasattr(self.backbone, 'blocks'):
+            modules_to_unfreeze = list(self.backbone.blocks)
+        # ConvNeXt / EfficientNet style
+        elif hasattr(self.backbone, 'stages'):
+            for stage in self.backbone.stages:
+                if hasattr(stage, 'blocks'):
+                    modules_to_unfreeze.extend(list(stage.blocks))
+        # ResNet / MegaDescriptor style
+        elif hasattr(self.backbone, 'layer4'):
+            modules_to_unfreeze = list(self.backbone.layer4)
+
+        if not modules_to_unfreeze:
+            print("[Warning] Could not detect block structure. Unfreezing entire backbone.")
+            for p in self.backbone.parameters():
+                p.requires_grad = True
+            return
+        
+        # Unfreeze last n modules
+        num_to_unfreeze = min(num_blocks, len(modules_to_unfreeze))
+        target_modules = modules_to_unfreeze[-num_to_unfreeze:]
+        for mod in target_modules:
+            for p in mod.parameters():
+                p.requires_grad = True
+        
+        print(f"[JaguarID] Unfroze the last {num_to_unfreeze} blocks of the backbone.")
     
     def get_embeddings(self, x):
         """Utility method to extract normalized embeddings for ReID evaluation."""

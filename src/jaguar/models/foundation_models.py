@@ -170,9 +170,9 @@ class FoundationModelWrapper:
         },
         "EVA-02": {
             "loader": lambda: load_eva_02(),
-            "input_size": 224,
+            "input_size": 448, #224,
             "transform": transforms.Compose([
-                transforms.Resize((224,224), interpolation=InterpolationMode.BICUBIC),
+                transforms.Resize((448,448), interpolation=InterpolationMode.BICUBIC), #224,224
                 transforms.ToImage(),
                 transforms.ToDtype(torch.float32, scale=True),
                 transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
@@ -316,9 +316,9 @@ class FoundationModelWrapper:
 if __name__ == "__main__":
     
     # Create a dummy image
-    dummy_img = Image.fromarray((np.random.rand(384,384,3)*255).astype(np.uint8))
+    dummy_img = Image.fromarray((np.random.rand(448,448,3)*255).astype(np.uint8))
     # Initialize model wrapper
-    model_wrapper = FoundationModelWrapper("MegaDescriptor-L", device="cpu")
+    model_wrapper = FoundationModelWrapper("EVA-02", device="cpu")
     # Extract embeddings
     embeddings = model_wrapper.extract_embeddings([dummy_img])
     print("Embeddings:", embeddings.shape)

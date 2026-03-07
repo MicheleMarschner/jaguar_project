@@ -6,6 +6,8 @@ import numpy as np
 import random 
 import pandas as pd
 import torch 
+import torchvision.transforms.v2 as transforms
+from torchvision.transforms import InterpolationMode
 
 from torch.utils.data import Sampler, DataLoader, Dataset
 from sklearn.model_selection import train_test_split
@@ -16,6 +18,67 @@ from PIL import Image
 
 from jaguar.datasets.FiftyOneDataset import FODataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
+from jaguar.config import IMGNET_MEAN, IMGNET_STD
+
+# --- Helper for different transforms on Subsets if full_ds is used ---
+class TransformSubset(torch.utils.data.Dataset):
+    def __init__(self, subset, transform=None):
+        self.subset = subset
+        self.transform = transform
+        
+    def __getitem__(self, index):
+        sample = self.subset[index]
+        if self.transform:
+            # Assuming the dataset returns a dict with "img"
+            sample["img"] = self.transform(sample["img"])
+        return sample
+        
+    def __len__(self):
+        return len(self.subset)
+
+def get_transforms(config, model_wrapper, is_training=True):
+    # Extract model-specific requirements from the wrapper's registry
+    registry_entry = model_wrapper.registry_entry
+    input_size = registry_entry["input_size"]
+    # Default to BICUBIC if not specified
+    interpolation = InterpolationMode.BICUBIC 
+
+    # Start with Resize
+    transform_list = [
+        transforms.Resize((input_size, input_size), interpolation=interpolation),
+    ]
+
+    # Add Training Augmentations
+    aug_cfg = config.get("augmentation", {})
+    if is_training and aug_cfg.get("apply_augmentations", False):
+        if aug_cfg.get("horizontal_flip"):
+            transform_list.append(transforms.RandomHorizontalFlip())
+        
+        transform_list.append(transforms.RandomAffine(
+            degrees=aug_cfg.get("affine_degrees", 0),
+            translate=tuple(aug_cfg.get("affine_translate", [0, 0])),
+            scale=tuple(aug_cfg.get("affine_scale", [1, 1]))
+        ))
+        
+        transform_list.append(transforms.ColorJitter(
+            brightness=aug_cfg.get("color_jitter_brightness", 0),
+            contrast=aug_cfg.get("color_jitter_contrast", 0)
+        ))
+
+    # Final Steps (Conversion & Normalization)
+    transform_list.extend([
+        transforms.ToImage(),
+        transforms.ToDtype(torch.float32, scale=True),
+        transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
+    ])
+
+    # Post-Normalization Augmentations (Random Erasing)
+    if is_training and aug_cfg.get("apply_augmentations", False):
+        p_erase = aug_cfg.get("random_erasing_p", 0)
+        if p_erase > 0:
+            transform_list.append(transforms.RandomErasing(p=p_erase))
+
+    return transforms.Compose(transform_list)
 
 class PreprocessedDataset(Dataset):
     """

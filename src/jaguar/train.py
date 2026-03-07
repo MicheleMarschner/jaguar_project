@@ -5,6 +5,8 @@ import torch
 import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
+from muon import Muon
+
 from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import PATHS, DEVICE 
 from jaguar.utils.utils_scheduler import JaguardIdScheduler
@@ -20,19 +22,76 @@ class JaguarTrainer:
         # Define experiments paths and folders 
         self.experiment_name = config['training']['experiment_name']
         self.config_folder = config['training']['config_folder']
+        self.save_dir = Path(config['training']['save_dir'])
+        self.save_dir.mkdir(parents=True, exist_ok=True)
         
-        self.optimizer = optim.Adam( #optim.AdamW
-            filter(lambda p: p.requires_grad, model.parameters()),
-            lr=config["scheduler_params"]["lr_start"],
-            # weight_decay=config['training']['weight_decay']
-        )
-        self.scheduler = JaguardIdScheduler(self.optimizer, **dict(config["scheduler_params"]))
+        # self.optimizer = optim.Adam( #optim.AdamW
+        #     filter(lambda p: p.requires_grad, model.parameters()),
+        #     lr=config["scheduler_params"]["lr_start"],
+        #     # weight_decay=config['training']['weight_decay']
+        # )
+        # self.scheduler = JaguardIdScheduler(self.optimizer, **dict(config["scheduler_params"]))
+        
+        # First version with CosineAnnealingLR for comparison
         # self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
         #     self.optimizer, T_max=config['training']['epochs']
         # )
         
-        self.save_dir = Path(config['training']['save_dir'])
-        self.save_dir.mkdir(parents=True, exist_ok=True)
+        # ----------------------------
+        # Optimizer
+        # ----------------------------
+        opt_cfg = config['optimizer']
+        params = filter(lambda p: p.requires_grad, self.model.parameters())
+
+        if opt_cfg['type'] == "AdamW":
+            self.optimizer = torch.optim.AdamW(
+                params, lr=opt_cfg['lr'], weight_decay=opt_cfg.get('weight_decay', 0)
+            )
+        elif opt_cfg['type'] == "Adam":
+            self.optimizer = torch.optim.Adam(
+                params, lr=opt_cfg['lr'], betas=tuple(opt_cfg.get('betas', [0.9,0.999])), weight_decay=opt_cfg.get('weight_decay', 0)
+            )
+        elif opt_cfg['type'] == "SGD":
+            self.optimizer = torch.optim.SGD(
+                params, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
+            )
+        elif opt_name == "Muon":  # Muon accepts similar arguments to AdamW
+            self.optimizer = MuonOpt(
+                params, lr=opt_cfg["lr"], weight_decay=opt_cfg.get("weight_decay", 0), betas=tuple(opt_cfg.get("betas", [0.9,0.999]))
+            )
+        else:
+            raise ValueError(f"Unknown optimizer type: {opt_cfg['type']}")
+
+        # ----------------------------
+        # Scheduler
+        # ----------------------------
+        sched_cfg = config['scheduler']
+        sched_type = sched_cfg.get("type", "CosineAnnealingLR")
+
+        if sched_type == "CosineAnnealingLR":
+            self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                self.optimizer, T_max=sched_cfg['T_max'], eta_min=sched_cfg.get('lr_min',0)
+            )
+        elif sched_type == "OneCycleLR":
+            self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                self.optimizer,
+                max_lr=sched_cfg['lr_max'],
+                total_steps=sched_cfg.get('total_steps', None),
+                epochs=sched_cfg.get('epochs', None),
+                steps_per_epoch=len(self.train_loader),
+            )
+        elif sched_type == "ReduceLROnPlateau":
+            self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                self.optimizer,
+                mode='max',
+                factor=sched_cfg.get('factor', 0.1),
+                patience=sched_cfg.get('patience', 2),
+                min_lr=sched_cfg.get('lr_min', 1e-7)
+            )
+        elif sched_type == "JaguardIdScheduler":
+            self.scheduler = JaguardIdScheduler(self.optimizer, **sched_cfg)
+        else:
+            raise ValueError(f"Unknown scheduler type: {sched_type}")
 
     def train_epoch(self, epoch):
         self.model.train()

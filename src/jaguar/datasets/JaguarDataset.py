@@ -13,6 +13,7 @@ from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transforms
 
 from jaguar.config import PROJECT_ROOT, PATHS, DATA_ROOT
+
 class JaguarDataset(Dataset):
     def __init__(
         self,

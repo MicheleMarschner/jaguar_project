@@ -400,22 +400,6 @@ def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
                 g_map = cv2.resize(g_map, (W, H), interpolation=cv2.INTER_LINEAR)
                 g_vis = show_cam_on_image(img, g_map, use_rgb=True)
 
-                # =========================
-                # CHECK 3: does displayed img have background pixels (from file RGB under alpha==0)?
-                # =========================
-                rgba = Image.open(batch["filepath"][i]).convert("RGBA").resize((W, H), Image.BILINEAR)
-                a = np.array(rgba.getchannel("A"))
-                bg_mask = (a == 0)
-
-                img_u8 = (img * 255).astype(np.uint8)
-                bg_pix = img_u8[bg_mask]
-
-                print(
-                    f"[CHK3] {Path(batch['filepath'][i]).name} | variant={'??'} "
-                    f"| bg_pix_max={bg_pix.max(axis=0) if bg_pix.size else None} "
-                    f"| bg_pix_mean={bg_pix.mean(axis=0) if bg_pix.size else None}"
-                )
-
                 plain_row.append((img * 255).astype(np.uint8))
                 eigen_row.append(e_vis)
                 grad_row.append(g_vis)
@@ -471,16 +455,18 @@ if __name__ == "__main__":
     dataset_name = "jaguar_init"
     manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
     checkpoint_path = PATHS.checkpoints / "jaguar_reid_v1_epoch_16.pth"
+    BACKGROUND = "original"
+    run_name = f"{backbone_name}__{head_type}__bg-{BACKGROUND}"
 
-    save_path = resolve_path("xai/background_sensitivity", EXPERIMENTS_STORE)
+    save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
     ensure_dir(save_path)
     results_path = resolve_path("xai/background_sensitivity", RESULTS_STORE)
     ensure_dir(results_path)
     
     # Load Sample List
-    _, gallery_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
+    _, gallery_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)         ## ! TODO spli dtaeien als source of truth: train +val aber query bilder ausschließen UND bursts/duplicates aus query in gallery rausschmeißen!! 
     torch_idx = select_random_datasubset_balanced(gallery_ds, n=n_samples, seed=SEED, k_per_id=5)
-    samples_list = [gallery_ds.samples[i] for i in torch_idx]
+    samples_list = [gallery_ds.samples[i] for i in torch_idx]               ## !TODO sicher gehen dass val split, der nicht im training gesehen wurde!!
 
     num_classes = int(len(np.unique(np.asarray(gallery_ds.labels))))
 
@@ -511,10 +497,6 @@ if __name__ == "__main__":
         data_root=PATHS.data.parent,
         samples_list=samples_list,
     )
-    for i, s in enumerate(query_ds.samples):
-        p = query_ds._resolve_path(s[query_ds.filepath_key])
-        if not Path(p).exists():
-            print(f"[MISSING QUERY FILE] idx={i} sample={s} resolved={p}")
     query_loader = torch.utils.data.DataLoader(query_ds, batch_size=BATCH_SIZE, shuffle=False)
     
     # 3) embeddings
@@ -544,19 +526,6 @@ if __name__ == "__main__":
         gallery_files=gallery_files,
     )
 
-    print(retrieval_df.head())
-    print(retrieval_df[[
-        "id",
-        "filepath",
-        "gold_rank_orig",
-        "gold_rank_jaguar_only",
-        "gold_rank_bg_only",
-        "bg_better_than_jag_rank",
-        "bg_better_than_jag_rank1",
-        "bg_better_than_jag_rank5",
-        "margin_delta_bg_minus_jag",
-    ]].head(10))
-
     # Run Sensitivity Analysis on classification (logits)
     logits_res = compute_logit_sensitivity(model, query_loader, DEVICE)
 
@@ -569,18 +538,18 @@ if __name__ == "__main__":
         how="left",
     )
 
+    retrieval_variant_summary = {
+        "orig": summarize_retrieval_variant(analysis_df, "orig"),
+        "jaguar_only": summarize_retrieval_variant(analysis_df, "jaguar_only"),
+        "bg_only": summarize_retrieval_variant(analysis_df, "bg_only"),
+    }
+
     analysis_correct = analysis_df[analysis_df["is_rank1_orig"]].copy()
     analysis_wrong = analysis_df[~analysis_df["is_rank1_orig"]].copy()
 
     summary_all = summarize_bg_vs_jaguar(analysis_df)
     summary_correct = summarize_bg_vs_jaguar(analysis_correct)
     summary_wrong = summarize_bg_vs_jaguar(analysis_wrong)
-
-    retrieval_variant_summary = {
-        "orig": summarize_retrieval_variant(analysis_df, "orig"),
-        "jaguar_only": summarize_retrieval_variant(analysis_df, "jaguar_only"),
-        "bg_only": summarize_retrieval_variant(analysis_df, "bg_only"),
-    }
 
     similarity_summary = {
         "all": summarize_embedding_stability(analysis_df),
@@ -590,8 +559,13 @@ if __name__ == "__main__":
     
     # save results
     similarity_res.to_csv(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.csv", index=False)
+    
+    # classification_sensitivity.parquet
     save_parquet(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet", logits_res)
+    # similarity_stability.parquet
     save_parquet(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet", similarity_res)
+    
+    # analysis_merged.parquet
     save_parquet(
         save_path / f"analysis_merged__{backbone_name}_{head_type}__n{n_samples}.parquet",
         analysis_df
@@ -600,9 +574,12 @@ if __name__ == "__main__":
     config = {
         "n_samples": n_samples,
         "sample_indices": [int(x) for x in torch_idx],
+        "background_setting": BACKGROUND,
+        "seed": SEED,
         "data": {
             "dataset_name": dataset_name,
             "manifest_dir": to_rel_path(manifest_dir),
+            "gallery_source": "train_full"          ## !TODO muss eigentlich abhängig vom Modell sein oder? Was es im training gesehen hat - split data als source of truth
         },
         "model": {
             "checkpoint_path": to_rel_path(checkpoint_path),
@@ -625,12 +602,15 @@ if __name__ == "__main__":
         },
     }
 
+    # run_config.json
     with open(save_path / f"run_config__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
         json.dump(config, f, indent=2)
     
+    # similarity_summary.json
     with open(save_path / f"similarity_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
         json.dump(similarity_summary, f, indent=2)
 
+    # retrieval_bg_vs_jaguar.parquet
     save_parquet(
         save_path / f"retrieval_bg_vs_jaguar__{backbone_name}_{head_type}__n{n_samples}.parquet",
         retrieval_df
@@ -643,6 +623,7 @@ if __name__ == "__main__":
         "variant_summary": retrieval_variant_summary,
     }
 
+    # retrieval_summary.json
     with open(save_path / f"retrieval_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
         json.dump(retrieval_summary, f, indent=2)
 

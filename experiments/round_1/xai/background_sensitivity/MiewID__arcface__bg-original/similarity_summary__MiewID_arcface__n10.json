@@ -1,0 +1,29 @@
+{
+  "all": {
+    "mean_stability_jaguar_only": 0.6528608322143554,
+    "mean_stability_bg_only": 0.08737774901092052,
+    "median_stability_jaguar_only": 0.6977453231811523,
+    "median_stability_bg_only": 0.1058838777244091,
+    "share_bg_more_stable": 0.0,
+    "mean_stability_delta_bg_minus_jag": -0.565483083203435,
+    "median_stability_delta_bg_minus_jag": -0.5780440624803305
+  },
+  "orig_rank1_correct": {
+    "mean_stability_jaguar_only": 0.6528608322143554,
+    "mean_stability_bg_only": 0.08737774901092052,
+    "median_stability_jaguar_only": 0.6977453231811523,
+    "median_stability_bg_only": 0.1058838777244091,
+    "share_bg_more_stable": 0.0,
+    "mean_stability_delta_bg_minus_jag": -0.565483083203435,
+    "median_stability_delta_bg_minus_jag": -0.5780440624803305
+  },
+  "orig_rank1_wrong": {
+    "mean_stability_jaguar_only": NaN,
+    "mean_stability_bg_only": NaN,
+    "median_stability_jaguar_only": NaN,
+    "median_stability_bg_only": NaN,
+    "share_bg_more_stable": NaN,
+    "mean_stability_delta_bg_minus_jag": NaN,
+    "median_stability_delta_bg_minus_jag": NaN
+  }
+}

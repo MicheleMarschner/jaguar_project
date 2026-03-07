@@ -206,42 +206,28 @@ class MaskAwareJaguarDataset(JaguarDataset):
             rgba = Image.open(img_path).convert("RGBA")
         except Exception as e:
             print(f"Error loading {img_path}: {e}")
-            return None # Skip or handle error
-        
-        # Resize
-        rgba = self.resize_rgba(rgba)
+            return None
 
-        rgba_np = np.array(rgba)          # (H,W,4)
-        rgb0 = rgba_np[..., :3]
-        a_np = rgba_np[..., 3]
+        # split BEFORE resize to avoid RGBA premultiplication / blackening
+        rgb = rgba.convert("RGB")
+        alpha = rgba.getchannel("A")
 
-        bg0 = rgb0[a_np == 0]
-        print("[DBG] file:", Path(img_path).name,
-            "| alpha0%:", float((a_np == 0).mean()),
-            "| bg_rgb_max:", bg0.max(axis=0) if bg0.size else None,
-            "| bg_rgb_mean:", bg0.mean(axis=0) if bg0.size else None)
+        rgb = rgb.resize((self.input_size, self.input_size), Image.BILINEAR)
+        alpha = alpha.resize((self.input_size, self.input_size), Image.NEAREST)
 
-        # Now create rgb_np (equivalent RGB image)
-        r, g, b, a = rgba.split()
-        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
+        rgb_np = np.array(rgb)
+        a_np = np.array(alpha)
 
-        bg2 = rgb_np[a_np == 0]
-        print("[DBG] after merge | bg_rgb_max:", bg2.max(axis=0) if bg2.size else None)
+        fg_mask = a_np > self.alpha_threshold
 
-        # Split Mask
-        r, g, b, a = rgba.split()
-        fg_mask = np.array(a) > self.alpha_threshold
-        
-        # Create Variants
-        rgb_np = np.array(Image.merge("RGB", (r, g, b)))
-        
         img_orig = rgb_np.copy()
-        
+
         img_bg_masked = rgb_np.copy()
-        img_bg_masked[~fg_mask] = self.mask_fill_color # Keep Jaguar
-        
+        img_bg_masked[~fg_mask] = self.mask_fill_color   # keep jaguar
+
         img_fg_masked = rgb_np.copy()
-        img_fg_masked[fg_mask] = self.mask_fill_color # Keep Background
+        img_fg_masked[fg_mask] = self.mask_fill_color    # keep background
+            
         
         # Normalize
         def process(arr):

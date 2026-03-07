@@ -21,12 +21,12 @@ class JaguarDataset(Dataset):
         transform: Optional[Callable] = None,
         processing_fn: Optional[Callable[[Image.Image, Dict[str, Any]], Image.Image]] = None,
         is_test: bool = False,
-        # New Arguments
         mode: str = "train", # "train" or "val"
         split_parquet: Optional[Union[str, Path]] = None,
         include_duplicates: bool = True,
         filepath_key: str = "filepath",
         filename_key: str = "filename",
+        samples_list: Optional[List[Dict[str, Any]]] = None,
     ):
         self.base_root = Path(base_root)
         self.data_root = Path(data_root).resolve() if data_root is not None else None
@@ -41,7 +41,10 @@ class JaguarDataset(Dataset):
         if self.data_root is None:
             raise ValueError("data_root must be provided")
         
-        if split_parquet is not None:
+        if samples_list is not None:
+            self.samples = samples_list
+
+        elif split_parquet is not None:
             # Load split information from parquet
             df = pd.read_parquet(split_parquet)
             
@@ -63,6 +66,7 @@ class JaguarDataset(Dataset):
                     self.filepath_key: row['filename'], # Only store "train_XXXX.png"
                     "ground_truth": {"label": row['identity_id']}
                 })
+
         elif split_parquet is None and not self.is_test:
             # Fallback to original JSON loading logic
             with open(self.base_root / "samples.json", "r") as f:
@@ -78,6 +82,7 @@ class JaguarDataset(Dataset):
                         "label": s["ground_truth"]["label"]
                     }
                 })
+
         elif self.is_test:
             test_dir = self.data_root / "raw/jaguar-re-id/test/test"
             if not test_dir.exists():
@@ -91,7 +96,6 @@ class JaguarDataset(Dataset):
                     "ground_truth": {"label": ""}
                 })
             print(f"[JaguarDataset] Loaded {len(self.samples)} test images.")
-                
         # Setup Labels
         if self.is_test:
             self.labels = [""] * len(self.samples)

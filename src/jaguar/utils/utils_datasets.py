@@ -342,3 +342,55 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_
     save_npy(path, emb)
     print(f"[Info] Saved embeddings to {path}, shape={emb.shape}")
     return emb
+
+
+def load_or_extract_jaguarid_embeddings(
+    model,
+    torch_ds,
+    split="training",
+    batch_size=32,
+    num_workers=4,
+    folder=None,
+):
+    if folder is None:
+        folder = resolve_path("embeddings", DATA_STORE)
+    ensure_dir(folder)
+
+    filename = f"embeddings_{model.backbone_wrapper.name}_{model.head_type}_{split}.npy"
+    path = folder / filename
+
+    if path.exists():
+        emb = np.load(path)
+        print(f"[Info] Loaded JaguarID embeddings from {path}, shape={emb.shape}")
+        return emb
+
+    print(f"[Info] JaguarID embeddings not found at {path}. Extracting...")
+
+    # make sure gallery/original dataset uses the correct preprocessing
+    torch_ds.transform = model.backbone_wrapper.transform
+
+    dataloader = DataLoader(
+        torch_ds,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=True,
+        shuffle=False,
+    )
+
+    all_embeddings = []
+
+    model.eval()
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Extracting JaguarID embeddings"):
+            imgs = batch["img"].to(model.device)
+            batch_emb = model.get_embeddings(imgs)
+
+            if torch.is_tensor(batch_emb):
+                batch_emb = batch_emb.cpu().numpy()
+
+            all_embeddings.append(batch_emb)
+
+    emb = np.concatenate(all_embeddings, axis=0)
+    np.save(path, emb)
+    print(f"[Info] Saved JaguarID embeddings to {path}, shape={emb.shape}")
+    return emb

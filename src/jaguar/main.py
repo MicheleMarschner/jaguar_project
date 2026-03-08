@@ -56,7 +56,7 @@ def main():
         parquet_root=None
         # Load one large dataset and split it later
         _, train_ds = load_jaguar_from_FO_export(
-            PATHS.data_export / "init",
+            # PATHS.data_export / "init",
             dataset_name="jaguar_init",
             overwrite_db=False,
             parquet_path=parquet_root,
@@ -66,7 +66,7 @@ def main():
     else:
         # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
         _, train_ds, val_ds = load_jaguar_from_FO_export(
-            PATHS.data_export / "init",
+            # PATHS.data_export / "init",
             dataset_name="jaguar_init",
             overwrite_db=False,
             parquet_path=parquet_root,

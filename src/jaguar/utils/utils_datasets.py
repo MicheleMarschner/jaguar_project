@@ -321,14 +321,16 @@ def load_jaguar_from_FO_export(
     """
     manifest_dir = Path(manifest_dir)
 
-    if dataset_name in fo.list_datasets() and not overwrite_db:
-        fo_ds = FODataset(dataset_name, overwrite=False)
-    else:
-        fo_ds = FODataset.load_manifest(
-            export_dir=manifest_dir,
-            dataset_name=dataset_name,
-            overwrite_db=overwrite_db,
-        )
+    fo_ds = None
+    if (manifest_dir / "fiftyone").is_dir():
+        if dataset_name in fo.list_datasets() and not overwrite_db:
+            fo_ds = FODataset(dataset_name, overwrite=False)
+        else:
+            fo_ds = FODataset.load_manifest(
+                export_dir=manifest_dir,
+                dataset_name=dataset_name,
+                overwrite_db=overwrite_db,
+            )
 
     if full_ds:
         # Load full dataset based on samples.json

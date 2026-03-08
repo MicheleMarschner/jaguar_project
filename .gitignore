@@ -5,6 +5,8 @@ __pycache__/
 data/
 __MACOSX/
 .env
+3.10
+=3.10
 
 # artifacts 
 checkpoints/

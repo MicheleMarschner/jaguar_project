@@ -3,7 +3,7 @@ BURST_MIN_CLUSTER_SIZE = 2      # fixed
 BURST_MAX_WITHIN = 500          # fixed
 BURST_MAX_CROSS = 10000         # fixed
 PHASH_THRESHOLD = COLLISION_FREE_THRESHOLD    # set by configuration (collision-free)
-VAL_SIZE = 0.2                  # fixed
+val_split_size = 0.2                  # fixed
 SEED = 51                       # fixed
 
 

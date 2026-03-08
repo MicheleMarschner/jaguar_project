@@ -28,7 +28,7 @@ from jaguar.XAI.run_xai_similarity import XAIConfig, compute_saliency_gradcam_fo
 from jaguar.config import DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, SEED
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 from jaguar.utils.utils_xai import SimilarityForward, save_vec
 
 
@@ -309,7 +309,7 @@ def run_xai_metrics(cfg) -> pd.DataFrame:
 
     # Load the same dataset + model backbone used for scoring similarity 
     # (needed for faithfulness and sanity recomputation).
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=cfg.dataset_name,
         processing_fn=None,

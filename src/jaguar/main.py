@@ -1,35 +1,49 @@
+
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
+from pathlib import Path
 import argparse
 import tomllib
 from pathlib import Path
 from torch.utils.data import DataLoader, Subset
+import time
 
-from jaguar.config import PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
+from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds
+from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE, PROJECT_ROOT
+from jaguar.experiments.experiment_output import save_requested_outputs
+from jaguar.utils.utils_output import build_output_artifacts
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
-    load_jaguar_from_FO_export,
+    build_processing_fn,
+    get_resize_for_epoch,
+    load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
-    TransformSubset,
     get_transforms,
     get_stratified_train_val_split,
 )
 from jaguar.train import JaguarTrainer
+from jaguar.logging.wandb_logger import (
+    init_wandb_run, log_wandb_dataset_info, log_wandb_epoch_metrics,
+    finish_wandb_run, log_wandb_output_artifact, log_wandb_model_info,
+    log_wandb_checkpoint_artifact
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train JaguarID model")
     parser.add_argument(
-        "--config",
+        "--base_config",
         type=str,
-        default="leaderboard_experiments",
-        help="Path to the experiment config TOML file"
+        help="Path to the base config TOML file, relative to PATHS.configs and without .toml",
+    )
+    parser.add_argument(
+        "--experiment_config",
+        type=str,
+        help="Path to the experiment override TOML file, relative to PATHS.configs and without .toml",
     )
     parser.add_argument(
         "--experiment_name",
         type=str,
-        default=None,
-        help="Optional name of the experiment (used for logging/checkpoints)"
+        help="Optional name of the experiment (used for logging/checkpoints)",
     )
     parser.add_argument(
         "--backbone",
@@ -39,75 +53,116 @@ def parse_args():
     )
     return parser.parse_args()
 
+
+def load_toml_config(config_name: str) -> dict:
+    with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
+        return tomllib.load(f)
+
+
+def deep_update(base: dict, override: dict) -> dict:
+    result = dict(base)
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_update(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def main():
     # Parse CLI arguments
     args = parse_args()
 
-    # Load Config
-    with open(PATHS.configs / f"{args.config}.toml", "rb") as f:
-        config = tomllib.load(f)
-        print(config)
-        
-    if args.backbone is not None:
-        print(f"[Override] Backbone -> {args.backbone}")
-        config["model"]["backbone_name"] = args.backbone
-        
-    round_name = config["training"]["experiment_name"]
-    parquet_file_path = config["data"]["parquet_path"]
-    # manifest_dir = config["data"]["manifest_dir"]
-    data_root = config["data"]["data_root"]
-    data_round = config["data"]["data_round"]
-    parquet_root = f"{WORK_ROOT}/experiments/{round_name}/{parquet_file_path}"
+    # Load and merge configs: base + experiment override
+    base_config = load_toml_config(args.base_config)
+    experiment_config = load_toml_config(args.experiment_config)
+
+    config = deep_update(base_config, experiment_config)
 
     # Optionally override experiment name inside config
     if args.experiment_name is not None:
-        config.setdefault("experiment", {})
-        config["experiment"]["name"] = args.experiment_name
-    
-    if args.backbone is not None:
-        config["training"]["experiment_name"] += f"_{args.backbone}"
+        config.setdefault("training", {})
+        config["training"]["experiment_name"] = args.experiment_name
 
-    is_full_ds = config["data"].get("full_ds", False)
-    data_root = f"{data_root}/data/{data_round}"
-    # manifest_root = f"{manifest_dir}/data/{data_round}"
-    
-    # Load Dataset (Existing loading logic...)
-    if is_full_ds:
-        parquet_root=None
-        # Load one large dataset and split it later
-        _, train_ds = load_jaguar_from_FO_export(
-            manifest_dir= Path(data_root) / "fiftyone" / "init", # PATHS.data_export / "init"
-            data_root=data_root,
-            dataset_name="jaguar_init",
-            overwrite_db=False,
-            parquet_path=parquet_root,
-            full_ds=True,
-            include_duplicates=config["data"]["include_duplicates"],
-        )
+
+    checkpoints_dir = Path(config["training"]["save_dir"])
+    exp_name = config["training"]["experiment_name"]
+    experiment_group = config.get("output", {}).get("experiment_group")
+
+    # run artifact directory
+    if experiment_group:
+        run_dir = PATHS.runs / experiment_group / exp_name
+        config["training"]["save_dir"] = str(checkpoints_dir / experiment_group / exp_name)
     else:
-        # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
-        _, train_ds, val_ds = load_jaguar_from_FO_export(
-            manifest_dir= Path(data_root) / "fiftyone" / "init", # PATHS.data_export / "init"
-            data_root=data_root,
-            dataset_name="jaguar_init",
-            overwrite_db=False,
-            parquet_path=parquet_root,
-            full_ds=False,
-            include_duplicates=config["data"]["include_duplicates"],
-        )
-        
-    # _, train_ds, val_ds = load_jaguar_from_FO_export(
-    #     PATHS.data_export / "init",
-    #     dataset_name="jaguar_init",
-    #     processing_fn=None,
-    #     overwrite_db=False,
-    #     parquet_path=parquet_root,
-    #     full_ds=False,
-    # )
+        run_dir = PATHS.runs / exp_name
+        config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
+    ensure_dir(run_dir)
+
+    wandb_run = init_wandb_run(
+        config=config,
+        run_dir=run_dir,
+        exp_name=exp_name,
+        experiment_group=experiment_group,
+    )
+    
+    print("\n[RUN]")
+    print("experiment_name:", exp_name)
+    print("run_dir:", run_dir)
+
+    # !TODO prints for dry run
+    print("experiment_group:", config.get("output", {}).get("experiment_group"))
+    print("output_profile:", config.get("output", {}).get("profile"))
+    print("save_dir:", config["training"]["save_dir"])
+            
+    parquet_file_path = config["data"]["split_data_path"]
+    parquet_root = resolve_path(parquet_file_path, EXPERIMENTS_STORE)
+
+    set_seeds(config["training"]["seed"])
+
+    train_processing_fn = build_processing_fn(config, split="train")
+    val_processing_fn = build_processing_fn(config, split="val")
+
+    pr_cfg = config.get("progressive_resizing", {})
+    pr_enabled = pr_cfg.get("enabled", False)
+    pr_sizes = pr_cfg.get("sizes", [])
+    pr_stage_epochs = pr_cfg.get("stage_epochs", [])
+
+    if pr_enabled:
+        if len(pr_sizes) != len(pr_stage_epochs):
+            raise ValueError(
+                "progressive_resizing.sizes and progressive_resizing.stage_epochs must have the same length"
+            )
+        if sum(pr_stage_epochs) != config["training"]["epochs"]:
+            raise ValueError(
+                "Sum of progressive_resizing.stage_epochs must equal training.epochs"
+            )
+
+    current_resize = None
+    
+    # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
+    _, train_ds, val_ds = load_split_jaguar_from_FO_export(
+        PATHS.data_export / "splits_curated",
+        overwrite_db=False,
+        parquet_path=parquet_root,
+        train_processing_fn=train_processing_fn,
+        val_processing_fn=val_processing_fn,
+        include_duplicates=config["split"]["include_duplicates"],
+    )
 
     # Calculate Identities
-    unique_labels = sorted(list(set([str((s.get("ground_truth")).get("label")) for s in train_ds.samples])))
-    num_classes = len(unique_labels)
+    num_classes = len(train_ds.label_to_idx)
+
+    print(f"[DATA] Train: {len(train_ds)} | Val: {len(val_ds)} | Classes: {num_classes}")   #!TODO nur für dry run!
+
+    log_wandb_dataset_info(
+        run=wandb_run,
+        run_dir=run_dir,
+        parquet_root=parquet_root,
+        train_size=len(train_ds),
+        val_size=len(val_ds),
+        num_classes=num_classes,
+        device=DEVICE,
+    )
 
     # Initialize Model
     model = JaguarIDModel(
@@ -117,33 +172,38 @@ def main():
         device=DEVICE,
         emb_dim=config['model']['emb_dim'],
         freeze_backbone=config['model']['freeze_backbone'],
+        loss_s=config["model"].get("s", 30.0),
+        loss_m=config["model"].get("m", 0.5),
         use_projection=config['model']['use_projection'],
-        use_forward_features=config['model']['use_forward_features']
+        use_forward_features=config['model']['use_forward_features'],
     )
-    
-    if is_full_ds: 
-        print("[Data] Splitting full dataset...")
-        train_idx, val_idx, _ = get_stratified_train_val_split(
-            train_ds, 
-            val_split=config['data']['val_split'], 
-            seed=config['training']['seed']
-        )
-        # Create Subsets for train/val splits
-        train_ds_old = train_ds
-        train_subset = Subset(train_ds, train_idx)
-        val_subset = Subset(train_ds, val_idx)
-        
-        # Apply Transforms via wrapper and modify/apply transforms from the Model Backbone
-        train_ds = TransformSubset(train_subset, get_transforms(config, model.backbone_wrapper, is_training=True))
-        val_ds = TransformSubset(val_subset, get_transforms(config, model.backbone_wrapper, is_training=False))
-        # Labels for Sampler (must align with numeric indices in train_idx)
-        train_labels = [train_ds_old.labels_idx[i] for i in train_idx]
-    else:
+
+    log_wandb_model_info(
+        run=wandb_run,
+        model=model,
+    )
+
+    if pr_enabled:
+        current_resize = get_resize_for_epoch(1, pr_sizes, pr_stage_epochs)
+        print(f"[ProgressiveResizing] Initial input size: {current_resize}")
+
         # Apply transforms directly to pre-split datasets
+        train_ds.transform = get_transforms(
+            config, model.backbone_wrapper, is_training=True, input_size_override=current_resize
+        )
+        val_ds.transform = get_transforms(
+            config, model.backbone_wrapper, is_training=False, input_size_override=current_resize
+        )
+    else:
         train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)        
-        # Labels for Sampler
-        train_labels = train_ds.labels_idx
+        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
+            
+    # !TODO nur für dry run!
+    print(f"[TRANSFORMS] progressive_resizing={pr_enabled} | current_resize={current_resize if pr_enabled else model.backbone_wrapper.input_size}")
+    print(f"[AUG] {config.get('augmentation', {})}")
+    # Labels for Sampler
+    train_labels = train_ds.labels_idx
+        
     
     print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Train: {len(train_ds)} | Val: {len(val_ds)}")
 
@@ -183,7 +243,7 @@ def main():
     # full_ds.transform = model.backbone_wrapper.transform 
     # train_idx, val_idx, all_labels = get_stratified_train_val_split(
     #     full_ds, 
-    #     val_split=config['data']['val_split'], 
+    #     val_split_size=config['data']['val_split_size'], 
     #     seed=config['training']['seed']
     # )
 
@@ -219,11 +279,37 @@ def main():
         config['training']['save_dir'] = PROJECT_ROOT
     trainer = JaguarTrainer(model, train_loader, val_loader, config)
     
-    best_score = 0.0   
+    best_score = 0.0 
+    best_metrics = None
+    best_epoch = None 
+    history = []
+    epoch_times = []
+    best_checkpoint_path = None
+
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
     monitor_metric = config["training"].get("monitor_metric", "mAP")
     for epoch in range(1, config['training']['epochs'] + 1):
+        epoch_start_time = time.perf_counter()
+        if pr_enabled:
+            epoch_resize = get_resize_for_epoch(epoch, pr_sizes, pr_stage_epochs)
+            if epoch_resize != current_resize:
+                current_resize = epoch_resize
+                print(f"\n[ProgressiveResizing] Switching input size to {current_resize} at epoch {epoch}")
+
+                train_ds.transform = get_transforms(
+                    config,
+                    model.backbone_wrapper,
+                    is_training=True,
+                    input_size_override=current_resize,
+                )
+                val_ds.transform = get_transforms(
+                    config,
+                    model.backbone_wrapper,
+                    is_training=False,
+                    input_size_override=current_resize,
+                )
+                
         avg_loss = trainer.train_epoch(epoch)
         metrics = trainer.validate()
         
@@ -240,8 +326,10 @@ def main():
         current_score = metrics[monitor_metric]
         if current_score > best_score:
             best_score = current_score
+            best_metrics = metrics
+            best_epoch = epoch
             patience_counter = 0
-            trainer.save_checkpoint(epoch, metrics)
+            best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
         else:
             patience_counter += 1
             
@@ -249,11 +337,92 @@ def main():
             trainer.scheduler.step(metrics['mAP'])
         else:  
             trainer.scheduler.step()
+
+        ##!TODO laut chatty sollte obere block hiermit ersetzt werden as OneCycleLR per batch
+        #if config["scheduler"]["type"] == "ReduceLROnPlateau":
+        #    trainer.scheduler.step(metrics["mAP"])
+        #elif config["scheduler"]["type"] != "OneCycleLR":
+        #    trainer.scheduler.step()
+
+        current_lr = trainer.optimizer.param_groups[0]["lr"]
+
+        epoch_time_sec = time.perf_counter() - epoch_start_time
+        epoch_times.append(epoch_time_sec)
+
+        history.append({
+            "epoch": epoch,
+            "train_loss": float(avg_loss),
+            "val_mAP": float(metrics["mAP"]),
+            "val_pairwise_AP": float(metrics["pairwise_AP"]),
+            "val_rank1": float(metrics["rank1"]),
+            "val_sim_gap": float(metrics["sim_gap"]),
+            "lr": float(current_lr),
+            "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
+            "epoch_time_sec": float(epoch_time_sec),
+        })
+
+        log_wandb_epoch_metrics(
+            run=wandb_run,
+            epoch=epoch,
+            avg_loss=avg_loss,
+            metrics=metrics,
+            current_lr=current_lr,
+            epoch_time_sec=epoch_time_sec,
+            input_size=current_resize if pr_enabled else model.backbone_wrapper.input_size,
+        )
         
         if config["training"].get("early_stopping", False):
             if patience_counter >= patience:
                 print(f"\nEarly stopping triggered after {epoch} epochs.")
                 break
+                
+    final_results = {
+        "experiment_name": config["training"]["experiment_name"],
+        "best_epoch": best_epoch,
+        "monitor_metric": monitor_metric,
+        "best_score": best_score,
+        "metrics": best_metrics,
+    }
+
+    artifacts = build_output_artifacts(
+        run_dir=run_dir,
+        config=config,
+        final_results=final_results,
+        train_history=history,
+        model=model,
+        epoch_times=epoch_times,
+    )
+
+    save_requested_outputs(config, artifacts)
+
+    log_wandb_output_artifact(
+        run=wandb_run,
+        run_dir=run_dir,
+        artifact_name=f"{exp_name}-outputs",
+    )
+
+    log_wandb_checkpoint_artifact(
+        run=wandb_run,
+        checkpoint_path=best_checkpoint_path,
+        artifact_name=f"{exp_name}-checkpoint",
+        metadata={
+            "best_epoch": best_epoch,
+            "monitor_metric": monitor_metric,
+            "best_score": float(best_score),
+        },
+        aliases=["best"],
+    )
+
+    finish_wandb_run(
+        run=wandb_run,
+        best_epoch=best_epoch,
+        best_score=best_score,
+        monitor_metric=monitor_metric,
+        best_metrics=best_metrics,
+        epochs_completed=len(history),
+        total_train_time_sec=sum(epoch_times),
+    )
+        
 
 if __name__ == "__main__":
     main()

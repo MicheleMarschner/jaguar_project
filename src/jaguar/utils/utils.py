@@ -1,3 +1,4 @@
+import json
 import os
 from datetime import datetime
 import torch
@@ -7,9 +8,21 @@ from pathlib import Path
 import random
 import pandas as pd
 
-from typing import Literal, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence
 
 from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
+
+
+def read_json_if_exists(path: Path) -> Optional[dict[str, Any]]:
+    if not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json(obj, path: Path):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
 
 
 def ensure_dir(p: Path) -> None:

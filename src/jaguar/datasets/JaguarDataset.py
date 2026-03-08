@@ -46,26 +46,30 @@ class JaguarDataset(Dataset):
             self.samples = samples_list
 
         elif split_parquet is not None:
-            # Load split information from parquet
             df = pd.read_parquet(split_parquet)
-            
-            # Filter by mode (train vs val)
-            mask = df['split_final'] == mode
-            
-            # Filter duplicates if requested
-            if not include_duplicates:
-                # keep_curated is string 'true'/'false' in your CSV sample, 
-                # but usually boolean in parquet. Handling both:
-                mask &= (df['keep_curated'].astype(str).str.lower() == 'true')
-            
+
+            if mode not in {"train", "val", "full"}:
+                raise ValueError(f"Unsupported mode '{mode}'. Expected 'train' or 'val'.")
+
+            if mode == "full":
+                mask = pd.Series(True, index=df.index)
+            else:
+                mask = df["split_final"] == mode
+
+            if mode != "full" and not include_duplicates:
+                keep = df["keep_curated"]
+                if keep.dtype != bool:
+                    keep = keep.astype(str).str.lower().map({"true": True, "false": False})
+                mask &= keep.fillna(False)
+
             df = df[mask].copy()
 
-            # Convert dataframe to the expected samples format
             self.samples = []
             for _, row in df.iterrows():
                 self.samples.append({
-                    self.filepath_key: row['filename'], # Only store "train_XXXX.png"
-                    "ground_truth": {"label": row['identity_id']}
+                    self.filepath_key: row.get("filepath_rel", row["filename"]),
+                    self.filename_key: row["filename"],
+                    "ground_truth": {"label": row["identity_id"]},
                 })
 
         elif split_parquet is None and not self.is_test:

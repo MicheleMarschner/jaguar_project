@@ -1,39 +1,53 @@
 [model]
-backbone_name = "EVA-02"      # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
-head_type = "arcface" # head+loss criterion
+backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
+head_type = "arcface"
 emb_dim = 1024
-freeze_backbone = true  # To unfreeze the backbone, set other relative parameters accordingly in [training]
+freeze_backbone = true
 s = 30.0
 m = 0.50
 use_projection = true
 use_forward_features = false
 
+[split]
+strategy = "closed_set"
+val_split_size = 0.05   #0.2
+include_duplicates = false
+seed = 42
+
 [data]
-# manifest_dir = "/fast/AG_Kainmueller/data/jaguar_project/"
 data_root = "/fast/AG_Kainmueller/data/jaguar_project/"
-data_round = "round_1"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
 dataset_name = "jaguar_stage0"
-parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
-val_split_size = 0.05     #0.2
-# Set to true to handle class imbalance
-use_balanced_sampler = false
-num_workers = 32     #32
-full_ds = true
-include_duplicates = true
+use_balanced_sampler = false    # Set to true to handle class imbalance
+num_workers = 32
+
+[curation]
+train_k = 1
+val_k = 50
+phash_threshold = 4
+
+[preprocessing]
+train_background = "random_bg"
+val_background = "blur_bg"
+bg_dir = "data/round_1/backgrounds"
+p_original = 0.5
+edge_softness = 2
+blur_radius = 10
+key_for_seed = "filename"
 
 [training]
-monitor_metric = "pairwise_AP"      # Options: "mAP", "pairwise_AP" 
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/" # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
-experiment_name = "ablation" #"round_eva_baseline_nobs_vs005_pairwiseAP_finetuningbackbone"
-# config_folder = "megadescriptor"
+monitor_metric = "mAP"
+save_dir = "checkpoints/round_1/"            # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
+experiment_name = "scientific_base"
 epochs = 30
-batch_size = 32
+batch_size = 32   #16
 seed = 42
 early_stopping = true
-early_stopping_patience = 5
+early_stopping_patience = 5  
 # ---Fine-tuning Params---
 unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
+backbone_lr = 2e-6      # Keep this very small (1/10th or 1/100th of head LR)
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
@@ -62,3 +76,16 @@ affine_scale = [0.85, 1.15]
 color_jitter_brightness = 0.2
 color_jitter_contrast = 0.2
 random_erasing_p = 0.25
+
+[evaluation]
+extra_val_backgrounds = ["original", "gray_bg"]
+
+[xai]
+seed = 51
+n_samples = 100
+ig_steps = 10
+
+[logging]
+enabled = true
+project = "jaguar-reid-SpotItLikeItsHot"
+mode = "online"

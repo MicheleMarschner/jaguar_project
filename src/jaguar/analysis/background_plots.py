@@ -5,7 +5,7 @@ from PIL import Image
 from jaguar.config import DATA_STORE, PATHS
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir, resolve_path
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 
 def show_jaguar_images_with_backgrounds(
@@ -95,7 +95,7 @@ if __name__ == "__main__":
     ensure_dir(save_dir)
     jaguar_id = "Marcela"
 
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/init", DATA_STORE),
         dataset_name="jaguar_init",
         processing_fn=None,

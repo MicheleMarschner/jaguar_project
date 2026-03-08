@@ -8,7 +8,7 @@ from PIL import Image
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
 from jaguar.utils.utils import ensure_dir, resolve_path, to_abs
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 
 def plot_split_identity_histograms(
@@ -89,7 +89,7 @@ def plot_split_identity_histograms(
 
 def check_split_with_closed_set_policy(
     split_df: pd.DataFrame,
-    val_size: float = 0.2,
+    val_split_size: float = 0.2,
     identity_col: str = "identity_id",
 ):
     df = split_df.copy()
@@ -115,7 +115,7 @@ def check_split_with_closed_set_policy(
 
     print(f"[ClosedSet] Images: train={n_train} ({n_train/total_images:.2%}) | "
           f"val={n_val} ({n_val/total_images:.2%})")
-    print(f"[ClosedSet] Target val_ratio={val_size:.2%} | achieved={n_val/total_images:.2%}")
+    print(f"[ClosedSet] Target val_ratio={val_split_size:.2%} | achieved={n_val/total_images:.2%}")
 
     # ---------------------------------
     # Identity counts (overlap allowed)
@@ -155,7 +155,7 @@ def check_split_with_closed_set_policy(
 
 def check_split_with_open_set_policy(
     split_df: pd.DataFrame,
-    val_size: float = 0.2,
+    val_split_size: float = 0.2,
     identity_col: str = "identity_id",
 ):
     df = split_df.copy()
@@ -183,7 +183,7 @@ def check_split_with_open_set_policy(
     print(f"[OpenSet] Images: train={n_train} ({n_train/total_images:.2%}) | "
           f"val={n_val} ({n_val/total_images:.2%})")
     print(f"[OpenSet] Identities: train={len(train_ids)} | val={len(val_ids)} (disjoint OK)")
-    print(f"[OpenSet] Target val_ratio={val_size:.2%} | achieved={n_val/total_images:.2%}")
+    print(f"[OpenSet] Target val_ratio={val_split_size:.2%} | achieved={n_val/total_images:.2%}")
 
     # ---------------------------------
     # Duplicate statistics
@@ -295,7 +295,7 @@ if __name__ == "__main__":
     
     split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
 
-    fo_wrapper, torch_ds = load_jaguar_from_FO_export(
+    fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(
         manifest_dir,
         dataset_name=dataset_name,
         processing_fn=None,

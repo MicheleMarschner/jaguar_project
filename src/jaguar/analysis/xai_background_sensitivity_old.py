@@ -31,7 +31,7 @@ from jaguar.XAI.run_xai_classification import select_random_datasubset_balanced
 from jaguar.config import DEVICE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
 from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.models.jaguarid_models import JaguarIDModel
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 _RUN_RE = re.compile(r"^(?P<model>.+)__(?P<split>.+)__n(?P<n>\d+)__seed(?P<seed>\d+)$")
 
@@ -605,7 +605,7 @@ if __name__ == "__main__":
     checkpoint_path = ""
     
     # Load Sample List
-    _, temp_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
+    _, temp_ds = load_full_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)
     ### load subsamples
     samples_list = [temp_ds.samples[i] for i in torch_idx]
 

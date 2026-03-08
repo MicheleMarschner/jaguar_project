@@ -40,6 +40,8 @@ Notes / assumptions:
 """
 
 import os
+
+from jaguar.utils.utils_setup import get_split_paths
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
@@ -55,9 +57,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, SEED
+from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS
 from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_jaguar_from_FO_export, load_or_extract_embeddings
+from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_full_jaguar_from_FO_export, load_or_extract_embeddings
 from jaguar.utils.utils_split_and_curate import (
     build_split_table_from_torch_dataset,
     print_keep_drop_summary,
@@ -72,7 +74,7 @@ from jaguar.utils.utils_split_and_curate import (
 
 def make_open_set_splits(
     df: pd.DataFrame,
-    val_size: float = 0.2,
+    val_split_size: float = 0.2,
     seed: int = 51,
     identity_col: str = "identity_id",
 ) -> pd.DataFrame:
@@ -82,7 +84,7 @@ def make_open_set_splits(
 
     in detail (identity-disjoint):
       - all images of an identity go to the same split
-      - val_size targets the fraction of IMAGES in val (approximately)
+      - val_split_size targets the fraction of IMAGES in val (approximately)
       - exact ratio may not be achievable because identities are indivisible units
     """
     out = df.copy().reset_index(drop=True)
@@ -96,9 +98,9 @@ def make_open_set_splits(
     # (shuffle first, then sort by size desc with stable sort to break ties reproducibly)
     id_counts = id_counts.sample(frac=1.0, random_state=seed).sort_values("n_images", ascending=False)
 
-    # We approximate the requested val image ratio by selecting whole identities (greedy selection). Exact val_size is usually 
+    # We approximate the requested val image ratio by selecting whole identities (greedy selection). Exact val_split_size is usually 
     # impossible because identities are indivisible.
-    target_val = int(len(out) * val_size)
+    target_val = int(len(out) * val_split_size)
     current_val = 0
     val_ids = []
 
@@ -123,7 +125,7 @@ def make_open_set_splits(
 
 def make_closed_set_splits(
     df: pd.DataFrame,
-    val_size: float = 0.2,
+    val_split_size: float = 0.2,
     seed: int = 51,
     identity_col: str = "identity_id",
 ) -> pd.DataFrame:
@@ -139,7 +141,7 @@ def make_closed_set_splits(
     """
     train_idx, val_idx, out, _ = get_group_aware_stratified_train_val_split(
         df=df,
-        val_split=val_size,
+        val_split_size=val_split_size,
         seed=seed,
         identity_col=identity_col,
         burst_group_col="burst_group_id",
@@ -466,34 +468,43 @@ def run_phash_sweep(
 
 
 def create_splits_and_curate(
-        SPLIT_STRATEGY, 
-        INCLUDE_DUPLICATES, 
-        TRAIN_K_PER_DEDUP, 
-        VAL_K_PER_DEDUP, 
-        PHASH_THRESH_DEDUP, 
-        VAL_SIZE, 
-        SEED):
+        split_strategy, 
+        include_duplicates, 
+        train_k_per_dedup, 
+        val_k_per_dedup, 
+        phash_thresh_dedup, 
+        val_split_size, 
+        seed):
 
     fo_dataset_name = "jaguar_burst"
-    manifest_dir = resolve_path("fiftyone/burst", DATA_STORE) 
-    stem = f"str{SPLIT_STRATEGY}__dup{INCLUDE_DUPLICATES}__kTrain{TRAIN_K_PER_DEDUP}__kVal{VAL_K_PER_DEDUP}__p{PHASH_THRESH_DEDUP}"
-    
-    out_root = PATHS.runs / "splits" / f"{stem}"
+    paths = get_split_paths(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k=train_k_per_dedup,
+        val_k=val_k_per_dedup,
+        phash_threshold=phash_thresh_dedup,
+    )
+
+    manifest_dir = paths["manifest_dir"]
+    out_root = paths["write_root"]
+    meta_img_file = paths["meta_img_file"]
+    export_dir = paths["export_dir"]
+
     ensure_dir(out_root)
+    
     
     # Load Data
     print(f"Loading {fo_dataset_name}...")
-    fo_wrapper, torch_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=fo_dataset_name)
+    fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(manifest_dir, dataset_name=fo_dataset_name)
     
     # Load Embeddings
     model_name = "MegaDescriptor-L"
     model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
-    embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
+    embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training", num_workers=0)
     
     # Load Metadata (Sharpness/pHash)
-    meta_img_file = resolve_path("bursts/meta_img_features.parquet", EXPERIMENTS_STORE)
     if not meta_img_file.exists():
-        raise FileNotFoundError("Run burst discovery first to generate meta features.")
+        raise FileNotFoundError(f"Run burst discovery first to generate meta features: {meta_img_file}")
     meta_img_df = pd.read_parquet(meta_img_file)
     
     # Build Split Table
@@ -503,18 +514,18 @@ def create_splits_and_curate(
 
     # Generate Raw Splits
     # Assign train/val according to the evaluation protocol (closed-set = known identities; open-set = unseen identities).
-    print(f"Generating {SPLIT_STRATEGY} splits...")
-    if SPLIT_STRATEGY == "open_set":
-        split_df = make_open_set_splits(df_full, val_size=VAL_SIZE, seed=SEED)
-    elif SPLIT_STRATEGY == "closed_set":
-        split_df = make_closed_set_splits(df_full, val_size=VAL_SIZE, seed=SEED)
+    print(f"Generating {split_strategy} splits...")
+    if split_strategy == "open_set":
+        split_df = make_open_set_splits(df_full, val_split_size=val_split_size, seed=seed)
+    elif split_strategy == "closed_set":
+        split_df = make_closed_set_splits(df_full, val_split_size=val_split_size, seed=seed)
     else:
-        raise ValueError(f"Unknown strategy: {SPLIT_STRATEGY}")
+        raise ValueError(f"Unknown strategy: {split_strategy}")
 
     # Apply Post-Split Curation
     # choose which images are eligible for splitting based on dedup policy. This controls whether 
     # training/validation sees all burst members or only deduplicated data.
-    if not INCLUDE_DUPLICATES: 
+    if not include_duplicates: 
         # Instead of running only one threshold → run sweep
         PHASH_SWEEP = [2, 3, 4, 5, 6]   # your choice
 
@@ -523,8 +534,8 @@ def create_splits_and_curate(
             meta_img_df=meta_img_df,
             embeddings=embeddings,
             thresholds=PHASH_SWEEP,
-            train_k=TRAIN_K_PER_DEDUP,
-            val_k=VAL_K_PER_DEDUP,
+            train_k=train_k_per_dedup,
+            val_k=val_k_per_dedup,
             save_dir=out_root
         )
 
@@ -535,9 +546,9 @@ def create_splits_and_curate(
             split_df=split_df,
             meta_img_df=meta_img_df,
             embeddings=embeddings,
-            train_k=TRAIN_K_PER_DEDUP,
-            val_k=VAL_K_PER_DEDUP,
-            phash_threshold=PHASH_THRESH_DEDUP
+            train_k=train_k_per_dedup,
+            val_k=val_k_per_dedup,
+            phash_threshold=phash_thresh_dedup
         )
     else:
         final_df = split_df.copy()
@@ -553,11 +564,11 @@ def create_splits_and_curate(
     print_keep_drop_summary(final_df)
 
     config = {
-        "strategy": SPLIT_STRATEGY,
-        "dedup_policy": INCLUDE_DUPLICATES,
-        "train_k": TRAIN_K_PER_DEDUP,
-        "val_k": VAL_K_PER_DEDUP,
-        "intra_burst_phash_threshold": PHASH_THRESH_DEDUP,
+        "strategy": split_strategy,
+        "dedup_policy": include_duplicates,
+        "train_k": train_k_per_dedup,
+        "val_k": val_k_per_dedup,
+        "intra_burst_phash_threshold": phash_thresh_dedup,
         "fo_dataset_name": fo_dataset_name,
         "base_dedup_manifest": to_rel_path(manifest_dir),
     }
@@ -579,28 +590,5 @@ def create_splits_and_curate(
         final_df=final_df,
     )
     print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
-    export_dir = DATA_STORE.write_root / "fiftyone" / "splits_curated"
     fo_wrapper.export_manifest(export_dir)
     rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
-    
-
-if __name__ == "__main__":
-
-    param_grid = {
-        "TRAIN_K_PER_DEDUP": [1],
-        "VAL_K_PER_DEDUP": [50],
-        "SPLIT_STRATEGY": ["open_set","closed_set"],
-        "INCLUDE_DUPLICATES": [True],
-        "PHASH_THRESH_DEDUP": [4]
-    }
-    
-    
-    for exp_config in ParameterGrid(param_grid):
-        create_splits_and_curate(
-            exp_config["SPLIT_STRATEGY"], 
-            exp_config["INCLUDE_DUPLICATES"], 
-            exp_config["TRAIN_K_PER_DEDUP"], 
-            exp_config["VAL_K_PER_DEDUP"], 
-            exp_config["PHASH_THRESH_DEDUP"], 
-            VAL_SIZE=0.2, 
-            SEED=SEED)

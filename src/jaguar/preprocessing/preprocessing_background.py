@@ -13,10 +13,6 @@ Used for preprocessing/augmentation experiments, not for model training logic it
 import random
 from pathlib import Path
 from PIL import Image, ImageFilter
-from jaguar.utils.utils import resolve_path
-import numpy as np
-
-from jaguar.config import DATA_STORE, PATHS
 
 
 def rgba_on_solid_bg(rgba: Image.Image, color=(128, 128, 128)) -> Image.Image:
@@ -128,6 +124,37 @@ class ImageProcessor:
         #  Composite: show original foreground where alpha is present, blurred background elsewhere.
         out = Image.composite(rgb, blurred_bg, alpha)
         return out
+    
+    @staticmethod
+    def mixed_original_random_bg(
+        img: Image.Image,
+        sample: dict,
+        base_root: Path,
+        bg_dir: str,
+        p_original: float = 0.5,
+        key_for_seed: str = "filename",
+        **kwargs,
+    ) -> Image.Image:
+        """
+        Deterministically choose between original RGB and random background
+        per (epoch, sample).
+        """
+        epoch = int(sample.get("_epoch", 0))
+        seed_key = str(sample.get(key_for_seed))
+        seed = hash(("mixed_original_random_bg", epoch, seed_key)) & 0xFFFFFFFF
+        rng = random.Random(seed)
+
+        if rng.random() < p_original:
+            return img.convert("RGB")
+
+        return ImageProcessor.random_bg_cutout_deterministic(
+            img=img,
+            sample=sample,
+            base_root=base_root,
+            bg_dir=bg_dir,
+            key_for_seed=key_for_seed,
+            **kwargs,
+        )
 
 # Registry used by dataset loading/preprocessing code to select a background policy by name.
 PROCESSORS = {
@@ -137,88 +164,5 @@ PROCESSORS = {
     "black_bg": ImageProcessor.black_bg_cutout_alpha,
     "white_bg": ImageProcessor.white_bg_cutout_alpha,
     "blur_bg": ImageProcessor.blur_bg_cutout_alpha,
+    "mixed_original_random_bg": ImageProcessor.mixed_original_random_bg,
 }
-
-def build_habitat_backgrounds(
-    raw_dir: Path,
-    cutout_dir: Path,
-    out_dir: Path,
-    n_patches: int = 100,
-    patch_size: int = 224,
-    max_tries_per_patch: int = 30,
-    max_fg_frac: float = 0.02,   # allow <=2% foreground pixels in patch
-    seed: int = 51,
-):
-    """
-    Create a reusable pool of mostly-foreground-free habitat patches from the raw training images.
-
-    These patches are later used as realistic random backgrounds for cutout compositing
-    (background-ablation experiments).
-    """
-    random.seed(seed)
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    raw_files = sorted([p for p in raw_dir.iterdir() if p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}])
-    if not raw_files:
-        raise ValueError(f"No images found in {raw_dir}")
-
-    saved = 0
-    attempts = 0
-
-    while saved < n_patches and attempts < n_patches * max_tries_per_patch:
-        attempts += 1
-        raw_path = random.choice(raw_files)
-        cut_path = cutout_dir / raw_path.name
-        if not cut_path.exists():
-            continue
-
-        raw = Image.open(raw_path).convert("RGB")
-        cut = Image.open(cut_path).convert("RGBA")  # Use cutout alpha as a foreground mask proxy to avoid sampling patches that contain the jaguar.
-
-        if raw.size != cut.size:
-            # if misaligned, skip (or resize cut alpha to raw)
-            continue
-
-        W, H = raw.size
-        if W < patch_size or H < patch_size:
-            continue
-
-        alpha = np.array(cut.getchannel("A"))  # H,W
-        # sample a random crop location
-        x0 = random.randint(0, W - patch_size)
-        y0 = random.randint(0, H - patch_size)
-
-        a_crop = alpha[y0:y0+patch_size, x0:x0+patch_size]
-        fg_frac = (a_crop > 0).mean()
-
-        if fg_frac > max_fg_frac:       # Keep only near-background patches; small tolerance handles imperfect cutout masks/edges.
-            continue
-
-        patch = raw.crop((x0, y0, x0+patch_size, y0+patch_size))
-        out_path = out_dir / f"bg_{saved:06d}.jpg"
-        patch.save(out_path, quality=90)
-        saved += 1
-
-        if saved % 200 == 0:
-            print(f"Saved {saved}/{n_patches} backgrounds...")
-
-    print(f"Done. Saved {saved} patches to {out_dir}. Attempts={attempts}")
-
-
-if __name__ == "__main__":
-
-    ##### evalues for background:
-    ##### apply as processing_fn to dataset (like a transform)
-    ##### "original", "random_bg", "black_bg", "gray_bg", "white_bg", "blur_bg"    
-
-    out_dir = resolve_path("backgrounds", DATA_STORE)
-
-    # Assumes cutout alpha masks are stored alongside/raw-equivalent filenames in PATHS.data_train.
-    # If raw and cutout folders differ in your setup, pass separate directories here.
-    build_habitat_backgrounds(
-        raw_dir=PATHS.data_train,
-        cutout_dir=PATHS.data_train,
-        out_dir=out_dir,
-        n_patches=2000,
-        patch_size=224,
-    )

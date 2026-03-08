@@ -12,7 +12,7 @@ from typing import Any, Optional, Sequence
 from jaguar.utils.utils import denormalize_image, ensure_dir, resolve_path, tensor_img_to_hwc01
 from jaguar.utils.utils_xai import normalize_heatmap
 from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 sns.set_theme(style="whitegrid", palette="muted")
 
@@ -519,7 +519,7 @@ if __name__ == "__main__":
     pt_path = resolve_path("saliency_maps/ig_similarity_pair_specific__ConvNeXt-V2__N1.pt", DATA_STORE)
     plot_ig_triplets_from_pt(pt_path, indices=[0], max_rows=3)
 
-    fo_ds, torch_ds = load_jaguar_from_FO_export(
+    fo_ds, torch_ds = load_full_jaguar_from_FO_export(
         PATHS.data_export / "init",
         dataset_name="jaguar_init",
         processing_fn=None,

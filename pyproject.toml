@@ -35,6 +35,8 @@ dependencies = [
   "ImageHash",
   "seaborn==0.13.2",
   "torchmetrics",
+  "tomli-w==1.2.0",
+  "muon"
 ]
 
 [project.optional-dependencies]

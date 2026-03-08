@@ -277,18 +277,20 @@ class JaguarIDModel(nn.Module):
                 return self.criterion(logits, labels), logits
         return logits
 
+
+'''
 if __name__ == "__main__":
     import torch
     from torch.utils.data import DataLoader
     from pathlib import Path
     from jaguar.config import PATHS, DEVICE
     from jaguar.models.foundation_models import FoundationModelWrapper
-    from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+    from jaguar.utils.utils_datasets import load_split_jaguar_from_FO_export
 
     print("[Debug] Running ReID Evaluation...")
 
     # Load Dataset
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_split_jaguar_from_FO_export(
         PATHS.data_export / "init",
         dataset_name="jaguar_init",
         processing_fn=None,
@@ -361,3 +363,5 @@ if __name__ == "__main__":
     print("\n========== ReID Metrics ==========")
     for k, v in results.items():
         print(f"{k}: {v:.4f}")
+
+'''

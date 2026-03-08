@@ -5,14 +5,25 @@ emb_dim = 512
 freeze_backbone = true
 s = 30.0
 m = 0.50
+use_projection = true
+use_forward_features = false
 
 [data]
 dataset_name = "jaguar_stage0"
 parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
-val_split = 0.2
+val_split_size = 0.2
 # Set to true to handle class imbalance
 use_balanced_sampler = true
 num_workers = 4
+
+[preprocessing]
+train_background = "original"       ["original", "random_bg", "blur_bg", "mixed_original_random_bg"]
+val_background = "original"         ["original","blur_bg"]
+bg_dir = "/path/to/backgrounds"
+p_original = 0.5
+edge_softness = 2
+blur_radius = 10
+key_for_seed = "filename"
 
 [training]
 experiment_name = "round_2"

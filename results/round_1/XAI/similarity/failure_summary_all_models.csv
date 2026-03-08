@@ -1,2 +1,0 @@
-model,n_queries,n_failures,failure_rate,median_easy_rank_in_failures,median_sim_gap_wrong_minus_right
-MiewID,10,0,0.0,,

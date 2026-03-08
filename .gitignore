@@ -1,8 +1,13 @@
 __pycache__/
 *.pyc
 .DS_Store
+*/*.egg-info/
 
 # artifacts 
 checkpoints/
 wandb/
 notebooks/wandb
+logs/
+
+# .sh files
+*.sh

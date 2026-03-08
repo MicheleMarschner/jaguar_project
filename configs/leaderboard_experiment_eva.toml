@@ -9,7 +9,7 @@ m = 0.50
 [data]
 dataset_name = "jaguar_stage0"
 parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
-val_split = 0.05     #0.2
+val_split_size = 0.05     #0.2
 # Set to true to handle class imbalance
 use_balanced_sampler = false
 num_workers = 32

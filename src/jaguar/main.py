@@ -7,14 +7,15 @@ import tomllib
 from torch.utils.data import DataLoader
 import time
 
-from jaguar.utils.utils import ensure_dir, set_seeds
-from jaguar.config import DATA_ROOT, PATHS, DEVICE, PROJECT_ROOT
-from jaguar.utils.utils_output import build_output_artifacts, save_requested_outputs
+from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds
+from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE, PROJECT_ROOT
+from jaguar.experiments.experiment_output import save_requested_outputs
+from jaguar.utils.utils_output import build_output_artifacts
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
     build_processing_fn,
     get_resize_for_epoch,
-    load_jaguar_from_FO_export,
+    load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
 )
@@ -88,12 +89,13 @@ def main():
     print("experiment_name:", exp_name)
     print("run_dir:", run_dir)
 
+    # !TODO prints for dry run
     print("experiment_group:", config.get("output", {}).get("experiment_group"))
     print("output_profile:", config.get("output", {}).get("profile"))
     print("save_dir:", config["training"]["save_dir"])
             
     parquet_file_path = config["data"]["split_data_path"]
-    parquet_root = DATA_ROOT / f"{parquet_file_path}"
+    parquet_root = resolve_path(parquet_file_path, EXPERIMENTS_STORE)
 
     set_seeds(config["training"]["seed"])
 
@@ -118,14 +120,13 @@ def main():
     current_resize = None
     
     # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
-    _, train_ds, val_ds = load_jaguar_from_FO_export(
-        PATHS.data_export / "init",
-        dataset_name="jaguar_init",
+    _, train_ds, val_ds = load_split_jaguar_from_FO_export(
+        PATHS.data_export / "splits_curated",
         overwrite_db=False,
         parquet_path=parquet_root,
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
-        include_duplicates=config["data"]["include_duplicates"],
+        include_duplicates=config["split"]["include_duplicates"],
     )
 
     # Calculate Identities
@@ -205,7 +206,7 @@ def main():
     # full_ds.transform = model.backbone_wrapper.transform 
     # train_idx, val_idx, all_labels = get_stratified_train_val_split(
     #     full_ds, 
-    #     val_split=config['data']['val_split'], 
+    #     val_split_size=config['data']['val_split_size'], 
     #     seed=config['training']['seed']
     # )
 

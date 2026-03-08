@@ -1,19 +1,16 @@
-# src/jaguar/setup_experiment.py
-
 import argparse
-import json
 from pathlib import Path
 from typing import Any
 
 from jaguar.analysis.eda import run_eda
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND
+from jaguar.main import deep_update, load_toml_config
 from jaguar.preprocessing.burst_discovery import discover_bursts
-from jaguar.utils.utils_setup import build_habitat_backgrounds
-from jaguar.utils.utils import ensure_dir, ensure_dirs, read_json_if_exists, resolve_path, write_json
+from jaguar.preprocessing.split_and_curate import create_splits_and_curate
+from jaguar.utils.utils_setup import build_habitat_backgrounds, build_split_stem, get_burst_paths, get_split_paths
+from jaguar.utils.utils import ensure_dir, ensure_dirs, read_json_if_exists, resolve_path
 from jaguar.utils.utils_setup import init_fiftyone_dataset
 
-
-## burst_discovery
 
 SETUP_STEPS = {
     "initial_eda": [
@@ -21,16 +18,24 @@ SETUP_STEPS = {
         "ensure_fiftyone_init_dataset",
         "run_initial_eda",
     ],
+    "kaggle_base": [
+        "ensure_output_dirs",
+       #"ensure_split_manifest",
+        "ensure_fiftyone_init_dataset",
+    ],
     "scientific_background": [
         "ensure_output_dirs",
         #"ensure_split_manifest",
         "ensure_fiftyone_init_dataset",
+        #"ensure_burst_artifacts",
         "ensure_background_pool",
     ],
-    "kaggle_backbone": [
+    "scientific_deduplication": [
         "ensure_output_dirs",
-       #"ensure_split_manifest",
+        #"ensure_split_manifest",
         "ensure_fiftyone_init_dataset",
+        "ensure_burst_artifacts",
+        "ensure_split_artifacts",
     ],
 }
 
@@ -42,6 +47,18 @@ def parse_args():
         type=str,
         required=True,
         help="Name of the setup routine",
+    )
+    parser.add_argument(
+        "--base_config",
+        type=str,
+        required=True,
+        help="Base config path/key",
+    )
+    parser.add_argument(
+        "--experiment_config",
+        type=str,
+        required=True,
+        help="Experiment config path/key",
     )
     return parser.parse_args()
 
@@ -135,6 +152,9 @@ def run_initial_eda():
     )
 
 
+# ============================================================
+# Run setup: burst discovery
+# ============================================================
 
 def _burst_outputs_exist(out_dir: Path) -> bool:
     required = [
@@ -166,14 +186,13 @@ def _build_burst_signature(
 
 def ensure_burst_artifacts(
     *,
-    dataset_name: str = "jaguar_init",
     burst_min_cluster_size: int = 2,
     burst_max_within: int = 500,
     burst_max_cross: int = 10000,
     seed: int = 51,
     phash_size: int = 8,
 ):
-    bursts_root = PATHS.runs / "bursts"
+    bursts_root = get_burst_paths()["write_root"]
 
     for cfg_path in bursts_root.rglob("config.json"):
         cfg = read_json_if_exists(cfg_path)
@@ -184,10 +203,10 @@ def ensure_burst_artifacts(
 
     print(f"[SETUP] no burst config for {ROUND} found -> running burst discovery")
     discover_bursts(
-        BURST_MIN_CLUSTER_SIZE=burst_min_cluster_size,
-        BURST_MAX_WITHIN=burst_max_within,
-        BURST_MAX_CROSS=burst_max_cross,
-        SEED=seed,
+        burst_min_cluster_size=burst_min_cluster_size,
+        burst_max_within=burst_max_within,
+        burst_max_cross=burst_max_cross,
+        seed=seed,
         phash_size=phash_size,
     )
 
@@ -198,8 +217,83 @@ def ensure_burst_artifacts(
 
     raise RuntimeError("Burst discovery ran, but no config.json with matching round was found.")
 
+# ============================================================
+# Run setup: deduplication
+# ============================================================
 
-def run_step(step_name: str):
+def build_split_relpath(
+    *,
+    split_strategy: str,
+    include_duplicates: bool,
+    train_k_per_dedup: int,
+    val_k_per_dedup: int,
+    phash_thresh_dedup: int,
+) -> str:
+    stem = build_split_stem(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k_per_dedup=train_k_per_dedup,
+        val_k_per_dedup=val_k_per_dedup,
+        phash_thresh_dedup=phash_thresh_dedup,
+    )
+    return f"splits/{stem}/full_split.parquet"
+
+
+def ensure_split_artifacts(
+    *,
+    split_strategy: str,
+    include_duplicates: bool,
+    train_k: int,
+    val_k: int,
+    phash_threshold: int,
+    val_split_size: float,
+    seed: int,
+) -> Path:
+    paths = get_split_paths(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k=train_k,
+        val_k=val_k,
+        phash_threshold=phash_threshold,
+    )
+
+    full_path = paths["full_split_file"]
+
+    print("[SETUP] expected split path:", full_path)
+    print("[SETUP] exists:", full_path.exists())
+    print("[SETUP] split args:", {
+        "split_strategy": split_strategy,
+        "include_duplicates": include_duplicates,
+        "train_k": train_k,
+        "val_k": val_k,
+        "phash_threshold": phash_threshold,
+        "val_split_size": val_split_size,
+        "seed": seed,
+    })
+
+    if full_path.exists():
+        print("[SETUP] split artifacts already exist -> skip")
+        print(f"[SETUP] using: {full_path}")
+        return full_path
+
+    print("[SETUP] no matching split artifacts found -> running split_and_curate")
+    create_splits_and_curate(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k_per_dedup=train_k,
+        val_k_per_dedup=val_k,
+        phash_thresh_dedup=phash_threshold,
+        val_split_size=val_split_size,
+        seed=seed,
+    )
+
+    if not full_path.exists():
+        raise RuntimeError(f"Split creation finished, but file not found: {full_path}")
+
+    return full_path
+
+
+def run_step(step_name: str, current_setup_config: dict):
     print(f"[SETUP] {step_name}")
 
     if step_name == "ensure_output_dirs":
@@ -212,6 +306,18 @@ def run_step(step_name: str):
         print("  -> ensure background pool")
     elif step_name == "run_initial_eda":
         run_initial_eda()
+    elif step_name == "ensure_burst_artifacts":
+        ensure_burst_artifacts()
+    elif step_name == "ensure_split_artifacts":
+        ensure_split_artifacts(
+            train_k=current_setup_config["curation"]["train_k"],
+            val_k=current_setup_config["curation"]["val_k"],
+            phash_threshold=current_setup_config["curation"]["phash_threshold"],
+            split_strategy=current_setup_config["split"]["strategy"],
+            include_duplicates=current_setup_config["split"]["include_duplicates"],
+            val_split_size=current_setup_config["split"]["val_split_size"],
+            seed=current_setup_config["split"]["seed"],
+        )
     else:
         raise ValueError(f"Unknown setup step: {step_name}")
 
@@ -227,8 +333,12 @@ def main():
     print(f"[SETUP] setup_name = {args.setup_name}")
     print(f"[SETUP] steps = {steps}")
 
+    base_config = load_toml_config(args.base_config)
+    experiment_config = load_toml_config(args.experiment_config)
+    current_setup_config = deep_update(base_config, experiment_config)
+
     for step in steps:
-        run_step(step)
+        run_step(step, current_setup_config)
 
     print("[SETUP] done")
 

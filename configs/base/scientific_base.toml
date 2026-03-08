@@ -1,45 +1,43 @@
 [model]
-backbone_name = "EVA-02"
+backbone_name = "EfficientNet-B4"
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
 s = 30.0
 m = 0.50
 
+[split]
+strategy = "closed_set"
+include_duplicates = false
+val_split_size = 0.2
+seed = 51
+
 [data]
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
 dataset_name = "jaguar_stage0"
-split_data_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
-val_split = 0.2
 use_balanced_sampler = false
 num_workers = 0
-include_duplicates = false
-
-[preprocessing]
-train_background = "random_bg"
-val_background = "blur_bg"
-bg_dir = "/data/round_1/backgrounds"
-p_original = 0.5
-edge_softness = 2
-blur_radius = 10
-key_for_seed = "filename"
-
-
-[split]
-seed = 51
-val_size = 0.2
-strategy = "closed_set"
 
 [curation]
 train_k = 1
 val_k = 50
 phash_threshold = 4
-include_duplicates = false
+
+
+[preprocessing]
+train_background = "random_bg"
+val_background = "blur_bg"
+bg_dir = "data/round_1/backgrounds"
+p_original = 0.5
+edge_softness = 2
+blur_radius = 10
+key_for_seed = "filename"
 
 [training]
 monitor_metric = "mAP"
 save_dir = "checkpoints/round_1/"            # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
 experiment_name = "scientific_base"
-epochs = 30
+epochs = 1
 batch_size = 16
 lr = 2e-5
 weight_decay = 1e-3

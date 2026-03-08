@@ -5,6 +5,7 @@ import tomllib
 from pathlib import Path
 
 from jaguar.config import PATHS
+from jaguar.experiments.experiment_setup import build_split_relpath
 from jaguar.utils.utils import ensure_dir
 
 
@@ -63,10 +64,26 @@ def dict_to_toml(data: dict) -> str:
     return "\n".join(lines)
 
 
+def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
+    key = path[-1]
+
+    if key in run_cfg:
+        return run_cfg[key]
+    if key in experiment_meta:
+        return experiment_meta[key]
+
+    cur = base_config
+    for p in path:
+        if not isinstance(cur, dict) or p not in cur:
+            return default
+        cur = cur[p]
+    return cur
+
+
 def build_experiment_override(
     run_cfg: dict, 
-    output_profile: str | None = None, 
-    experiment_group: str | None = None
+    experiment_meta: dict,
+    base_config: dict
 ) -> dict:
     override = {
         "training": {
@@ -116,6 +133,13 @@ def build_experiment_override(
         "pr_sizes": ("progressive_resizing", "sizes"),
         "pr_stage_epochs": ("progressive_resizing", "stage_epochs"),
 
+        "train_k": ("curation", "train_k"),
+        "val_k": ("curation", "val_k"),
+        "phash_threshold": ("curation", "phash_threshold"),
+        "split_strategy": ("split", "strategy"),
+        "val_split_size": ("split", "val_split_size"),
+        "include_duplicates": ("split", "include_duplicates"),
+
         "seed": ("training", "seed"),
 
         "output_profile": ("output", "profile"),
@@ -131,28 +155,65 @@ def build_experiment_override(
         section, target_key = field_to_section[key]
         override.setdefault(section, {})
         override[section][target_key] = value
+    
+    output_profile = experiment_meta.get("output_profile")
+    experiment_group = experiment_meta.get("name")
 
-        if output_profile is not None:
-            override.setdefault("output", {})
-            override["output"]["profile"] = output_profile
-            override["output"]["experiment_group"] = experiment_group
+    if output_profile is not None:
+        override.setdefault("output", {})
+        override["output"]["profile"] = output_profile
+        override["output"]["experiment_group"] = experiment_group
+
+    existing_split_path = _pick_value(run_cfg, experiment_meta, base_config, "data", "split_data_path")
+
+    has_split_override = any(
+        key in run_cfg or key in experiment_meta
+        for key in ["split_strategy", "include_duplicates", "train_k", "val_k", "phash_threshold"]
+    )
+
+    if existing_split_path is not None and not has_split_override:
+        override.setdefault("data", {})
+        override["data"]["split_data_path"] = existing_split_path
+    elif has_split_override:
+        split_strategy = _pick_value(run_cfg, experiment_meta, base_config, "split", "strategy")
+        include_duplicates = _pick_value(run_cfg, experiment_meta, base_config, "split", "include_duplicates")
+        train_k = _pick_value(run_cfg, experiment_meta, base_config, "curation", "train_k")
+        val_k = _pick_value(run_cfg, experiment_meta, base_config, "curation", "val_k")
+        phash_threshold = _pick_value(run_cfg, experiment_meta, base_config, "curation", "phash_threshold")
+
+        if (
+            split_strategy is not None
+            and include_duplicates is not None
+            and train_k is not None
+            and val_k is not None
+            and phash_threshold is not None
+        ):
+            split_relpath = build_split_relpath(
+                split_strategy=split_strategy,
+                include_duplicates=include_duplicates,
+                train_k_per_dedup=train_k,
+                val_k_per_dedup=val_k,
+                phash_thresh_dedup=phash_threshold,
+            )
+            override.setdefault("data", {})
+            override["data"]["split_data_path"] = split_relpath
+
     return override
 
 
 def run_experiments():
     args = parse_args()
     experiment_config = load_toml_config(args.experiment_config)
+    base_config = load_toml_config(args.base_config)
 
-    exp_meta = experiment_config.get("experiment", {})
-    runs = exp_meta.get("runs", [])
+    experiment_meta = experiment_config.get("experiment", {})
+    runs = experiment_meta.get("runs", [])
     runs = runs[:2]                     ## !TODO for dry test!
     if not runs:
         raise ValueError("No runs found under [[experiment.runs]]")
 
     experiment_name = experiment_config.get("experiment", {}).get("name", "experiment")
-    setup_name = exp_meta.get("setup_name")
-    experiment_group = exp_meta.get("name")
-    output_profile = exp_meta.get("output_profile")
+    setup_name = experiment_meta.get("setup_name")
     generated_dir = PATHS.configs / "_generated" / experiment_name
     ensure_dir(generated_dir)
 
@@ -162,7 +223,7 @@ def run_experiments():
 
     for i, run_cfg in enumerate(runs, start=1):
         experiment_name = run_cfg["experiment_name"]
-        override = build_experiment_override(run_cfg, output_profile=output_profile, experiment_group=experiment_group)
+        override = build_experiment_override(run_cfg, experiment_meta=experiment_meta, base_config=base_config)
         override_text = dict_to_toml(override)
 
         print(f"\n[{i}/{len(runs)}] {experiment_name}")
@@ -182,18 +243,46 @@ def run_experiments():
             experiment_name,
         ]
 
-        all_cmds.append(" ".join(cmd))
-
         print("Generated override config:")
         print(override_text)
         print("Command:")
         print(" ".join(cmd))
+
+        if setup_name:
+            setup_cmd = [
+                "python",
+                "src/jaguar/experiments/experiment_setup.py",
+                "--setup_name",
+                setup_name,
+                "--base_config",
+                args.base_config,
+                "--experiment_config",
+                str(rel_path),
+            ]
+            print("Running setup:", " ".join(setup_cmd))
+            setup_result = subprocess.run(setup_cmd)
+
+            if setup_result.returncode != 0:
+                raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
         result = subprocess.run(cmd)
 
         if result.returncode != 0:
             raise RuntimeError(f"Run failed: {experiment_name}")
+
+        run_lines = []
+        if setup_name:
+            run_lines.append(" ".join(setup_cmd))
+        run_lines.append(" ".join(cmd))
+        all_cmds.extend(run_lines)
+        all_cmds.append("")
+
+        print("Generated override config:")
+        print(override_text)
+        print("Command:")
+        print(" ".join(cmd))
+
 
     run_script_path = generated_dir / "run_all.sh"
 
@@ -202,12 +291,6 @@ def run_experiments():
         "set -e",
         "",
     ]
-
-    if setup_name:
-        script_lines.append(
-            f"python src/jaguar/setup_experiment.py --setup_name {setup_name}"
-        )
-        script_lines.append("")
 
     script_lines.extend(all_cmds)
     script_lines.append("")

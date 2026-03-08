@@ -14,7 +14,7 @@ from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE, SEED
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export, load_or_extract_jaguarid_embeddings
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export, load_or_extract_jaguarid_embeddings
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
@@ -464,7 +464,7 @@ if __name__ == "__main__":
     ensure_dir(results_path)
     
     # Load Sample List
-    _, gallery_ds = load_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)         ## ! TODO spli dtaeien als source of truth: train +val aber query bilder ausschließen UND bursts/duplicates aus query in gallery rausschmeißen!! 
+    _, gallery_ds = load_full_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)         ## ! TODO spli dtaeien als source of truth: train +val aber query bilder ausschließen UND bursts/duplicates aus query in gallery rausschmeißen!! 
     torch_idx = select_random_datasubset_balanced(gallery_ds, n=n_samples, seed=SEED, k_per_id=5)
     samples_list = [gallery_ds.samples[i] for i in torch_idx]               ## !TODO sicher gehen dass val split, der nicht im training gesehen wurde!!
 

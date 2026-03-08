@@ -3,7 +3,7 @@ name = "kaggle_optim_sched"
 description = "Optimizer and scheduler ablation with fixed backbone, loss, and data."
 base_config = "base/kaggle_base"
 mode = "kaggle"
-setup_name = "kaggle_backbone"
+setup_name = "kaggle_base"
 output_profile = "optim_sched"
 
 [[experiment.runs]]

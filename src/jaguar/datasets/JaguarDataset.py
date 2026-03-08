@@ -48,12 +48,15 @@ class JaguarDataset(Dataset):
         elif split_parquet is not None:
             df = pd.read_parquet(split_parquet)
 
-            if mode not in {"train", "val"}:
+            if mode not in {"train", "val", "full"}:
                 raise ValueError(f"Unsupported mode '{mode}'. Expected 'train' or 'val'.")
 
-            mask = df["split_final"] == mode
+            if mode == "full":
+                mask = pd.Series(True, index=df.index)
+            else:
+                mask = df["split_final"] == mode
 
-            if not include_duplicates:
+            if mode != "full" and not include_duplicates:
                 keep = df["keep_curated"]
                 if keep.dtype != bool:
                     keep = keep.astype(str).str.lower().map({"true": True, "false": False})

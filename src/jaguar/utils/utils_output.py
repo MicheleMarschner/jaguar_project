@@ -7,7 +7,6 @@ import json
 
 
 from jaguar.config import PATHS
-from jaguar.experiments.experiment_output import OUTPUT_PROFILES, OUTPUT_WRITERS
 from jaguar.utils.utils import ensure_dir, read_json_if_exists
 
 
@@ -60,21 +59,6 @@ def build_output_artifacts(
         artifacts["timing_stats"] = build_timing_stats(epoch_times)
 
     return artifacts
-
-
-def save_requested_outputs(config: dict, artifacts: dict[str, Any]) -> None:
-    output_profile = config.get("output", {}).get("profile")
-    requested_outputs = OUTPUT_PROFILES.get(output_profile, {}).get("per_run", [])
-
-    # !TODO nur für dry run
-    print(f"[OUTPUT] profile={config.get('output', {}).get('profile')}")
-    print(f"[OUTPUT] requested={requested_outputs}")
-
-    for output_name in requested_outputs:
-        writer = OUTPUT_WRITERS.get(output_name)
-        if writer is None:
-            raise ValueError(f"Unknown output writer: {output_name}")
-        writer(**artifacts)
 
 
 def load_run_artifacts(run_dir: Path) -> dict[str, Any]:

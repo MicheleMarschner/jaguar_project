@@ -184,7 +184,7 @@ class BalancedBatchSampler(Sampler):
         return len(self.labels) // self.batch_size
     
 
-def split_train_val_indices_from_labels(labels, val_split: float, seed: int):
+def split_train_val_indices_from_labels(labels, val_split_size: float, seed: int):
     """
     - stratify labels with frequency > 1
     - labels occurring once are forced into train
@@ -206,7 +206,7 @@ def split_train_val_indices_from_labels(labels, val_split: float, seed: int):
 
     train_idx_part, val_idx = train_test_split(
         strat_indices,
-        test_size=val_split,
+        test_size=val_split_size,
         random_state=seed,
         stratify=strat_labels,
     )
@@ -217,14 +217,14 @@ def split_train_val_indices_from_labels(labels, val_split: float, seed: int):
     return train_idx, val_idx
 
 
-def get_stratified_train_val_split(dataset, val_split, seed):
+def get_stratified_train_val_split(dataset, val_split_size, seed):
     # Extract labels for every image
     image_labels = [str(s.get("ground_truth").get("label")) for s in dataset.samples]
 
     # Reuse shared core
     train_idx, val_idx = split_train_val_indices_from_labels(
         labels=image_labels,
-        val_split=val_split,
+        val_split_size=val_split_size,
         seed=seed,
     )
 
@@ -236,7 +236,7 @@ def get_stratified_train_val_split(dataset, val_split, seed):
 
 def get_group_aware_stratified_train_val_split(
     df: pd.DataFrame,
-    val_split: float,
+    val_split_size: float,
     seed: int,
     identity_col: str = "identity_id",
     burst_group_col: str = "burst_group_id",
@@ -319,7 +319,7 @@ def get_group_aware_stratified_train_val_split(
     # ------------------------------------------------------------
     train_group_idx, val_group_idx = split_train_val_indices_from_labels(
         labels=groups_df["group_identity"].tolist(),
-        val_split=val_split,
+        val_split_size=val_split_size,
         seed=seed,
     )
 
@@ -347,6 +347,91 @@ def get_group_aware_stratified_train_val_split(
     return train_idx, val_idx, out, groups_df
 
 
+def load_full_jaguar_from_FO_export(
+    manifest_dir,
+    dataset_name="jaguar_init",
+    transform=None,
+    processing_fn=None,
+    overwrite_db=False,
+):
+    """
+    Load the full Jaguar dataset from a FiftyOne export manifest.
+
+    Used for setup stages that operate on the complete dataset
+    before train/val splitting (e.g. burst discovery, split creation, EDA).
+    """
+    manifest_dir = Path(manifest_dir)
+
+    if dataset_name in fo.list_datasets() and not overwrite_db:
+        fo_ds = FODataset(dataset_name, overwrite=False)
+    else:
+        fo_ds = FODataset.load_manifest(
+            export_dir=manifest_dir,
+            dataset_name=dataset_name,
+            overwrite_db=overwrite_db,
+        )
+
+    torch_ds = JaguarDataset(
+        base_root=manifest_dir,
+        data_root=DATA_ROOT,
+        mode="full",
+        split_parquet=None,
+        transform=transform,
+        processing_fn=processing_fn,
+        include_duplicates=True,
+    )
+
+    return fo_ds, torch_ds
+
+
+def load_split_jaguar_from_FO_export(
+    manifest_dir,
+    dataset_name="jaguar_splits_curated",
+    transform=None,
+    train_processing_fn=None,
+    val_processing_fn=None,
+    overwrite_db=False,
+    include_duplicates=False,
+    parquet_path: str = None,
+):
+    """
+    Load pre-split Jaguar train/val datasets from a FiftyOne export manifest
+    plus a split parquet file.
+    """
+    manifest_dir = Path(manifest_dir)
+
+    if dataset_name in fo.list_datasets() and not overwrite_db:
+        fo_ds = FODataset(dataset_name, overwrite=False)
+    else:
+        fo_ds = FODataset.load_manifest(
+            export_dir=manifest_dir,
+            dataset_name=dataset_name,
+            overwrite_db=overwrite_db,
+        )
+
+    torch_ds_train = JaguarDataset(
+        base_root=manifest_dir,
+        data_root=DATA_ROOT,
+        mode="train",
+        split_parquet=parquet_path,
+        transform=transform,
+        processing_fn=train_processing_fn,
+        include_duplicates=include_duplicates,
+    )
+
+    torch_ds_val = JaguarDataset(
+        base_root=manifest_dir,
+        data_root=DATA_ROOT,
+        mode="val",
+        split_parquet=parquet_path,
+        transform=transform,
+        processing_fn=val_processing_fn,
+        include_duplicates=include_duplicates,
+    )
+
+    return fo_ds, torch_ds_train, torch_ds_val
+
+"""
 def load_jaguar_from_FO_export(
     manifest_dir,
     dataset_name="jaguar_init",
@@ -358,13 +443,13 @@ def load_jaguar_from_FO_export(
     include_duplicates=False,
     parquet_path: str = None,
 ):
-    """
+    '''
     - If dataset exists in FiftyOne DB: load it
     - Else: import from manifest_dir/samples.json into DB via load_manifest()
     Returns:
         - if full_ds=True:  (fo_ds, torch_ds)
         - if full_ds=False: (fo_ds, torch_ds_train, torch_ds_val)
-    """
+    '''
     manifest_dir = Path(manifest_dir)
 
     if dataset_name in fo.list_datasets() and not overwrite_db:
@@ -399,6 +484,8 @@ def load_jaguar_from_FO_export(
     )
 
     return fo_ds, torch_ds_train, torch_ds_val
+"""
+
 
 def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_size=32, num_workers=4):
     folder = resolve_path("embeddings", DATA_STORE)

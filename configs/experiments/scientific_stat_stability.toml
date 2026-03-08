@@ -3,7 +3,7 @@ name = "kaggle_seed_stability"
 description = "Statistical stability study across random seeds."
 base_config = "base/kaggle_base"
 mode = "kaggle"
-setup_name = "kaggle_backbone"
+setup_name = "kaggle_base"
 output_profile = "stat_stability"
 
 [[experiment.runs]]

@@ -82,7 +82,7 @@ import cv2
 from PIL import Image
 
 from jaguar.config import PATHS
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
@@ -747,7 +747,7 @@ if __name__ == "__main__":
     print(summary_fail_display)
     summary_fail.to_csv(save_root / "failure_summary_all_models.csv", index=False)
 
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=dataset_name,
         processing_fn=None,

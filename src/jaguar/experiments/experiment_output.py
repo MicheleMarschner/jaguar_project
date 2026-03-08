@@ -1,4 +1,5 @@
 import argparse
+from typing import Any
 
 from jaguar.utils.utils import write_json
 from jaguar.utils.utils_output import aggregate_experiment_outputs
@@ -38,7 +39,7 @@ OUTPUT_PROFILES = {
         "aggregate": ["background_summary"],
     },
     "deduplication": {
-        "per_run": [],
+        "per_run": ["experiment_config", "metrics", "train_history"],
         "aggregate": ["deduplication_summary"],
     },
     "stat_stability": {
@@ -78,6 +79,20 @@ def save_error_overlap(*, run_dir, ensemble_stats, **kwargs):
 def save_timing(*, run_dir, timing_stats, **kwargs):
     write_json(timing_stats, run_dir / "timing.json")
 
+
+def save_requested_outputs(config: dict, artifacts: dict[str, Any]) -> None:
+    output_profile = config.get("output", {}).get("profile")
+    requested_outputs = OUTPUT_PROFILES.get(output_profile, {}).get("per_run", [])
+
+    # !TODO nur für dry run
+    print(f"[OUTPUT] profile={config.get('output', {}).get('profile')}")
+    print(f"[OUTPUT] requested={requested_outputs}")
+
+    for output_name in requested_outputs:
+        writer = OUTPUT_WRITERS.get(output_name)
+        if writer is None:
+            raise ValueError(f"Unknown output writer: {output_name}")
+        writer(**artifacts)
 
 
 OUTPUT_WRITERS = {

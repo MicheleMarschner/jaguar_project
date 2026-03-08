@@ -1,9 +1,11 @@
 from pathlib import Path
 import random
 from PIL import Image
-from jaguar.config import PATHS
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
 from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
 import pandas as pd
+from jaguar.utils.utils import resolve_path
+import numpy as np
 
 
 def build_habitat_backgrounds(
@@ -70,8 +72,6 @@ def build_habitat_backgrounds(
             print(f"Saved {saved}/{n_patches} backgrounds...")
 
     print(f"Done. Saved {saved} patches to {out_dir}. Attempts={attempts}")
-
-
 
 
 def _build_from_csv_labels(
@@ -144,4 +144,61 @@ def init_fiftyone_dataset(
         build_fn=build_fn,
         overwrite_load=False,
     )
-    
+
+
+def build_split_stem(
+    *,
+    split_strategy: str,
+    include_duplicates: bool,
+    train_k_per_dedup: int,
+    val_k_per_dedup: int,
+    phash_thresh_dedup: int,
+) -> str:
+    return (
+        f"str{split_strategy}"
+        f"__dup{include_duplicates}"
+        f"__kTrain{train_k_per_dedup}"
+        f"__kVal{val_k_per_dedup}"
+        f"__p{phash_thresh_dedup}"
+    )
+
+
+def get_split_paths(
+    *,
+    split_strategy: str,
+    include_duplicates: bool,
+    train_k: int,
+    val_k: int,
+    phash_threshold: int,
+) -> dict[str, Path | str]:
+    stem = build_split_stem(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k_per_dedup=train_k,
+        val_k_per_dedup=val_k,
+        phash_thresh_dedup=phash_threshold,
+    )
+
+    rel_root = Path("splits") / stem
+
+    return {
+        "stem": stem,
+        "rel_root": rel_root,
+        "write_root": EXPERIMENTS_STORE.write_root / rel_root,
+        "full_split_relpath": rel_root / "full_split.parquet",
+        "full_split_file": EXPERIMENTS_STORE.write_root / rel_root / "full_split.parquet",
+        "config_file": EXPERIMENTS_STORE.write_root / rel_root / "config.json",
+        "manifest_dir": resolve_path("fiftyone/burst", DATA_STORE),
+        "meta_img_file": resolve_path("bursts/meta_img_features.parquet", EXPERIMENTS_STORE),
+        "export_dir": DATA_STORE.write_root / "fiftyone" / "splits_curated",
+    }
+
+
+def get_burst_paths() -> dict[str, Path]:
+    write_root = EXPERIMENTS_STORE.write_root / "bursts"
+    return {
+        "write_root": write_root,
+        "meta_img_file": write_root / "meta_img_features.parquet",
+        "cand_file": write_root / "candidate_edges_all_pairs.parquet",
+        "diagnostics_cache_dir": write_root / "diagnostics_cache",
+    }

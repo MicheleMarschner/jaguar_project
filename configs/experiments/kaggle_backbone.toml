@@ -3,7 +3,7 @@ name = "kaggle_backbone"
 description = "Backbone ablation for Kaggle-oriented training runs."
 base_config = "base/kaggle_base"
 mode = "kaggle"
-setup_name = "kaggle_backbone"
+setup_name = "kaggle_base"
 output_profile = "backbone"
 
 [[experiment.runs]]

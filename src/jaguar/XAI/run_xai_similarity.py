@@ -35,7 +35,7 @@ from typing import Dict, Any, Sequence, Tuple, List
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, DEVICE, SEED 
 from jaguar.utils.utils import ensure_dir, resolve_path, save_npy, save_parquet
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export, load_or_extract_embeddings 
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export, load_or_extract_embeddings 
 from jaguar.models.foundation_models import FoundationModelWrapper  
 from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name  
 from jaguar.utils.utils_xai import ig_saliency_batched_similarity 
@@ -504,7 +504,7 @@ def run_xai(cfg: XAIConfig, model_name: str, explainer_names: Sequence[str]) -> 
     split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
 
     # Load the dataset manifest used for indexing (emb_row is the common join key)
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=cfg.dataset_name,
         processing_fn=None,

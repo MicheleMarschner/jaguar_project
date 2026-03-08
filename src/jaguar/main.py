@@ -94,7 +94,9 @@ def main():
         head_type=config['model']['head_type'],
         device=DEVICE,
         emb_dim=config['model']['emb_dim'],
-        freeze_backbone=config['model']['freeze_backbone']
+        freeze_backbone=config['model']['freeze_backbone'],
+        use_projection=config['model']['use_projection'],
+        use_forward_features=config['model']['use_forward_features']
     )
     
     if is_full_ds: 

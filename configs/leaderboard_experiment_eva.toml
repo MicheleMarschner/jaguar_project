@@ -1,10 +1,12 @@
 [model]
-backbone_name = "EVA-02"
+backbone_name = "EVA-02"      # Options: "EVA-02", "MegaDescriptor-L", "MiewID"
 head_type = "arcface" # head+loss criterion
 emb_dim = 1024
 freeze_backbone = true  # To unfreeze the backbone, set other relative parameters accordingly in [training]
 s = 30.0
 m = 0.50
+use_projection = false
+use_forward_features = true
 
 [data]
 dataset_name = "jaguar_stage0"
@@ -22,7 +24,7 @@ save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/" # "/me
 experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone_cosineannealing"
 # config_folder = "megadescriptor"
 epochs = 30
-batch_size = 16
+batch_size = 32
 seed = 42
 early_stopping = true
 early_stopping_patience = 5

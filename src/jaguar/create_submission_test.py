@@ -65,13 +65,15 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/EVA-02/round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone/best_model.pth"
+    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/EVA-02/round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone_noproj_fwdfeat/best_model.pth"
     TEST_CSV_PATH = "/home/vanessa/Documents/repos/jaguar_project/data/round_1/raw/jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"
     EMB_DIM = 1024
     NUM_CLASSES = 31
     BATCH_SIZE = 32
+    USE_PROJECTION = False
+    USE_FORWARD_FEATURES = True
 
     print(f"Loading model from {CHECKPOINT_PATH}...")
 
@@ -83,7 +85,10 @@ def generate_submission():
         num_classes=NUM_CLASSES,
         head_type="arcface",
         device=DEVICE,
-        emb_dim=EMB_DIM
+        emb_dim=EMB_DIM,
+        use_projection = USE_PROJECTION,
+        use_forward_features = USE_FORWARD_FEATURES
+        
     )
 
     checkpoint = torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=False)

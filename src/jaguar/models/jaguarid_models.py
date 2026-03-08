@@ -82,15 +82,19 @@ class JaguarIDModel(nn.Module):
         loss_m: float = 0.5,
         use_gem: bool = False,      
         gem_p: float = 3.0,    
-        use_projection: bool = True,     
+        use_projection: bool = True,    
+        use_forward_features: bool = False,  
     ):
         super().__init__()
         self.device = device
         self.head_type = head_type.lower()
+        self.use_forward_features = use_forward_features
+        
         # Initialize GeM if needed
         self.use_gem = use_gem
         if self.use_gem:
             self.gem = GeM(p=gem_p)
+            
         # Load foundation backbone
         self.backbone_wrapper = FoundationModelWrapper(backbone_name, device=device)
         self.backbone = self.backbone_wrapper.model
@@ -106,11 +110,21 @@ class JaguarIDModel(nn.Module):
         input_res = self.backbone_wrapper.input_size # Use the wrapper's config!
         
         with torch.no_grad():
-            # Create dummy input based on actual model requirements
-            dummy = torch.randn(1, 3, input_res, input_res).to(device)      
-            out = self.backbone(dummy)
-            if isinstance(out, (tuple, list)): out = out[0]
-            if out.ndim > 2: out = out.mean(dim=(2, 3))
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)
+            if self.use_forward_features and hasattr(self.backbone, "forward_features"):
+                out = self.backbone.forward_features(dummy)
+                # handle token -> map if necessary
+                if out.ndim == 3:  # [B, N, C] from ViT-like backbones
+                    B, N, C = out.shape
+                    H = W = int(N ** 0.5)
+                    out = out[:, : H * W, :]
+                    out = out.permute(0, 2, 1).reshape(B, C, H, W)
+            else:
+                out = self.backbone(dummy)
+                if isinstance(out, (tuple, list)):
+                    out = out[0]
+            if out.ndim > 2:
+                out = out.mean(dim=(2, 3))
             self.feature_dim = out.shape[1]
 
         print(f"[JaguarID] Backbone: {backbone_name} | Input Res: {input_res} | Feature dim: {self.feature_dim}")
@@ -184,9 +198,25 @@ class JaguarIDModel(nn.Module):
         
         print(f"[JaguarID] Unfroze the last {num_to_unfreeze} blocks of the backbone.")
     
+    def _extract_features(self, x):
+        """Handles backbone feature extraction with optional forward_features."""
+        if self.use_forward_features and hasattr(self.backbone, "forward_features"):
+            features = self.backbone.forward_features(x)
+            # Handle ViT-style token -> spatial map
+            if features.ndim == 3:  # [B, N, C]
+                B, N, C = features.shape
+                H = W = int(N ** 0.5)
+                features = features[:, : H * W, :]
+                features = features.permute(0, 2, 1).reshape(B, C, H, W)
+        else:
+            features = self.backbone(x)
+            if isinstance(features, (tuple, list)):
+                features = features[0]
+        return features
+    
     def get_embeddings(self, x):
         """Utility method to extract normalized embeddings for ReID evaluation."""
-        features = self.backbone(x)
+        features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
@@ -194,8 +224,7 @@ class JaguarIDModel(nn.Module):
                 features = self.gem(features).flatten(1)
             else:
                 features = features.mean(dim=(2, 3))
-
-        # Pass through the learned projection neck or a batch normalization layer
+        # Pass through the learned projection neck; otherwise through a batch normalization layer
         embeddings = self.neck(features)
         if not self.use_projection:
             embeddings = self.bn(embeddings)
@@ -221,8 +250,7 @@ class JaguarIDModel(nn.Module):
         return emb
 
     def forward(self, x, labels=None):
-        features = self.backbone(x)
-
+        features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
@@ -230,8 +258,7 @@ class JaguarIDModel(nn.Module):
                 features = self.gem(features).flatten(1)
             else:
                 features = features.mean(dim=(2, 3))
-            
-        # Pass through neck or a batch normalization layer
+        # Pass through the learned projection neck; otherwise through a batch normalization layer
         embeddings = self.neck(features)
         if not self.use_projection:
             embeddings = self.bn(embeddings)
@@ -239,9 +266,9 @@ class JaguarIDModel(nn.Module):
         # Triplet case (returns embeddings)
         if self.head_type == "triplet":
             return F.normalize(embeddings, dim=1)
+        
         # Classification heads
         logits = self.head(embeddings)
-
         if labels is not None:
             if self.head_type in ["arcface", "cosface", "sphereface"]:
                 loss, scaled_logits = self.criterion(logits, labels)

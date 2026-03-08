@@ -76,8 +76,12 @@ random_erasing_p = 0.25
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]
 
-
 [xai]
 seed = 51
 n_samples = 100
 ig_steps = 10
+
+[logging]
+enabled = true
+project = "jaguar-reid-SpotItLikeItsHot"
+mode = "online"

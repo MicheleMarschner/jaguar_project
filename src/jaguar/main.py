@@ -20,6 +20,11 @@ from jaguar.utils.utils_datasets import (
     get_transforms,
 )
 from jaguar.train import JaguarTrainer
+from jaguar.logging.wandb_logger import (
+    init_wandb_run, log_wandb_dataset_info, log_wandb_epoch_metrics,
+    finish_wandb_run, log_wandb_output_artifact, log_wandb_model_info,
+    log_wandb_checkpoint_artifact
+)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train JaguarID model")
@@ -84,6 +89,13 @@ def main():
         run_dir = PATHS.runs / exp_name
         config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
     ensure_dir(run_dir)
+
+    wandb_run = init_wandb_run(
+        config=config,
+        run_dir=run_dir,
+        exp_name=exp_name,
+        experiment_group=experiment_group,
+    )
     
     print("\n[RUN]")
     print("experiment_name:", exp_name)
@@ -134,6 +146,16 @@ def main():
 
     print(f"[DATA] Train: {len(train_ds)} | Val: {len(val_ds)} | Classes: {num_classes}")   #!TODO nur für dry run!
 
+    log_wandb_dataset_info(
+        run=wandb_run,
+        run_dir=run_dir,
+        parquet_root=parquet_root,
+        train_size=len(train_ds),
+        val_size=len(val_ds),
+        num_classes=num_classes,
+        device=DEVICE,
+    )
+
     # Initialize Model
     model = JaguarIDModel(
         backbone_name=config['model']['backbone_name'],
@@ -144,6 +166,11 @@ def main():
         freeze_backbone=config['model']['freeze_backbone'],
         loss_s=config["model"].get("s", 30.0),
         loss_m=config["model"].get("m", 0.5),
+    )
+
+    log_wandb_model_info(
+        run=wandb_run,
+        model=model,
     )
 
     if pr_enabled:
@@ -247,6 +274,7 @@ def main():
     best_epoch = None 
     history = []
     epoch_times = []
+    best_checkpoint_path = None
 
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
@@ -291,7 +319,7 @@ def main():
             best_metrics = metrics
             best_epoch = epoch
             patience_counter = 0
-            trainer.save_checkpoint(epoch, metrics)
+            best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
         else:
             patience_counter += 1
             
@@ -322,6 +350,16 @@ def main():
             "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
             "epoch_time_sec": float(epoch_time_sec),
         })
+
+        log_wandb_epoch_metrics(
+            run=wandb_run,
+            epoch=epoch,
+            avg_loss=avg_loss,
+            metrics=metrics,
+            current_lr=current_lr,
+            epoch_time_sec=epoch_time_sec,
+            input_size=current_resize if pr_enabled else model.backbone_wrapper.input_size,
+        )
         
         if config["training"].get("early_stopping", False):
             if patience_counter >= patience:
@@ -346,6 +384,34 @@ def main():
     )
 
     save_requested_outputs(config, artifacts)
+
+    log_wandb_output_artifact(
+        run=wandb_run,
+        run_dir=run_dir,
+        artifact_name=f"{exp_name}-outputs",
+    )
+
+    log_wandb_checkpoint_artifact(
+        run=wandb_run,
+        checkpoint_path=best_checkpoint_path,
+        artifact_name=f"{exp_name}-checkpoint",
+        metadata={
+            "best_epoch": best_epoch,
+            "monitor_metric": monitor_metric,
+            "best_score": float(best_score),
+        },
+        aliases=["best"],
+    )
+
+    finish_wandb_run(
+        run=wandb_run,
+        best_epoch=best_epoch,
+        best_score=best_score,
+        monitor_metric=monitor_metric,
+        best_metrics=best_metrics,
+        epochs_completed=len(history),
+        total_train_time_sec=sum(epoch_times),
+    )
         
 
 if __name__ == "__main__":

@@ -76,3 +76,7 @@ enabled = false
 sizes = []              # [224, 384, 512]
 stage_epochs = []       # [10, 10, 10]
 
+[logging]
+enabled = true
+project = "jaguar-reid"
+mode = "online"

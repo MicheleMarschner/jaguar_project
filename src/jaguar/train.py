@@ -145,7 +145,7 @@ class JaguarTrainer:
         )
         return bundle.compute_all()
 
-    def save_checkpoint(self, epoch, metrics):
+    def save_checkpoint(self, epoch, metrics) -> Path:
         path = self.save_dir
         os.makedirs(path, exist_ok=True)
         save_path = path / "best_model.pth"
@@ -164,3 +164,5 @@ class JaguarTrainer:
             tomli_w.dump(self.config, f)
 
         print(f"[Info] Saved config file: {config_save_path}")
+
+        return config_save_path

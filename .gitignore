@@ -1,13 +1,25 @@
 __pycache__/
 *.pyc
 .DS_Store
-*/*.egg-info/
+*.egg-info/
+data/
+__MACOSX/
+.env
+3.10
+=3.10
 
 # artifacts 
 checkpoints/
+data/
 wandb/
 notebooks/wandb
 logs/
 
-# .sh files
+miewid/*.pth
+megadescriptor/*.pth
+
+wandb.md
+comments.md
+
+#.sh files
 *.sh

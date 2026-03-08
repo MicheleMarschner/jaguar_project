@@ -7,7 +7,7 @@ name = "jaguar_project"
 version = "0.1.0"
 description = "Jaguars"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "numpy>=1.26",
   "pandas>=2.2",
@@ -19,7 +19,22 @@ dependencies = [
   "scipy>=1.4",
   "matplotlib>=3.7",
   "huggingface-hub>=0.23",
-  "pytest>=8.3.3"
+  # "pytest>=8.3.3",
+  "torchvision==0.24.0",
+  "pillow==11.3.0",
+  "wandb==0.23.1",
+  "python-dotenv==1.2.1",
+  "fiftyone==1.13.1",
+  "grad-cam==1.5.5",
+  "transformers==4.39.3", # "transformers==4.51.0",
+  "faiss-cpu==1.13.2",
+  "timm",
+  "tomli",
+  "quantus==0.6.0",
+  "pyarrow==23.0.1",
+  "ImageHash",
+  "seaborn==0.13.2",
+  "torchmetrics",
 ]
 
 [project.optional-dependencies]

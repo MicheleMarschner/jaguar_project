@@ -147,7 +147,7 @@ def mine_references_from_gallery(
     print(f"[Mining] Queries: {n_queries} vs Gallery: {len(gallery_indices)}")
 
     # Load Embeddings
-    all_embeddings = load_or_extract_embeddings(model_wrapper, torch_ds)
+    all_embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, num_workers=0)
     
     # Slice specific sets
     q_global = np.asarray(query_indices, dtype=np.int64)

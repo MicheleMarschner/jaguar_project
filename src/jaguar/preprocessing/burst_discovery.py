@@ -10,7 +10,7 @@ import uuid
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, ROUND
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
 from jaguar.utils.utils_burst_discovery import (
@@ -567,7 +567,7 @@ def discover_bursts(BURST_MIN_CLUSTER_SIZE, BURST_MAX_WITHIN, BURST_MAX_CROSS, S
     diag_file = diagnostics_cache_dir / f"phash_diagnostics__within{BURST_MAX_WITHIN}__cross{BURST_MAX_CROSS}__seed{SEED}.parquet"
 
     # 1. LOAD DATA & MODEL
-    fo_wrapper, torch_ds = load_jaguar_from_FO_export(
+    fo_wrapper, torch_ds, _ = load_jaguar_from_FO_export(
         PATHS.data_export / "init", dataset_name=fo_dataset_name, processing_fn=None
     )
     print(f"[Info] Dataset: {len(torch_ds)}")
@@ -631,6 +631,7 @@ def discover_bursts(BURST_MIN_CLUSTER_SIZE, BURST_MAX_WITHIN, BURST_MAX_CROSS, S
             )
         },
         config_dict={
+            "round": ROUND,
             "method": "phash_only_safe_all_pairs_within_identity",
             "fo_dataset_name": fo_dataset_name,
             "phash_size": phash_size,

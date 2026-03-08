@@ -4,6 +4,7 @@ description = "Classification loss/head ablation with fixed backbone and trainin
 base_config = "base/kaggle_base"
 mode = "kaggle"
 setup_name = "kaggle_backbone"
+output_profile = "loss"
 
 [[experiment.runs]]
 experiment_name = "loss_arcface"

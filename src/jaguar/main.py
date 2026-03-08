@@ -1,14 +1,15 @@
+
 import os
-from pathlib import Path
-
-from jaguar.utils.utils import ensure_dir, set_seeds, write_json
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-
+from pathlib import Path
 import argparse
 import tomllib
 from torch.utils.data import DataLoader
+import time
 
-from jaguar.config import DATA_ROOT, PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
+from jaguar.utils.utils import ensure_dir, set_seeds
+from jaguar.config import DATA_ROOT, PATHS, DEVICE, PROJECT_ROOT
+from jaguar.utils.utils_output import build_output_artifacts, save_requested_outputs
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_datasets import (
     build_processing_fn,
@@ -72,17 +73,24 @@ def main():
 
     checkpoints_dir = Path(config["training"]["save_dir"])
     exp_name = config["training"]["experiment_name"]
+    experiment_group = config.get("output", {}).get("experiment_group")
 
-    # checkpoint directory (model files only)
-    config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
-    
-    # run artifact directory (csv, parquet, metrics, configs, logs)
-    run_dir = PATHS.runs / exp_name
+    # run artifact directory
+    if experiment_group:
+        run_dir = PATHS.runs / experiment_group / exp_name
+        config["training"]["save_dir"] = str(checkpoints_dir / experiment_group / exp_name)
+    else:
+        run_dir = PATHS.runs / exp_name
+        config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
     ensure_dir(run_dir)
-
+    
     print("\n[RUN]")
     print("experiment_name:", exp_name)
     print("run_dir:", run_dir)
+
+    print("experiment_group:", config.get("output", {}).get("experiment_group"))
+    print("output_profile:", config.get("output", {}).get("profile"))
+    print("save_dir:", config["training"]["save_dir"])
             
     parquet_file_path = config["data"]["split_data_path"]
     parquet_root = DATA_ROOT / f"{parquet_file_path}"
@@ -123,6 +131,8 @@ def main():
     # Calculate Identities
     num_classes = len(train_ds.label_to_idx)
 
+    print(f"[DATA] Train: {len(train_ds)} | Val: {len(val_ds)} | Classes: {num_classes}")   #!TODO nur für dry run!
+
     # Initialize Model
     model = JaguarIDModel(
         backbone_name=config['model']['backbone_name'],
@@ -150,6 +160,9 @@ def main():
         train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
         val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
             
+    # !TODO nur für dry run!
+    print(f"[TRANSFORMS] progressive_resizing={pr_enabled} | current_resize={current_resize if pr_enabled else model.backbone_wrapper.input_size}")
+    print(f"[AUG] {config.get('augmentation', {})}")
     # Labels for Sampler
     train_labels = train_ds.labels_idx
         
@@ -232,11 +245,13 @@ def main():
     best_metrics = None
     best_epoch = None 
     history = []
+    epoch_times = []
 
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
     monitor_metric = config["training"].get("monitor_metric", "mAP")
     for epoch in range(1, config['training']['epochs'] + 1):
+        epoch_start_time = time.perf_counter()
         if pr_enabled:
             epoch_resize = get_resize_for_epoch(epoch, pr_sizes, pr_stage_epochs)
             if epoch_resize != current_resize:
@@ -292,6 +307,9 @@ def main():
 
         current_lr = trainer.optimizer.param_groups[0]["lr"]
 
+        epoch_time_sec = time.perf_counter() - epoch_start_time
+        epoch_times.append(epoch_time_sec)
+
         history.append({
             "epoch": epoch,
             "train_loss": float(avg_loss),
@@ -301,6 +319,7 @@ def main():
             "val_sim_gap": float(metrics["sim_gap"]),
             "lr": float(current_lr),
             "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
+            "epoch_time_sec": float(epoch_time_sec),
         })
         
         if config["training"].get("early_stopping", False):
@@ -316,9 +335,16 @@ def main():
         "metrics": best_metrics,
     }
 
-    write_json(final_results, run_dir / "metrics.json")
-    write_json(history, run_dir / "history.json")
-    write_json(config, run_dir / "experiment_config.json")
+    artifacts = build_output_artifacts(
+        run_dir=run_dir,
+        config=config,
+        final_results=final_results,
+        train_history=history,
+        model=model,
+        epoch_times=epoch_times,
+    )
+
+    save_requested_outputs(config, artifacts)
         
 
 if __name__ == "__main__":

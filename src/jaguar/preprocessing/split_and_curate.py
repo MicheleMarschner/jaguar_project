@@ -488,7 +488,7 @@ def create_splits_and_curate(
     # Load Embeddings
     model_name = "MegaDescriptor-L"
     model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
-    embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training")
+    embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, split="training", num_workers=0)
     
     # Load Metadata (Sharpness/pHash)
     meta_img_file = resolve_path("bursts/meta_img_features.parquet", EXPERIMENTS_STORE)

@@ -4,6 +4,7 @@ description = "Optimizer and scheduler ablation with fixed backbone, loss, and d
 base_config = "base/kaggle_base"
 mode = "kaggle"
 setup_name = "kaggle_backbone"
+output_profile = "optim_sched"
 
 [[experiment.runs]]
 experiment_name = "adamw__cosine"

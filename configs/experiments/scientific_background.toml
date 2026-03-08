@@ -4,6 +4,7 @@ description = "Scientific background ablation with fixed blur_bg validation."
 base_config = "base/scientific_base"
 mode = "scientific"
 setup_name = "scientific_background"
+output_profile = "background"
 
 [[experiment.runs]]
 experiment_name = "bg_train_original"

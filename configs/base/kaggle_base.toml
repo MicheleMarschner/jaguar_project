@@ -1,5 +1,5 @@
 [model]
-backbone_name = "EVA-02"
+backbone_name = "EfficientNet-B4"
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
@@ -11,13 +11,13 @@ dataset_name = "jaguar_stage0"
 split_data_path = "splits/default_kaggle/full_split.parquet"
 val_split = 0.05
 use_balanced_sampler = false
-num_workers = 32
+num_workers = 0
 include_duplicates = true
 
 [preprocessing]
 train_background = "original"
 val_background = "original"
-bg_dir = "/path/to/backgrounds"
+bg_dir = "/data/round_1/backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10
@@ -27,7 +27,7 @@ key_for_seed = "filename"
 monitor_metric = "pairwise_AP"
 save_dir = "checkpoints/round_1/"  
 experiment_name = "kaggle_base"
-epochs = 30
+epochs = 1
 batch_size = 16
 lr = 2e-5
 weight_decay = 1e-3
@@ -36,21 +36,21 @@ early_stopping = true
 early_stopping_patience = 5
 
 [optimizer]
-optimizer_type = "Adam"
-optimizer_lr = 1e-5
-optimizer_weight_decay = 1e-3
-optimizer_momentum = 0.9
-optimizer_betas = [0.9, 0.999]
+type = "Adam"
+lr = 1e-5
+weight_decay = 1e-3
+momentum = 0.9
+betas = [0.9, 0.999]
 
 [scheduler]
-scheduler_type = "JaguardIdScheduler"
-scheduler_T_max = 30
-scheduler_lr_start = 1e-5
-scheduler_lr_min = 9e-6
-scheduler_lr_max = 1e-3
-scheduler_lr_ramp_ep = 15
-scheduler_lr_sus_ep = 0
-scheduler_lr_decay = 0.8
+type = "JaguardIdScheduler"
+T_max = 30
+lr_start = 1e-5
+lr_min = 9e-6
+lr_max = 1e-3
+lr_ramp_ep = 15
+lr_sus_ep = 0
+lr_decay = 0.8
 
 [augmentation]
 apply_augmentations = true
@@ -63,7 +63,7 @@ color_jitter_contrast = 0.2
 random_erasing_p = 0.25
 
 [progressive_resizing]
-[progressive_resizing]
 enabled = false
 sizes = []              # [224, 384, 512]
 stage_epochs = []       # [10, 10, 10]
+

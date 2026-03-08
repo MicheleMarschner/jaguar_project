@@ -1,0 +1,9 @@
+[training]
+experiment_name = "aug_none"
+
+[augmentation]
+apply_augmentations = false
+
+[output]
+profile = "augmentation"
+experiment_group = "kaggle_augmentation"

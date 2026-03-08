@@ -16,8 +16,12 @@ def get_device(prefer_name: str | None = None):
     - Otherwise pick the best (highest capability)
     """
     if not torch.cuda.is_available():
-        print("[Config] CUDA not available, using CPU")
-        return torch.device("cpu")
+        if torch.backends.mps.is_built() and torch.backends.mps.is_available():
+            print("[Config] CUDA not available, using MPS")
+            return torch.device("mps")
+        else: 
+            print("[Config] CUDA not available, using CPU")
+            return torch.device("cpu")
 
     num_gpus = torch.cuda.device_count()
     print(f"[Config] Found {num_gpus} CUDA device(s):")
@@ -170,7 +174,7 @@ DATA_STORE = ArtifactStore(
 )
 
 
-DEVICE = get_device(prefer_name="RTX")
+DEVICE = device = get_device(prefer_name="RTX")
 NUM_WORKERS = 0
 SEED = 51
 IMGNET_MEAN = [0.485, 0.456, 0.406]

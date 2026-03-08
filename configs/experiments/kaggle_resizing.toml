@@ -4,6 +4,7 @@ description = "Fixed resolution versus progressive resizing."
 base_config = "base/kaggle_base"
 mode = "kaggle"
 setup_name = "kaggle_backbone"
+output_profile = "resizing"
 
 [[experiment.runs]]
 experiment_name = "fixed_384"

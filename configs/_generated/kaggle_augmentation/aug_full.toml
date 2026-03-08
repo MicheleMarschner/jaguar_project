@@ -1,0 +1,16 @@
+[training]
+experiment_name = "aug_full"
+
+[augmentation]
+apply_augmentations = true
+horizontal_flip = true
+affine_degrees = 15
+affine_translate = [0.15, 0.15]
+affine_scale = [0.85, 1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0.25
+
+[output]
+profile = "augmentation"
+experiment_group = "kaggle_augmentation"

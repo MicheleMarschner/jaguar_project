@@ -17,3 +17,6 @@ megadescriptor/*.pth
 
 wandb.md
 comments.md
+
+experiments/
+results/

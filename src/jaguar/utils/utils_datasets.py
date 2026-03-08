@@ -306,6 +306,7 @@ def get_group_aware_stratified_train_val_split(
 
 def load_jaguar_from_FO_export(
     manifest_dir,
+    data_root=None,
     dataset_name="jaguar_init",
     transform=None,
     processing_fn=None,
@@ -331,12 +332,15 @@ def load_jaguar_from_FO_export(
                 dataset_name=dataset_name,
                 overwrite_db=overwrite_db,
             )
-
+            
+    if not data_root: 
+        data_root = DATA_ROOT
+        
     if full_ds:
         # Load full dataset based on samples.json
         torch_ds = JaguarDataset(
             base_root=manifest_dir,
-            data_root=DATA_ROOT,
+            data_root=data_root,
             split_parquet=parquet_path,
             mode="train",
             transform=transform,
@@ -348,7 +352,7 @@ def load_jaguar_from_FO_export(
     # Train dataset 
     torch_ds_train = JaguarDataset(
         base_root=manifest_dir,
-        data_root=DATA_ROOT,
+        data_root=data_root,
         mode="train",
         transform=transform,
         processing_fn=processing_fn,

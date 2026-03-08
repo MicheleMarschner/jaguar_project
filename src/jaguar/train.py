@@ -6,7 +6,7 @@ import tomli_w
 import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
-from muon import Muon
+from muon import MuData
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import PATHS, DEVICE 
@@ -69,7 +69,7 @@ class JaguarTrainer:
                 params_groups, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
             )
         elif opt_cfg['type'] == "Muon":
-            self.optimizer = Muon(
+            self.optimizer = MuData(
                 params_groups, lr=opt_cfg["lr"], weight_decay=opt_cfg.get("weight_decay", 0), betas=tuple(opt_cfg.get("betas", [0.9,0.999]))
             )
         else:

@@ -3,6 +3,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import argparse
 import tomllib
+from pathlib import Path
 from torch.utils.data import DataLoader, Subset
 
 from jaguar.config import PATHS, DEVICE, PROJECT_ROOT, WORK_ROOT
@@ -30,6 +31,12 @@ def parse_args():
         default=None,
         help="Optional name of the experiment (used for logging/checkpoints)"
     )
+    parser.add_argument(
+        "--backbone",
+        type=str,
+        default=None,
+        help="Override backbone name from config"
+    )
     return parser.parse_args()
 
 def main():
@@ -39,24 +46,38 @@ def main():
     # Load Config
     with open(PATHS.configs / f"{args.config}.toml", "rb") as f:
         config = tomllib.load(f)
+        print(config)
+        
+    if args.backbone is not None:
+        print(f"[Override] Backbone -> {args.backbone}")
+        config["model"]["backbone_name"] = args.backbone
         
     round_name = config["training"]["experiment_name"]
     parquet_file_path = config["data"]["parquet_path"]
+    # manifest_dir = config["data"]["manifest_dir"]
+    data_root = config["data"]["data_root"]
+    data_round = config["data"]["data_round"]
     parquet_root = f"{WORK_ROOT}/experiments/{round_name}/{parquet_file_path}"
 
     # Optionally override experiment name inside config
     if args.experiment_name is not None:
         config.setdefault("experiment", {})
         config["experiment"]["name"] = args.experiment_name
+    
+    if args.backbone is not None:
+        config["training"]["experiment_name"] += f"_{args.backbone}"
 
     is_full_ds = config["data"].get("full_ds", False)
+    data_root = f"{data_root}/data/{data_round}"
+    # manifest_root = f"{manifest_dir}/data/{data_round}"
     
     # Load Dataset (Existing loading logic...)
     if is_full_ds:
         parquet_root=None
         # Load one large dataset and split it later
         _, train_ds = load_jaguar_from_FO_export(
-            # PATHS.data_export / "init",
+            manifest_dir= Path(data_root) / "fiftyone" / "init", # PATHS.data_export / "init"
+            data_root=data_root,
             dataset_name="jaguar_init",
             overwrite_db=False,
             parquet_path=parquet_root,
@@ -66,7 +87,8 @@ def main():
     else:
         # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
         _, train_ds, val_ds = load_jaguar_from_FO_export(
-            # PATHS.data_export / "init",
+            manifest_dir= Path(data_root) / "fiftyone" / "init", # PATHS.data_export / "init"
+            data_root=data_root,
             dataset_name="jaguar_init",
             overwrite_db=False,
             parquet_path=parquet_root,

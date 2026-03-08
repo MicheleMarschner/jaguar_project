@@ -1,27 +1,30 @@
 [model]
-backbone_name = "EVA-02"      # Options: "EVA-02", "MegaDescriptor-L", "MiewID"
+backbone_name = "EVA-02"      # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
 head_type = "arcface" # head+loss criterion
 emb_dim = 1024
 freeze_backbone = true  # To unfreeze the backbone, set other relative parameters accordingly in [training]
 s = 30.0
 m = 0.50
-use_projection = false
-use_forward_features = true
+use_projection = true
+use_forward_features = false
 
 [data]
+# manifest_dir = "/fast/AG_Kainmueller/data/jaguar_project/"
+data_root = "/fast/AG_Kainmueller/data/jaguar_project/"
+data_round = "round_1"
 dataset_name = "jaguar_stage0"
 parquet_path = "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1/full_split.parquet"
 val_split = 0.05     #0.2
 # Set to true to handle class imbalance
 use_balanced_sampler = false
-num_workers = 32
+num_workers = 32     #32
 full_ds = true
 include_duplicates = true
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP", "pairwise_AP" 
 save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/" # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
-experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone_cosineannealing"
+experiment_name = "ablation" #"round_eva_baseline_nobs_vs005_pairwiseAP_finetuningbackbone"
 # config_folder = "megadescriptor"
 epochs = 30
 batch_size = 32

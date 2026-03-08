@@ -13,9 +13,13 @@ checkpoints/
 data/
 wandb/
 notebooks/wandb
+logs/
 
 miewid/*.pth
 megadescriptor/*.pth
 
 wandb.md
 comments.md
+
+#.sh files
+*.sh

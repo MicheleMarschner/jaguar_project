@@ -49,8 +49,7 @@ def init_wandb_run(
 
     run = wandb.init(
         entity="michele-marschner-university-of-potsdam",
-        project=project,
-        entity="michele-marschner-university-of-potsdam",  
+        project=project,  
         group=experiment_group,
         job_type="train",
         tags=tags,

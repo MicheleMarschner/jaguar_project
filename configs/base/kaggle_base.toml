@@ -1,5 +1,5 @@
 [model]
-backbone_name = "Eva-02"
+backbone_name = "EVA-02"
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
@@ -16,7 +16,7 @@ seed = 51
 split_data_path = "splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false
-num_workers = 0
+num_workers = 4
 use_fiftyone = false
 
 [curation]

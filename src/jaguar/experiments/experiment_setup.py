@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND, USE_FIFTYONE
 from jaguar.main import deep_update, load_toml_config
 from jaguar.utils.utils_setup import build_habitat_backgrounds, build_split_stem, get_burst_paths, get_split_paths
 from jaguar.utils.utils import ensure_dir, ensure_dirs, read_json_if_exists, resolve_path
@@ -74,6 +74,9 @@ def ensure_output_dirs():
 
 def ensure_fiftyone_init_dataset():
     print("[SETUP] ensure_fiftyone_init_dataset")
+    if not USE_FIFTYONE:
+        print("  -> USE_FIFTYONE=False, skip FiftyOne init dataset")
+        return
 
     manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
   

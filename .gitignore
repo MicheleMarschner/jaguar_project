@@ -18,5 +18,5 @@ megadescriptor/*.pth
 wandb.md
 comments.md
 
-/experiments/
+/experiments/round_1
 results/

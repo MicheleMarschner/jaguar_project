@@ -7,3 +7,6 @@ python src/jaguar/main.py --base_config base/scientific_base --experiment_config
 python src/jaguar/experiments/experiment_setup.py --setup_name scientific_deduplication --base_config base/scientific_base --experiment_config _generated/scientific_deduplication/closed_curated_traink_1_valk_50_p4
 python src/jaguar/main.py --base_config base/scientific_base --experiment_config _generated/scientific_deduplication/closed_curated_traink_1_valk_50_p4 --experiment_name closed_curated_traink_1_valk_50_p4
 
+python src/jaguar/experiments/experiment_setup.py --setup_name scientific_deduplication --base_config base/scientific_base --experiment_config _generated/scientific_deduplication/closed_curated_traink_3_valk_5_p4
+python src/jaguar/main.py --base_config base/scientific_base --experiment_config _generated/scientific_deduplication/closed_curated_traink_3_valk_5_p4 --experiment_name closed_curated_traink_3_valk_5_p4
+

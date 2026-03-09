@@ -172,16 +172,44 @@ class JaguarIDModel(nn.Module):
         modules_to_unfreeze = []
       
         # ViT / EVA / DINO / Swin style
-        if hasattr(self.backbone, 'blocks'):
+        if hasattr(self.backbone, "blocks"):
             modules_to_unfreeze = list(self.backbone.blocks)
+            
         # ConvNeXt / EfficientNet style
-        elif hasattr(self.backbone, 'stages'):
+        elif hasattr(self.backbone, "stages"):
             for stage in self.backbone.stages:
-                if hasattr(stage, 'blocks'):
+                if hasattr(stage, "blocks"):
                     modules_to_unfreeze.extend(list(stage.blocks))
+                else:
+                    modules_to_unfreeze.append(stage)
+                    
         # ResNet / MegaDescriptor style
-        elif hasattr(self.backbone, 'layer4'):
+        elif hasattr(self.backbone, "layer4"):
             modules_to_unfreeze = list(self.backbone.layer4)
+
+        # Swin Transformer (timm style)
+        elif hasattr(self.backbone, "layers"):
+            for layer in self.backbone.layers:
+                if hasattr(layer, "blocks"):
+                    modules_to_unfreeze.extend(list(layer.blocks))
+                else:
+                    modules_to_unfreeze.append(layer)
+        
+        # EfficientNet (timm)
+        elif hasattr(self.backbone, "blocks"):
+            modules_to_unfreeze = list(self.backbone.blocks)
+                    
+        elif hasattr(self.backbone, "encoder") and hasattr(self.backbone.encoder, "layer4"):
+            modules_to_unfreeze = list(self.backbone.encoder.layer4)
+
+        elif hasattr(self.backbone, "backbone") and hasattr(self.backbone.backbone, "layer4"):
+            modules_to_unfreeze = list(self.backbone.backbone.layer4)
+        
+        # Fallback
+        else:
+            for name, module in self.backbone.named_modules():
+                if isinstance(module, nn.Sequential):
+                    modules_to_unfreeze.extend(list(module))
 
         if not modules_to_unfreeze:
             print("[Warning] Could not detect block structure. Unfreezing entire backbone.")
@@ -265,7 +293,13 @@ class JaguarIDModel(nn.Module):
 
         # Triplet case (returns embeddings)
         if self.head_type == "triplet":
-            return F.normalize(embeddings, dim=1)
+            # return F.normalize(embeddings, dim=1)
+            embeddings = F.normalize(embeddings, dim=1) # For ArcFace/CosFace/SphereFace, normalization is done inside the head; for Triplet we do it here
+            if labels is not None:
+                loss = self.criterion(embeddings, labels)
+                return loss, embeddings
+
+            return embeddings
         
         # Classification heads
         logits = self.head(embeddings)

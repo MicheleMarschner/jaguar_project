@@ -25,6 +25,10 @@ class FODataset:
     - portable export/load (copies media + rebind)
     - manifest-only export/load (no media copy, no rebind)
     """
+    
+    # Disable MongoDB entirely
+    fo.config.database_uri = None
+    fo.config.disable_mongodb = True
 
     def __init__(self, dataset_name: str, overwrite: bool = False, persistent: bool = True):
         self.dataset_name = dataset_name

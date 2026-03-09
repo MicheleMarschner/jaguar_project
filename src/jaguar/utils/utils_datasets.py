@@ -1,8 +1,9 @@
 from functools import partial
 
 import fiftyone as fo
+
 from tqdm import tqdm
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS
+from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS, IN_HPC
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
@@ -367,14 +368,15 @@ def load_full_jaguar_from_FO_export(
 
     fo_ds = None
     if (manifest_dir / "fiftyone").is_dir():
-        if dataset_name in fo.list_datasets() and not overwrite_db:
-            fo_ds = FODataset(dataset_name, overwrite=False)
-        else:
-            fo_ds = FODataset.load_manifest(
-                export_dir=manifest_dir,
-                dataset_name=dataset_name,
-                overwrite_db=overwrite_db,
-            )
+        if not IN_HPC:
+            if dataset_name in fo.list_datasets() and not overwrite_db:
+                fo_ds = FODataset(dataset_name, overwrite=False)
+            else:
+                fo_ds = FODataset.load_manifest(
+                    export_dir=manifest_dir,
+                    dataset_name=dataset_name,
+                    overwrite_db=overwrite_db,
+                )
 
     if data_root is None:
         data_root = DATA_ROOT
@@ -409,15 +411,17 @@ def load_split_jaguar_from_FO_export(
     plus a split parquet file.
     """
     manifest_dir = Path(manifest_dir)
-
-    if dataset_name in fo.list_datasets() and not overwrite_db:
-        fo_ds = FODataset(dataset_name, overwrite=False)
-    else:
-        fo_ds = FODataset.load_manifest(
-            export_dir=manifest_dir,
-            dataset_name=dataset_name,
-            overwrite_db=overwrite_db,
-        )
+    
+    fo_ds = None
+    if not IN_HPC:
+        if dataset_name in fo.list_datasets() and not overwrite_db:
+            fo_ds = FODataset(dataset_name, overwrite=False)
+        else:
+            fo_ds = FODataset.load_manifest(
+                export_dir=manifest_dir,
+                dataset_name=dataset_name,
+                overwrite_db=overwrite_db,
+            )
     
     if data_root is None:
         data_root = DATA_ROOT

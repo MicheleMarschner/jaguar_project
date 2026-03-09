@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 import os
 
+save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/"
 
 def get_device(prefer_name: str | None = None):
     """
@@ -61,12 +62,15 @@ def get_device(prefer_name: str | None = None):
 def is_colab() -> bool:
     return "COLAB_GPU" in os.environ or "COLAB_TPU_ADDR" in os.environ
 
-
 def is_kaggle() -> bool:
     if Path("/kaggle/input").exists():
         return True
     return False
 
+def is_hpc() -> bool:
+    if Path("/fast/AG_Kainmueller/data").exists():
+        return True
+    return False
 
 def find_project_root(start: Path) -> Path:
     """
@@ -105,22 +109,25 @@ class ArtifactStore:
 
 # NOTE: Project root is where your repo (configs/, src/, pyproject.toml, …) lives.
 # We detect it robustly so it behaves the same even if nesting changes.
+HPC_ROOT = Path("/fast/AG_Kainmueller/data/jaguar_project").resolve()
 PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
+IN_HPC = is_hpc()
 IN_COLAB = is_colab()
 IN_KAGGLE = is_kaggle()
 ROUND = "round_1"
 
+DATA_PATH = HPC_ROOT if IN_HPC else PROJECT_ROOT
 DATA_ROOT = Path(
-    os.environ.get("JAGUAR_DATA_ROOT", str(PROJECT_ROOT / f"data/{ROUND}"))
+    os.environ.get("JAGUAR_DATA_ROOT", str(DATA_PATH / f"data/{ROUND}"))
 ).resolve()
-
 
 if IN_KAGGLE and "JAGUAR_WORK_ROOT" not in os.environ:
     WORK_ROOT = Path("/kaggle/working").resolve()
+elif IN_HPC and "JAGUAR_WORK_ROOT" not in os.environ:
+    WORK_ROOT = HPC_ROOT 
 else:
     WORK_ROOT = Path(os.environ.get("JAGUAR_WORK_ROOT", str(PROJECT_ROOT))).resolve()
-
 
 PATHS = Paths(
     data_train=DATA_ROOT / "raw/jaguar-re-id/train/train",
@@ -172,7 +179,6 @@ DATA_STORE = ArtifactStore(
     read_roots=tuple(_data_read_roots),
     write_root=_data_write_root,
 )
-
 
 DEVICE = device = get_device(prefer_name="RTX")
 NUM_WORKERS = 0

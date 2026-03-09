@@ -15,7 +15,6 @@ include_duplicates = false
 seed = 42
 
 [data]
-data_root = "/fast/AG_Kainmueller/data/jaguar_project/"
 split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance

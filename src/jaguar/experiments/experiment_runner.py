@@ -8,7 +8,9 @@ from jaguar.config import PATHS
 from jaguar.experiments.experiment_setup import build_split_relpath
 from jaguar.utils.utils import ensure_dir
 
-
+################################################
+# Argument Parsing
+################################################
 def parse_args():
     parser = argparse.ArgumentParser(description="Run ablation experiments")
     parser.add_argument(
@@ -34,9 +36,17 @@ def parse_args():
         action="store_true",
         help="Only print generated configs without executing them",
     )
+    parser.add_argument(
+        "--submit_slurm",
+        action="store_true",
+        help="Submit experiments as SLURM array job"
+    )
     return parser.parse_args()
 
 
+################################################
+# TOML files loading and overwriting logic
+################################################
 def load_toml_config(config_name: str) -> dict:
     with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
         return tomllib.load(f)
@@ -63,7 +73,9 @@ def dict_to_toml(data: dict) -> str:
         lines.append("")
     return "\n".join(lines)
 
-
+################################################
+# Helper to pick values from config dictionaries
+################################################
 def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
     key = path[-1]
 
@@ -80,6 +92,9 @@ def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, 
     return cur
 
 
+################################################
+# Build per-run overrides
+################################################
 def build_experiment_override(
     run_cfg: dict, 
     experiment_meta: dict,
@@ -100,6 +115,8 @@ def build_experiment_override(
         "head_type": ("model", "head_type"),
         "s": ("model", "s"),
         "m": ("model", "m"),
+        "use_projection": ("model", "use_projection"),
+        "use_forward_features": ("model", "use_forward_features"),
 
         "optimizer_type": ("optimizer", "type"),
         "optimizer_lr": ("optimizer", "lr"),
@@ -200,7 +217,9 @@ def build_experiment_override(
 
     return override
 
-
+################################################
+# Main launcher
+################################################
 def run_experiments():
     args = parse_args()
     experiment_config = load_toml_config(args.experiment_config)
@@ -208,7 +227,7 @@ def run_experiments():
 
     experiment_meta = experiment_config.get("experiment", {})
     runs = experiment_meta.get("runs", [])
-    runs = runs[:2]                     ## !TODO for dry test!
+    # runs = runs[:2]                     ## !TODO for dry test!
     if not runs:
         raise ValueError("No runs found under [[experiment.runs]]")
 
@@ -218,88 +237,130 @@ def run_experiments():
     ensure_dir(generated_dir)
 
     print(f"Found {len(runs)} runs.")
+ 
+    # all_cmds = []
+    # store config paths
+    config_paths = []
 
-    all_cmds = []
-
+    # Overrides
     for i, run_cfg in enumerate(runs, start=1):
         experiment_name = run_cfg["experiment_name"]
         override = build_experiment_override(run_cfg, experiment_meta=experiment_meta, base_config=base_config)
         override_text = dict_to_toml(override)
 
-        print(f"\n[{i}/{len(runs)}] {experiment_name}")
-
         override_path = generated_dir / f"{experiment_name}.toml"
         override_path.write_text(override_text, encoding="utf-8")
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
+        config_paths.append(str(rel_path))
+        
+        print(f"[{i}/{len(runs)}] Generated override: {override_path.name}")
 
-        cmd = [
-            "python",
-            args.main_script,
-            "--base_config",
-            args.base_config,
-            "--experiment_config",
-            str(rel_path),
-            "--experiment_name",
-            experiment_name,
-        ]
+    #     cmd = [
+    #         "python",
+    #         args.main_script,
+    #         "--base_config",
+    #         args.base_config,
+    #         "--experiment_config",
+    #         str(rel_path),
+    #         "--experiment_name",
+    #         experiment_name,
+    #     ]
 
-        print("Generated override config:")
-        print(override_text)
-        print("Command:")
-        print(" ".join(cmd))
+    #     print("Generated override config:")
+    #     print(override_text)
+    #     print("Command:")
+    #     print(" ".join(cmd))
 
-        if setup_name:
-            setup_cmd = [
-                "python",
-                "src/jaguar/experiments/experiment_setup.py",
-                "--setup_name",
-                setup_name,
-                "--base_config",
-                args.base_config,
-                "--experiment_config",
-                str(rel_path),
-            ]
-            print("Running setup:", " ".join(setup_cmd))
-            setup_result = subprocess.run(setup_cmd)
+    #     if setup_name:
+    #         setup_cmd = [
+    #             "python",
+    #             "src/jaguar/experiments/experiment_setup.py",
+    #             "--setup_name",
+    #             setup_name,
+    #             "--base_config",
+    #             args.base_config,
+    #             "--experiment_config",
+    #             str(rel_path),
+    #         ]
+    #         print("Running setup:", " ".join(setup_cmd))
+    #         setup_result = subprocess.run(setup_cmd)
 
-            if setup_result.returncode != 0:
-                raise RuntimeError(f"Setup failed: {experiment_name}")
+    #         if setup_result.returncode != 0:
+    #             raise RuntimeError(f"Setup failed: {experiment_name}")
 
-        print("Running:", " ".join(cmd))
-        result = subprocess.run(cmd)
+    #     print("Running:", " ".join(cmd))
+    #     result = subprocess.run(cmd)
 
-        if result.returncode != 0:
-            raise RuntimeError(f"Run failed: {experiment_name}")
+    #     if result.returncode != 0:
+    #         raise RuntimeError(f"Run failed: {experiment_name}")
 
-        run_lines = []
-        if setup_name:
-            run_lines.append(" ".join(setup_cmd))
-        run_lines.append(" ".join(cmd))
-        all_cmds.extend(run_lines)
-        all_cmds.append("")
+    #     run_lines = []
+    #     if setup_name:
+    #         run_lines.append(" ".join(setup_cmd))
+    #     run_lines.append(" ".join(cmd))
+    #     all_cmds.extend(run_lines)
+    #     all_cmds.append("")
 
-        print("Generated override config:")
-        print(override_text)
-        print("Command:")
-        print(" ".join(cmd))
+    #     print("Generated override config:")
+    #     print(override_text)
+    #     print("Command:")
+    #     print(" ".join(cmd))
 
 
-    run_script_path = generated_dir / "run_all.sh"
+    # run_script_path = generated_dir / "run_all.sh"
 
-    script_lines = [
-        "#!/usr/bin/env bash",
-        "set -e",
+    # script_lines = [
+    #     "#!/usr/bin/env bash",
+    #     "set -e",
+    #     "",
+    # ]
+
+    # script_lines.extend(all_cmds)
+    # script_lines.append("")
+
+    # run_script_path.write_text("\n".join(script_lines), encoding="utf-8")
+
+    # print(f"\nSaved run script: {run_script_path}")
+    # print("\nAll runs finished.")
+    
+    # Generate SLURM array script
+    slurm_lines = [
+        "#!/bin/bash",
+        "#SBATCH --gres=gpu:h100:1",
+        "#SBATCH --cpus-per-gpu=32",
+        "#SBATCH --time=0-6:00:00",
+        "#SBATCH --mem=200GB",
+        "#SBATCH --account=kainmueller",
+        f"#SBATCH --array=0-{len(config_paths)-1}",
+        "#SBATCH --nodelist=maxg[10,20]",
+        "#SBATCH --partition=h100",
+        "#SBATCH --output=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.out",
+        "#SBATCH --error=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.err",
+        "#SBATCH -pkainmueller",
         "",
+        "CONFIGS=(",
     ]
+    
+    for c in config_paths:
+        slurm_lines.append(f'"{c}"')
+    slurm_lines += [
+        ")",
+        "",
+        "CONFIG=${CONFIGS[$SLURM_ARRAY_TASK_ID]}",
+        "echo \"Running config: $CONFIG\"",
+        "",
+        f"python {args.main_script} \\",
+        f"  --base_config {args.base_config} \\",
+        "  --experiment_config \"$CONFIG\"",
+    ]
+    slurm_path = generated_dir / "run_slurm.sh"
+    slurm_path.write_text("\n".join(slurm_lines))
+    print(f"Generated SLURM script: {slurm_path}")
 
-    script_lines.extend(all_cmds)
-    script_lines.append("")
-
-    run_script_path.write_text("\n".join(script_lines), encoding="utf-8")
-
-    print(f"\nSaved run script: {run_script_path}")
-    print("\nAll runs finished.")
-
+    # Optionally submit
+    if args.submit_slurm and not args.dry_run:
+        subprocess.run(["sbatch", str(slurm_path)])
+        print("Submitted SLURM array job.")
 
 if __name__ == "__main__":
     run_experiments()

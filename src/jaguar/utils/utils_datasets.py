@@ -1,6 +1,11 @@
 from functools import partial
 
-import fiftyone as fo
+try:
+    import fiftyone as fo
+    HAS_FIFTYONE = True
+except ImportError:
+    fo = None
+    HAS_FIFTYONE = False
 from tqdm import tqdm
 from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
 from jaguar.preprocessing.preprocessing_background import PROCESSORS

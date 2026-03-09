@@ -1,5 +1,5 @@
 [model]
-backbone_name = "EfficientNet-B4"
+backbone_name = "Eva-02"
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
@@ -26,7 +26,7 @@ phash_threshold = 4
 [preprocessing]
 train_background = "original"
 val_background = "original"
-bg_dir = "data/round_1/backgrounds"
+bg_dir = "data/round_2/backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10
@@ -34,9 +34,9 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"
-save_dir = "checkpoints/round_1/"  
+save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
-epochs = 1
+epochs = 30
 batch_size = 16
 lr = 2e-5
 weight_decay = 1e-3
@@ -78,5 +78,5 @@ stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true
-project = "jaguar-reid"
+project = "jaguar-reid-SpotItLikeItsHot"
 mode = "online"

@@ -1,0 +1,14 @@
+[split]
+seed = 51
+
+[xai]
+type = "similarity"
+dataset_name = "jaguar_splits_curated"
+split_name = "val"
+n_samples = 10
+pair_types = ["easy_pos", "hard_neg"]
+model_name = "MiewID"
+explainer_names = ["IG", "GradCAM"]
+ig_steps = 10
+ig_internal_bs = 32
+ig_batch_size = 32

@@ -1,0 +1,13 @@
+[experiment]
+name = "xai_similarity"
+description = "Generate pair similarity explanations."
+base_config = "base/xai_base"
+mode = "xai"
+setup_name = "xai_similarity"
+output_profile = "xai"
+
+[[experiment.runs]]
+experiment_name = "miewid_easy_hard"
+model_name = "MiewID"
+n_samples = 10
+pair_types = ["easy_pos", "hard_neg"]

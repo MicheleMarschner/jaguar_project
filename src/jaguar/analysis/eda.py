@@ -13,9 +13,7 @@ This script is analysis-only (no training / no model evaluation).
 from pathlib import Path
 import pandas as pd
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
-from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
-from jaguar.utils.utils import resolve_path
+from jaguar.config import PATHS
 from jaguar.utils.utils_eda import (
     alpha_background_table_scene,
     analyze_images, 

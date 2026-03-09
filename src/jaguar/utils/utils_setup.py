@@ -1,7 +1,7 @@
 from pathlib import Path
 import random
 from PIL import Image
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE
 from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
 import pandas as pd
 from jaguar.utils.utils import resolve_path

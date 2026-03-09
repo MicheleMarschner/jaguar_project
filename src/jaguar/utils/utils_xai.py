@@ -7,35 +7,14 @@ Similarity CAM (query→positive ref and query→hard negative)
 '''
 
 from pathlib import Path
-from typing import Any, Dict
-
 import torch
 from PIL import Image
 import torch.nn.functional as F
 import numpy as np
-import torchvision.transforms.v2 as transforms
 
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 from captum.attr import IntegratedGradients
-
-from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.config import DEVICE, PATHS, IMGNET_MEAN, IMGNET_STD
-from jaguar.utils.utils_datasets import JaguarDataset
-
-
-## initialize like:
-## wrapper = FoundationModelWrapper(name, device=DEVICE)
-## try:
-##      target_layers, reshape_transform = wrapper.get_grad_cam_config()
-##  except NotImplementedError:
-##      print(f"Skipping GradCAM for {name}")
-##      continue
-## cam = GradCAM(
-##      model=wrapper.model, 
-##      target_layers=target_layers, 
-##      reshape_transform=reshape_transform
-##  )
 
 
 class SimilarityForward(torch.nn.Module):

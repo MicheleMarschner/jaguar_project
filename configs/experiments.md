@@ -76,3 +76,10 @@ base-conditions:
 Vorschlag: 
 AdamW + CosineAnnealingLR   AdamW + OneCycleLR  Muon + CosineAnnealingLR    Muon + OneCycleLR
 oder: Adam + JaguardIdScheduler     Adam + CosineAnnealingLR    AdamW + JaguardIdScheduler  AdamW + CosineAnnealingLR
+
+
+
+### PORTABLE SETUP
+kaggle/default split
+folder struktur von data mit round1 und train/train muss gegeben sein
+init vs curated anpassen

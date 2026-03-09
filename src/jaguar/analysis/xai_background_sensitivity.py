@@ -433,14 +433,17 @@ def has_non_nan_group(master_df: pd.DataFrame, group_name: str, prefix: str = "r
     return not master_df[cols].isna().all().all()
 
 
-if __name__ == "__main__":
-    runs = load_runs(PATHS.runs / "xai/background_sensitivity")
-    grouped_outputs = save_grouped_master_summaries(runs)
-    
-    print("groups:", grouped_outputs.keys())
-    for group_key, obj in grouped_outputs.items():
-        print(group_key, obj["master_df"].shape)
+def run_xai_background_sensitivity(
+    experiments_dir: Path,
+) -> dict[str, Path]:
+    runs = load_runs(experiments_dir)
+    if not runs:
+        print(f"[ANALYSIS][WARN] No background-sensitivity runs found under: {experiments_dir}")
+        return {}
 
+    grouped_outputs = save_grouped_master_summaries(runs)
+
+    for _, obj in grouped_outputs.items():
         plot_background_comparison_figure(obj["master_df"], obj["summary_dir"], group_name="all")
         plot_background_comparison_figure(obj["master_df"], obj["summary_dir"], group_name="orig_rank1_wrong")
 
@@ -450,7 +453,6 @@ if __name__ == "__main__":
         plot_bg_better_margin_share(obj["master_df"], obj["summary_dir"], group_name="all")
         plot_bg_better_margin_share(obj["master_df"], obj["summary_dir"], group_name="orig_rank1_wrong")
 
-    
     global_master_df = save_global_master_summary(runs)
 
     global_summary_dir = PATHS.results / "xai/background_sensitivity_summary/_global"
@@ -460,3 +462,7 @@ if __name__ == "__main__":
         plot_backbone_gap_for_background(global_master_df, global_summary_dir, background, group_name="all")
         plot_backbone_gap_for_background(global_master_df, global_summary_dir, background, group_name="orig_rank1_wrong")
 
+    return {
+        "global_master_csv": global_summary_dir / "master_summary.csv",
+        "global_master_parquet": global_summary_dir / "master_summary.parquet",
+    }

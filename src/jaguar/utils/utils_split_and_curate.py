@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Literal
 import pandas as pd
 
 from jaguar.utils.utils import json_default, save_parquet, to_rel_path

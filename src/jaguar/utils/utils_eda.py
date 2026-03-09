@@ -1,36 +1,3 @@
-'''
-wandb:
-job_type="eda"
-
-cfg_overrides = {
-    "meta": {
-        "experiment_family": "eda",
-        "study_id": "dataset_eda__round1_train",
-        "job_type": "eda",
-    },
-    "data": {
-        "dataset_name": "jaguar_init",
-        "dataset_version": "jaguar_stage0_v1",
-        "data_root": str(PATHS.data_train),
-    },
-    "eda": {
-        "analysis_name": "initial_dataset_eda",
-        "identity_filter_thresholds": thresholds,
-        "n_examples_resolution_gallery": n_examples,
-        "merge_key": "filename",
-        "merge_validate": "one_to_one",
-    },
-    "inputs": {
-        "meta_img_features_parquet": str(PATHS.runs / "deduplication" / "meta_img_features.parquet"),
-    },
-    "outputs": {
-        "save_dir": str(save_dir),
-    },
-}
-
-'''
-
-
 from pathlib import Path
 import re
 from PIL import Image

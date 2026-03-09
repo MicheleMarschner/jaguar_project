@@ -100,11 +100,6 @@ def main():
     print("\n[RUN]")
     print("experiment_name:", exp_name)
     print("run_dir:", run_dir)
-
-    # !TODO prints for dry run
-    print("experiment_group:", config.get("output", {}).get("experiment_group"))
-    print("output_profile:", config.get("output", {}).get("profile"))
-    print("save_dir:", config["training"]["save_dir"])
             
     parquet_file_path = config["data"]["split_data_path"]
     parquet_root = resolve_path(parquet_file_path, EXPERIMENTS_STORE)
@@ -143,8 +138,6 @@ def main():
 
     # Calculate Identities
     num_classes = len(train_ds.label_to_idx)
-
-    print(f"[DATA] Train: {len(train_ds)} | Val: {len(val_ds)} | Classes: {num_classes}")   #!TODO nur für dry run!
 
     log_wandb_dataset_info(
         run=wandb_run,
@@ -188,9 +181,6 @@ def main():
         train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
         val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
             
-    # !TODO nur für dry run!
-    print(f"[TRANSFORMS] progressive_resizing={pr_enabled} | current_resize={current_resize if pr_enabled else model.backbone_wrapper.input_size}")
-    print(f"[AUG] {config.get('augmentation', {})}")
     # Labels for Sampler
     train_labels = train_ds.labels_idx
         

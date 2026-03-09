@@ -37,6 +37,12 @@ SETUP_STEPS = {
         "ensure_burst_artifacts",
         "ensure_split_artifacts",
     ],
+    "xai_similarity": [
+        "ensure_output_dirs",
+        "ensure_fiftyone_init_dataset",
+        #"ensure_burst_artifacts",
+        #"ensure_split_artifacts",
+    ],
 }
 
 
@@ -71,6 +77,13 @@ def ensure_output_dirs():
 
 def ensure_fiftyone_init_dataset():
     print("[SETUP] ensure_fiftyone_init_dataset")
+
+    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
+  
+    samples_path = manifest_dir / "samples.json"
+    if samples_path.exists():
+        print(f"  -> exists: {samples_path}")
+        return
 
     FO_path = PATHS.data_export / "init" / "metadata.json"
 
@@ -297,13 +310,13 @@ def run_step(step_name: str, current_setup_config: dict):
     print(f"[SETUP] {step_name}")
 
     if step_name == "ensure_output_dirs":
-        print("  -> ensure output dirs")
+        ensure_output_dirs()
     #elif step_name == "ensure_split_manifest":
     #    print("  -> ensure split manifest")
     elif step_name == "ensure_fiftyone_init_dataset":
-        print("  -> ensure fiftyone init dataset")
+        ensure_fiftyone_init_dataset()
     elif step_name == "ensure_background_pool":
-        print("  -> ensure background pool")
+        ensure_background_pool()
     elif step_name == "run_initial_eda":
         run_initial_eda()
     elif step_name == "ensure_burst_artifacts":

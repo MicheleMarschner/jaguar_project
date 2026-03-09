@@ -254,7 +254,6 @@ def get_or_create_manifest_dataset(
     manifest_dir = Path(manifest_dir)
 
     if manifest_exists(manifest_dir):
-        print(f"[FO] Loading manifest from {manifest_dir}")
         return FODataset.load_manifest(
             export_dir=manifest_dir,
             dataset_name=dataset_name,

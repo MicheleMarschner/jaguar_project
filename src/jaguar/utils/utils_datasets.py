@@ -2,7 +2,7 @@ from functools import partial
 
 import fiftyone as fo
 from tqdm import tqdm
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
@@ -122,9 +122,6 @@ def build_processing_fn(config, split: str):
     """
     pre_cfg = config.get("preprocessing", {})
     processor_name = pre_cfg.get(f"{split}_background", "original")
-
-    print(f"[DEBUG build_processing_fn] split={split}")
-    print(f"[DEBUG build_processing_fn] processor={processor_name}")
 
     if processor_name == "original":
         return None

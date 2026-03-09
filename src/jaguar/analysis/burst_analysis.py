@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 from jaguar.config import EXPERIMENTS_STORE, PATHS
-from jaguar.utils.utils import resolve_path
+from jaguar.utils.utils import ensure_dir, resolve_path
 
 
 def get_largest_burst_group(artifacts_dir):
@@ -94,7 +94,8 @@ def compute_burst_stats(artifacts_dir: Path, save_dir: Path):
     out_fp = save_dir / "burst_stats_per_jaguar.csv"
     jaguar_stats.to_csv(out_fp, index=False)
     print(f"Saved: {out_fp}")
-    return jaguar_stats
+
+    return jaguar_stats, out_fp
 
 
 def plot_burst_stats(jaguar_stats: pd.DataFrame, save_dir: Path, filename="burst_per_jaguar.png"):
@@ -119,19 +120,37 @@ def plot_burst_stats(jaguar_stats: pd.DataFrame, save_dir: Path, filename="burst
 
     out_fp = save_dir / filename
     plt.savefig(out_fp, dpi=200, bbox_inches="tight")
+    plt.close()
+
     return out_fp
 
-if __name__ == "__main__":
-    artifacts_dir = resolve_path(
-        "bursts/burst_groups__within500__cross10000__ph13",
-        EXPERIMENTS_STORE,
-    )
+
+def run_burst_analysis(
+    artifacts_dir: Path,
+    save_dir: Path,
+    img_root: Path,
+) -> dict[str, Path]:
     
-    img_root = PATHS.data_train
-    save_dir = PATHS.results / "bursts"
+    ensure_dir(save_dir)
 
     burst_df = get_largest_burst_group(artifacts_dir)
-    burst_plot = plot_burst(data_root=img_root, df=burst_df, save_dir=save_dir)
+    burst_plot_path = plot_burst(
+        data_root=img_root,
+        df=burst_df,
+        save_dir=save_dir,
+    )
 
-    jaguar_stats = compute_burst_stats(artifacts_dir, save_dir)
-    stats_plot = plot_burst_stats(jaguar_stats, save_dir)
+    jaguar_stats, stats_csv_path = compute_burst_stats(
+        artifacts_dir=artifacts_dir,
+        save_dir=save_dir,
+    )
+    stats_plot_path = plot_burst_stats(
+        jaguar_stats=jaguar_stats,
+        save_dir=save_dir,
+    )
+
+    return {
+        "burst_top5_plot": burst_plot_path,
+        "burst_stats_csv": stats_csv_path,
+        "burst_stats_plot": stats_plot_path,
+    }

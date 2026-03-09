@@ -113,8 +113,6 @@ class JaguarIDModel(nn.Module):
             if out.ndim > 2: out = out.mean(dim=(2, 3))
             self.feature_dim = out.shape[1]
 
-        print(f"[JaguarID] Backbone: {backbone_name} | Input Res: {input_res} | Feature dim: {self.feature_dim}")
-
         # Optionally create a projector (EmbeddingHead)
         if self.use_projection:
             self.neck = EmbeddingHead(self.feature_dim, emb_dim)
@@ -123,8 +121,6 @@ class JaguarIDModel(nn.Module):
             self.neck = nn.Identity()
             self.bn = nn.BatchNorm1d(self.feature_dim)
             head_input_dim = self.feature_dim
-
-        print(f"[JaguarID] Feature dim: {self.feature_dim}")
 
         # Select head + loss
         if self.head_type == "arcface":

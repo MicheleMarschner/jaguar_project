@@ -96,7 +96,6 @@ def build_experiment_override(
         "val_background": ("preprocessing", "val_background"),
 
         "backbone_name": ("model", "backbone_name"),
-
         "head_type": ("model", "head_type"),
         "s": ("model", "s"),
         "m": ("model", "m"),
@@ -141,6 +140,15 @@ def build_experiment_override(
         "include_duplicates": ("split", "include_duplicates"),
 
         "seed": ("training", "seed"),
+
+        "model_name": ("xai", "model_name"),
+        "n_samples": ("xai", "n_samples"),
+        "split_name": ("xai", "split_name"),
+        "pair_types": ("xai", "pair_types"),
+        "explainer_names": ("xai", "explainer_names"),
+        "ig_steps": ("xai", "ig_steps"),
+        "ig_internal_bs": ("xai", "ig_internal_bs"),
+        "ig_batch_size": ("xai", "ig_batch_size"),
 
         "output_profile": ("output", "profile"),
     }
@@ -208,7 +216,6 @@ def run_experiments():
 
     experiment_meta = experiment_config.get("experiment", {})
     runs = experiment_meta.get("runs", [])
-    runs = runs[:2]                     ## !TODO for dry test!
     if not runs:
         raise ValueError("No runs found under [[experiment.runs]]")
 
@@ -232,16 +239,27 @@ def run_experiments():
         override_path.write_text(override_text, encoding="utf-8")
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
 
+        mode = experiment_meta.get("mode", "scientific")
+        target_script = (
+            "src/jaguar/run_xai_experiment.py"
+            if mode == "xai"
+            else args.main_script
+        )
+
         cmd = [
             "python",
-            args.main_script,
+            target_script,
             "--base_config",
             args.base_config,
             "--experiment_config",
             str(rel_path),
-            "--experiment_name",
-            experiment_name,
         ]
+
+        if mode != "xai":
+            cmd.extend([
+                "--experiment_name",
+                experiment_name,
+            ])
 
         print("Generated override config:")
         print(override_text)

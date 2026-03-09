@@ -280,22 +280,24 @@ def plot_duplicate_group(cluster_df, data_root, save_dir):
     plt.suptitle(f"Jaguar: {jaguar_name} | Duplicate Group Size: {cluster_size} | Cluster ID: {cluster_id}", fontsize=14, y=1.05)
     plt.tight_layout()
 
-    file_path = save_dir / f"duplicate_group_{jaguar_name}_n{cluster_size}"
+    file_path = save_dir / f"duplicate_group_{jaguar_name}_n{cluster_size}.png"
     plt.savefig(file_path, dpi=200, bbox_inches="tight")
     print(f"Saved to {save_dir}")
 
+    return file_path
 
-if __name__ == "__main__":
-    artifacts_dir = resolve_path("splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1", EXPERIMENTS_STORE)
-    save_dir = PATHS.results / "splits"
-    ensure_dir(save_dir)
-    img_root = PATHS.data_train
-    manifest_dir = resolve_path("fiftyone/splits_curated", DATA_STORE)
-    dataset_name = "jaguar_curated"
-    
+
+
+def run_split_diagnostics(
+    artifacts_dir: Path,
+    save_dir: Path,
+    img_root: Path,
+    manifest_dir: Path,
+    dataset_name: str = "jaguar_curated",
+) -> dict[str, Path]:
     split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
 
-    fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(
+    load_full_jaguar_from_FO_export(
         manifest_dir,
         dataset_name=dataset_name,
         processing_fn=None,
@@ -306,19 +308,27 @@ if __name__ == "__main__":
         config = json.load(f)
 
     strategy = config["strategy"]
-    dedup_policy = config['dedup_policy']
+    dedup_policy = config["dedup_policy"]
 
-    plot_split_identity_histograms(split_df, save_dir, dedup_policy)
+    ensure_dir(save_dir)
+
+    hist_path = plot_split_identity_histograms(split_df, save_dir, dedup_policy)
+
     if strategy == "closed_set":
         check_split_with_closed_set_policy(split_df)
     elif strategy == "open_set":
         check_split_with_open_set_policy(split_df)
     else:
         raise RuntimeError(f"Unknown strategy: {strategy}")
-    
+
     cluster = find_largest_duplicate_group(split_df)
-    plot_duplicate_group(
+    duplicate_group_path = plot_duplicate_group(
         cluster,
         data_root=img_root,
-        save_dir=save_dir
+        save_dir=save_dir,
     )
+
+    return {
+        "split_histogram": hist_path,
+        "largest_duplicate_group_plot": duplicate_group_path,
+    }

@@ -1,8 +1,6 @@
-import argparse
 from typing import Any
 
 from jaguar.utils.utils import write_json
-from jaguar.utils.utils_output import aggregate_experiment_outputs
 
 
 OUTPUT_PROFILES = {
@@ -83,10 +81,6 @@ def save_requested_outputs(config: dict, artifacts: dict[str, Any]) -> None:
     output_profile = config.get("output", {}).get("profile")
     requested_outputs = OUTPUT_PROFILES.get(output_profile, {}).get("per_run", [])
 
-    # !TODO nur für dry run
-    print(f"[OUTPUT] profile={config.get('output', {}).get('profile')}")
-    print(f"[OUTPUT] requested={requested_outputs}")
-
     for output_name in requested_outputs:
         writer = OUTPUT_WRITERS.get(output_name)
         if writer is None:
@@ -103,24 +97,3 @@ OUTPUT_WRITERS = {
     "error_overlap": save_error_overlap,
     "timing": save_timing
 }
-
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Aggregate experiment outputs into summary tables")
-    parser.add_argument("--experiment_group", type=str, required=True)
-    parser.add_argument("--output_profile", type=str, required=True)
-    return parser.parse_args()
-
-
-def main():
-    args = parse_args()
-
-    out_path = aggregate_experiment_outputs(
-        experiment_group=args.experiment_group,
-        output_profile=args.output_profile,
-    )
-    print(f"[AGGREGATION] Saved summary to: {out_path}")
-
-
-if __name__ == "__main__":
-    main()

@@ -1,2 +1,11 @@
-[training]
-experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP"
+[experiment]
+name = "train_single_baseline"
+description = "Train one single model on the data"
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_base"
+
+[[experiment.runs]]
+experiment_name = "backbone_eva02"
+backbone_name = "EVA-02"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain4__kVal4__p4/full_split.parquet"

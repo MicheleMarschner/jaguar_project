@@ -38,6 +38,8 @@ class JaguarDataset(Dataset):
         self.filename_key = filename_key
         self.epoch = 0
         self.mode = mode
+
+        print(f"[DEBUG] {self.base_root}")
         
         if self.data_root is None:
             raise ValueError("data_root must be provided")
@@ -121,7 +123,7 @@ class JaguarDataset(Dataset):
         if pp.is_absolute() and pp.exists():
             return pp
         # If relative or absolute doesn't exist, use data_root (data/round_1/...)
-        if self.data_root is not None and self.mode in ("train", "val"):
+        if self.data_root is not None and self.mode in ("train", "val", "full"):
             return self.data_root / "raw/jaguar-re-id/train/train" / pp.name
         elif self.data_root is not None and self.mode=="test":
             return self.data_root / "raw/jaguar-re-id/test/test" / pp.name

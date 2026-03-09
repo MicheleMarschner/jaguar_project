@@ -27,7 +27,7 @@ phash_threshold = 4
 [preprocessing]
 train_background = "random_bg"
 val_background = "blur_bg"
-bg_dir = "data/round_1/backgrounds"
+bg_dir = "data/round_2/backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10
@@ -35,7 +35,7 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "mAP"
-save_dir = "checkpoints/round_1/"            # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
+save_dir = "checkpoints/round_2/"            # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
 experiment_name = "scientific_base"
 epochs = 1
 batch_size = 16

@@ -1,0 +1,11 @@
+{
+  "round": "round_2",
+  "method": "phash_only_safe_all_pairs_within_identity",
+  "fo_dataset_name": "jaguar_init",
+  "phash_size": 8,
+  "max_within_pairs_per_identity": 500,
+  "max_cross_pairs_total": 10000,
+  "seed": 51,
+  "phash_threshold": 11,
+  "min_cluster_size": 2
+}

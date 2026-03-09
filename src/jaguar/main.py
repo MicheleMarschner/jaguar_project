@@ -102,6 +102,7 @@ def main():
     print("run_dir:", run_dir)
             
     parquet_file_path = config["data"]["split_data_path"]
+    print(f"\n[DATA] path:{parquet_file_path}")
     parquet_root = resolve_path(parquet_file_path, EXPERIMENTS_STORE)
 
     set_seeds(config["training"]["seed"])
@@ -314,16 +315,10 @@ def main():
         else:
             patience_counter += 1
             
-        if config['scheduler']['type'] == "ReduceLROnPlateau":
-            trainer.scheduler.step(metrics['mAP'])
-        else:  
+        if config["scheduler"]["type"] == "ReduceLROnPlateau":
+            trainer.scheduler.step(metrics["mAP"])
+        elif config["scheduler"]["type"] != "OneCycleLR":
             trainer.scheduler.step()
-
-        ##!TODO laut chatty sollte obere block hiermit ersetzt werden as OneCycleLR per batch
-        #if config["scheduler"]["type"] == "ReduceLROnPlateau":
-        #    trainer.scheduler.step(metrics["mAP"])
-        #elif config["scheduler"]["type"] != "OneCycleLR":
-        #    trainer.scheduler.step()
 
         current_lr = trainer.optimizer.param_groups[0]["lr"]
 

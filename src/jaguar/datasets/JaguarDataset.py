@@ -68,11 +68,11 @@ class JaguarDataset(Dataset):
 
             self.samples = []
             for _, row in df.iterrows():
-                self.samples.append({
-                    self.filepath_key: row.get("filepath_rel", row["filename"]),
-                    self.filename_key: row["filename"],
-                    "ground_truth": {"label": row["identity_id"]},
-                })
+                sample = row.to_dict()
+                sample[self.filepath_key] = row.get("filepath_rel", row["filename"])
+                sample[self.filename_key] = row["filename"]
+                sample["ground_truth"] = {"label": row["identity_id"]}
+                self.samples.append(sample)
 
         elif split_parquet is None and not self.is_test:
             # Fallback to original JSON loading logic
@@ -83,12 +83,11 @@ class JaguarDataset(Dataset):
 
             self.samples = []
             for s in raw_samples:
-                self.samples.append({
-                    self.filepath_key: s.get("filename") or Path(s["filepath"]).name,
-                    "ground_truth": {
-                        "label": s["ground_truth"]["label"]
-                    }
-                })
+                sample = dict(s)
+                sample[self.filepath_key] = s.get(self.filepath_key) or s.get("filepath") or s.get("filename") or Path(s["filepath"]).name
+                sample[self.filename_key] = s.get(self.filename_key) or s.get("filename") or Path(sample[self.filepath_key]).name
+                sample["ground_truth"] = {"label": s["ground_truth"]["label"]}
+                self.samples.append(sample)
 
         elif self.is_test:
             test_dir = self.data_root / "raw/jaguar-re-id/test/test"

@@ -27,7 +27,7 @@ SETUP_STEPS = {
         #"ensure_burst_artifacts",
         "ensure_background_pool",
     ],
-    "scientific_deduplication": [
+    "kaggle_deduplication": [
         "ensure_output_dirs",
         #"ensure_split_manifest",
         "ensure_fiftyone_init_dataset",

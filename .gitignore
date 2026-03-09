@@ -2,13 +2,11 @@ __pycache__/
 *.pyc
 .DS_Store
 *.egg-info/
-data/
 __MACOSX/
 .env
 
 # artifacts 
 checkpoints/
-data/
 wandb/
 notebooks/wandb
 
@@ -19,4 +17,6 @@ wandb.md
 comments.md
 
 /experiments/round_1
-results/
+/results/
+/data/round_1/
+/data/round_2/raw/

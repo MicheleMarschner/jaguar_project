@@ -1,3 +1,89 @@
+
+# EXPERIMENTS
+
+
+frozen backbone: 1e-4
+unfrozen backbone: 2e-5
+
+## Kaggle
+
+DEFAULT:
+- Base: Kaggle
+- Background: white (for train and val)
+
+1. DEDUP   -> [data]: set base-condition for split
+2. BACK    -> [model]: set base-condition for model backbone
+3. LOSS    -> 
+4. MINING
+5. AUG
+6. OPTIM
+7. RESIZ
+8. STAB
+9. SOUP
+10. TTA
+11. ENSEMB
+
+
+### DEDUP Near-Duplicate Training Impact / Deduplication
+
+- Must: burst analysis and separating bursts in val/train
+- Must: closed-set
+- Experiment: phash 4 (distance 0–4 → very likely duplicate / same burst frame)
+    - keep all duplicates
+    - remove duplicates: train_k: 1 , val_k: 50 , phash: 4
+    - remove duplicates: train_k: 3, val_k: 1 , phash: 4
+    - remove duplicates: train_k: 3, val_k: 3, phash: 4
+    - remove duplicates: train_k: 1, val_k: 1, phash: 4
+
+- Output: 
+    - [data]: set base-condition for split (two train variants: one full and one best result or even 2 - check außerdem die stats dazu!)
+    - baseline for future runs (EVA-02)
+
+
+### BACK    Backbone 
+
+- Must: 2 Splits from DEDUP
+- Experiment:
+    - MegaDescriptor-L
+    - MiewID
+    - DINOv2_for_wildlife
+    - DINOv2-Base or DINOv3-Base
+    - ConvNeXt-V2
+    - EVA-02
+
+- Ouput: 
+    - [model]: set base-condition for model backbone (2 best over the 2 runs - and check if CNN/ViT)
+    - identify strongest ViT and strongest CNN
+
+
+### LOSS    Loss Comparison
+
+
+
+
+### ENSEMB  Ensemble
+- best specialized model    (from MegaDescriptor-L, MiewID, DINOv2_for_wildlife)
+- best generic ViT          (from DINOv2-Base, DINOv3-Base, EVA-02) 
+- best CNN                  (from ConvNeXt-V2, Efficien-NetB4)
+
+
+
+
+# SCIENTIFIC
+
+DEFAULT:
+- Base: Scientific
+- Background: white (for train and val)
+
+## BACKGROUND 
+
+
+
+
+
+
+
+
 # SCIENTIFIC
 
 base-conditions:

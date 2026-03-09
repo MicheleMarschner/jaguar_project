@@ -1,0 +1,46 @@
+{
+  "strategy": "closed_set",
+  "dedup_policy": false,
+  "train_k": 1,
+  "val_k": 1,
+  "intra_burst_phash_threshold": 4,
+  "fo_dataset_name": "jaguar_burst",
+  "base_dedup_manifest": {
+    "root": "data",
+    "rel": "fiftyone/burst"
+  },
+  "data_summary": {
+    "raw_data": {
+      "total_samples": 1895,
+      "total_identities": 31,
+      "splits": {
+        "train": {
+          "samples": 1567,
+          "sample_percentage": 0.8269,
+          "identities": 31
+        },
+        "val": {
+          "samples": 328,
+          "sample_percentage": 0.1731,
+          "identities": 31
+        }
+      }
+    },
+    "curated_data": {
+      "total_samples": 1222,
+      "total_identities": 31,
+      "splits": {
+        "train": {
+          "samples": 994,
+          "sample_percentage": 0.8134,
+          "identities": 31
+        },
+        "val": {
+          "samples": 228,
+          "sample_percentage": 0.1866,
+          "identities": 31
+        }
+      }
+    }
+  }
+}

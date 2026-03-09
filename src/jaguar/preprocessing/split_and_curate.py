@@ -39,6 +39,7 @@ Notes / assumptions:
   is the split + (optional) intra-burst curation described above.
 """
 
+import json
 import os
 
 from jaguar.utils.utils_setup import get_split_paths
@@ -505,15 +506,13 @@ def create_splits_and_curate(
 
     ensure_dir(out_root)
     
-    
     # Load Data
     print(f"Loading {fo_dataset_name}...")
     fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(
         manifest_dir, 
         dataset_name=fo_dataset_name,
         use_fiftyone=USE_FIFTYONE
-    )
-    
+    ) 
     # Load Embeddings
     model_name = "MegaDescriptor-L"
     model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)

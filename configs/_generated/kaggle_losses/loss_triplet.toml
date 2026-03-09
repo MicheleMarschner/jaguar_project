@@ -1,0 +1,13 @@
+[training]
+experiment_name = "loss_triplet"
+
+[model]
+head_type = "triplet"
+m = 0.5
+
+[output]
+profile = "loss"
+experiment_group = "kaggle_losses"
+
+[data]
+split_data_path = "splits/default_kaggle/full_split.parquet"

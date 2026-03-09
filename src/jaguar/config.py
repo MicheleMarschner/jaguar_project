@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 import os
 
+save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/"
 
 def get_device(prefer_name: str | None = None):
     """
@@ -61,12 +62,15 @@ def get_device(prefer_name: str | None = None):
 def is_colab() -> bool:
     return "COLAB_GPU" in os.environ or "COLAB_TPU_ADDR" in os.environ
 
-
 def is_kaggle() -> bool:
     if Path("/kaggle/input").exists():
         return True
     return False
 
+def is_hpc() -> bool:
+    if Path("/fast/AG_Kainmueller/data").exists():
+        return True
+    return False
 
 def find_project_root(start: Path) -> Path:
     """
@@ -105,22 +109,29 @@ class ArtifactStore:
 
 # NOTE: Project root is where your repo (configs/, src/, pyproject.toml, …) lives.
 # We detect it robustly so it behaves the same even if nesting changes.
+HPC_ROOT = Path("/fast/AG_Kainmueller/data/jaguar_project").resolve()
 PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
+IN_HPC = is_hpc()
 IN_COLAB = is_colab()
 IN_KAGGLE = is_kaggle()
+<<<<<<< HEAD
 ROUND = "round_2"
+=======
+ROUND = "round_2" # Options: "round_1", "round_2"
+>>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 
+DATA_PATH = HPC_ROOT if IN_HPC else PROJECT_ROOT
 DATA_ROOT = Path(
-    os.environ.get("JAGUAR_DATA_ROOT", str(PROJECT_ROOT / f"data/{ROUND}"))
+    os.environ.get("JAGUAR_DATA_ROOT", str(DATA_PATH / f"data/{ROUND}"))
 ).resolve()
-
 
 if IN_KAGGLE and "JAGUAR_WORK_ROOT" not in os.environ:
     WORK_ROOT = Path("/kaggle/working").resolve()
+elif IN_HPC and "JAGUAR_WORK_ROOT" not in os.environ:
+    WORK_ROOT = HPC_ROOT 
 else:
     WORK_ROOT = Path(os.environ.get("JAGUAR_WORK_ROOT", str(PROJECT_ROOT))).resolve()
-
 
 PATHS = Paths(
     data_train=DATA_ROOT / "raw/jaguar-re-id/train/train",
@@ -136,8 +147,8 @@ PATHS = Paths(
 # NOTE: caching pattern (read-if-exists else compute+write)
 # - Local: read_roots empty, write_root is under WORK_ROOT (often same as PROJECT_ROOT)
 # - Kaggle: optional read cache dataset mounted at /kaggle/input/jaguar-artifacts, write_root under /kaggle/working
-_experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_1")   
-_results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_1") 
+_experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_2")  # .../round_1"
+_results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_2") # .../round_1"
 _data_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data")   
 
 _experiments_read_roots = []
@@ -172,7 +183,6 @@ DATA_STORE = ArtifactStore(
     read_roots=tuple(_data_read_roots),
     write_root=_data_write_root,
 )
-
 
 DEVICE = device = get_device(prefer_name="RTX")
 NUM_WORKERS = 0

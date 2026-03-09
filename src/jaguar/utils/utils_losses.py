@@ -102,15 +102,56 @@ class SphereFaceLoss(nn.Module):
         logits = logits * self.s
         return F.cross_entropy(logits, labels), logits
 
+# class TripletLoss(nn.Module):
+#     """
+#     Standard Triplet Loss. 
+#     Note: Requires (Anchor, Positive, Negative) inputs.
+#     """
+#     def __init__(self, m:float = 0.3):
+#         super().__init__()
+#         self.m = m
+
+#     def forward(self, anchor, positive, negative):
+#         distance = F.triplet_margin_loss(anchor, positive, negative, margin=self.m, p=2)
+#         return distance
+    
 class TripletLoss(nn.Module):
     """
-    Standard Triplet Loss. 
-    Note: Requires (Anchor, Positive, Negative) inputs.
+    Batch-hard Triplet Loss for ReID, robust to small numbers of positives.
+    Works directly with (embeddings, labels) instead of explicit anchor/pos/neg.
     """
-    def __init__(self, m:float = 0.3):
+    def __init__(self, m: float = 0.3):
         super().__init__()
-        self.m = m
+        self.margin = m
 
-    def forward(self, anchor, positive, negative):
-        distance = F.triplet_margin_loss(anchor, positive, negative, margin=self.m, p=2)
-        return distance
+    def forward(self, embeddings: torch.Tensor, labels: torch.Tensor):
+        """
+        embeddings: (B, D) normalized feature vectors
+        labels: (B,) integer class labels
+        """
+        # pairwise Euclidean distance
+        dist_matrix = torch.cdist(embeddings, embeddings, p=2)
+
+        # masks for positives/negatives
+        labels = labels.unsqueeze(1)
+        mask_pos = labels.eq(labels.t())   # (B,B) same identity
+        mask_neg = ~mask_pos               # (B,B) different identity; we don't really need the neg one with the max_dist trick
+
+        # remove self-comparisons
+        mask_pos.fill_diagonal_(False)
+
+        # if no positives in batch, return zero loss
+        if mask_pos.sum() == 0:
+            return torch.tensor(0.0, device=embeddings.device)
+
+        # hardest positive distance for each anchor
+        hardest_pos = (dist_matrix * mask_pos.float()).max(dim=1)[0]
+
+        # hardest negative distance for each anchor
+        max_dist = dist_matrix.max().detach()
+        dist_neg = dist_matrix + max_dist * mask_pos.float()
+        hardest_neg = dist_neg.min(dim=1)[0]
+
+        # compute triplet loss
+        loss = F.relu(hardest_pos - hardest_neg + self.margin)
+        return loss.mean()

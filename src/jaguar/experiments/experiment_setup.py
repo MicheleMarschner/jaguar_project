@@ -256,6 +256,7 @@ def build_split_relpath(
 
 def ensure_split_artifacts(
     *,
+    data_root: str,
     split_strategy: str,
     include_duplicates: bool,
     train_k: int,
@@ -326,6 +327,7 @@ def run_step(step_name: str, current_setup_config: dict):
         ensure_burst_artifacts()
     elif step_name == "ensure_split_artifacts":
         ensure_split_artifacts(
+            data_root=current_setup_config["data"]["root"],
             train_k=current_setup_config["curation"]["train_k"],
             val_k=current_setup_config["curation"]["val_k"],
             phash_threshold=current_setup_config["curation"]["phash_threshold"],

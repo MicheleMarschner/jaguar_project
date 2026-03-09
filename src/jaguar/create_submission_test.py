@@ -85,7 +85,10 @@ def generate_submission():
         num_classes=NUM_CLASSES,
         head_type="arcface",
         device=DEVICE,
-        emb_dim=EMB_DIM
+        emb_dim=EMB_DIM,
+        use_projection = USE_PROJECTION,
+        use_forward_features = USE_FORWARD_FEATURES
+        
     )
 
     checkpoint = torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=False)

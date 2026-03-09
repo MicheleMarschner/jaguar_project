@@ -4,7 +4,8 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 import argparse
 import tomllib
-from torch.utils.data import DataLoader
+from pathlib import Path
+from torch.utils.data import DataLoader, Subset
 import time
 
 from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds
@@ -18,6 +19,7 @@ from jaguar.utils.utils_datasets import (
     load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
+    get_stratified_train_val_split,
 )
 from jaguar.train import JaguarTrainer
 from jaguar.logging.wandb_logger import (
@@ -42,6 +44,12 @@ def parse_args():
         "--experiment_name",
         type=str,
         help="Optional name of the experiment (used for logging/checkpoints)",
+    )
+    parser.add_argument(
+        "--backbone",
+        type=str,
+        default=None,
+        help="Override backbone name from config"
     )
     return parser.parse_args()
 
@@ -80,6 +88,7 @@ def main():
     checkpoints_dir = Path(config["training"]["save_dir"])
     exp_name = config["training"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
+    print(checkpoints_dir, experiment_group)
 
     # run artifact directory
     if experiment_group:
@@ -161,6 +170,8 @@ def main():
         freeze_backbone=config['model']['freeze_backbone'],
         loss_s=config["model"].get("s", 30.0),
         loss_m=config["model"].get("m", 0.5),
+        use_projection=config['model']['use_projection'],
+        use_forward_features=config['model']['use_forward_features'],
     )
 
     log_wandb_model_info(
@@ -206,9 +217,9 @@ def main():
     # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
-        batch_size=config['training']['batch_size'],
-        shuffle=True,
-        # batch_sampler=custom_batch_sampler,
+        # batch_size=config['training']['batch_size'],
+        # shuffle=True,
+        batch_sampler=custom_batch_sampler,
         num_workers=config['data']['num_workers'],
         pin_memory=True
     )

@@ -5,6 +5,8 @@ emb_dim = 512
 freeze_backbone = true
 s = 30.0
 m = 0.50
+use_projection = true
+use_forward_features = false
 
 [data]
 dataset_name = "jaguar_stage0"

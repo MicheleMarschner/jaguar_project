@@ -4,11 +4,14 @@ __pycache__/
 *.egg-info/
 __MACOSX/
 .env
+3.10
+=3.10
 
 # artifacts 
 checkpoints/
 wandb/
 notebooks/wandb
+logs/
 
 miewid/*.pth
 megadescriptor/*.pth

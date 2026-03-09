@@ -1,23 +1,24 @@
 [model]
-backbone_name = "EVA-02"
+backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
 s = 30.0
 m = 0.50
+use_projection = true
+use_forward_features = false
 
 [split]
 strategy = "closed_set"
-val_split_size = 0.2
+val_split_size = 0.2   #0.2 round_2, 0.05 round_1
 include_duplicates = true
-seed = 51
+seed = 42
 
 [data]
 split_data_path = "splits/default_kaggle/full_split.parquet"
-dataset_name = "jaguar_init"
-use_balanced_sampler = false
-num_workers = 4
-use_fiftyone = false
+dataset_name = "jaguar_stage0"
+use_balanced_sampler = false    # Set to true to handle class imbalance
+num_workers = 32
 
 [curation]
 train_k = 1
@@ -34,26 +35,47 @@ blur_radius = 10
 key_for_seed = "filename"
 
 [training]
-monitor_metric = "mAP"
-save_dir = "checkpoints/round_2/"  
+monitor_metric = "pairwise_AP"
+save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
+# save_dir = "checkpoints/round_1/"  
 experiment_name = "kaggle_base"
 epochs = 30
-batch_size = 32
+batch_size = 16
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
+# ---Fine-tuning Params---
+unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
+unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
 
 [optimizer]
+<<<<<<< HEAD
 type = "Adam"
 lr = 1e-4
+=======
+type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
+lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
+>>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 weight_decay = 1e-3
-momentum = 0.9
-betas = [0.9, 0.999]
+momentum = 0.9          # Only used for SGD
+betas = [0.9, 0.999]    # Only used for Adam/AdamW
+backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
 
 [scheduler]
+<<<<<<< HEAD
 type = "JaguardIdScheduler"
 T_max = 30
 
+=======
+type = "JaguardIdScheduler"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"
+T_max = 30                  # CosineAnnealingLR
+lr_start = 1e-5             # custom 
+lr_min = 9e-6               # Cosine or custom
+lr_max = 1e-3               # Custom or OneCycle
+lr_ramp_ep = 15             # Custom
+lr_sus_ep = 0               # Custom
+lr_decay = 0.8              # Custom
+>>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 
 [augmentation]
 apply_augmentations = true

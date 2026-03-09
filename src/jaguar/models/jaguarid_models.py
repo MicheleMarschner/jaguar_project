@@ -82,15 +82,19 @@ class JaguarIDModel(nn.Module):
         loss_m: float = 0.5,
         use_gem: bool = False,      
         gem_p: float = 3.0,    
-        use_projection: bool = True,     
+        use_projection: bool = True,    
+        use_forward_features: bool = False,  
     ):
         super().__init__()
         self.device = device
         self.head_type = head_type.lower()
+        self.use_forward_features = use_forward_features
+        
         # Initialize GeM if needed
         self.use_gem = use_gem
         if self.use_gem:
             self.gem = GeM(p=gem_p)
+            
         # Load foundation backbone
         self.backbone_wrapper = FoundationModelWrapper(backbone_name, device=device)
         self.backbone = self.backbone_wrapper.model
@@ -106,11 +110,21 @@ class JaguarIDModel(nn.Module):
         input_res = self.backbone_wrapper.input_size # Use the wrapper's config!
         
         with torch.no_grad():
-            # Create dummy input based on actual model requirements
-            dummy = torch.randn(1, 3, input_res, input_res).to(device)      
-            out = self.backbone(dummy)
-            if isinstance(out, (tuple, list)): out = out[0]
-            if out.ndim > 2: out = out.mean(dim=(2, 3))
+            dummy = torch.randn(1, 3, input_res, input_res).to(device)
+            if self.use_forward_features and hasattr(self.backbone, "forward_features"):
+                out = self.backbone.forward_features(dummy)
+                # handle token -> map if necessary
+                if out.ndim == 3:  # [B, N, C] from ViT-like backbones
+                    B, N, C = out.shape
+                    H = W = int(N ** 0.5)
+                    out = out[:, : H * W, :]
+                    out = out.permute(0, 2, 1).reshape(B, C, H, W)
+            else:
+                out = self.backbone(dummy)
+                if isinstance(out, (tuple, list)):
+                    out = out[0]
+            if out.ndim > 2:
+                out = out.mean(dim=(2, 3))
             self.feature_dim = out.shape[1]
 
         # Optionally create a projector (EmbeddingHead)
@@ -128,24 +142,108 @@ class JaguarIDModel(nn.Module):
             self.criterion = ArcFaceLoss(loss_s, loss_m)
         elif self.head_type == "cosface":
             self.head = BaseMarginHead(head_input_dim, num_classes)
-            self.criterion = CosFaceLoss()
+            self.criterion = CosFaceLoss(loss_s, loss_m)
         elif self.head_type == "sphereface":
             self.head = BaseMarginHead(head_input_dim, num_classes)
-            self.criterion = SphereFaceLoss()
+            self.criterion = SphereFaceLoss(loss_s, loss_m)
         elif self.head_type == "softmax":
             self.head = LinearHead(head_input_dim, num_classes)
             self.criterion = nn.CrossEntropyLoss()
         elif self.head_type == "triplet":
             self.head = nn.Identity() # Triplet just uses the neck
-            self.criterion = TripletLoss()
+            self.criterion = TripletLoss(loss_m)
         else:
             raise ValueError(f"Unknown head type: {head_type}")
 
         self.to(device)
+        
+    def unfreeze_backbone_layers(self, num_blocks: int):
+        """
+        Unfreezes the last 'num_blocks' of the backbone.
+        Handles both ViT-style (blocks) and CNN-style (stages/layers) backbones.
+        """
+        if num_blocks <= 0:
+            return
+        #Identify the list of modules to choose from
+        modules_to_unfreeze = []
+      
+        # ViT / EVA / DINO / Swin style
+        if hasattr(self.backbone, "blocks"):
+            modules_to_unfreeze = list(self.backbone.blocks)
+            
+        # ConvNeXt / EfficientNet style
+        elif hasattr(self.backbone, "stages"):
+            for stage in self.backbone.stages:
+                if hasattr(stage, "blocks"):
+                    modules_to_unfreeze.extend(list(stage.blocks))
+                else:
+                    modules_to_unfreeze.append(stage)
+                    
+        # ResNet / MegaDescriptor style
+        elif hasattr(self.backbone, "layer4"):
+            modules_to_unfreeze = list(self.backbone.layer4)
+
+        # Swin Transformer (timm style)
+        elif hasattr(self.backbone, "layers"):
+            for layer in self.backbone.layers:
+                if hasattr(layer, "blocks"):
+                    modules_to_unfreeze.extend(list(layer.blocks))
+                else:
+                    modules_to_unfreeze.append(layer)
+        
+        # EfficientNet (timm)
+        elif hasattr(self.backbone, "blocks"):
+            modules_to_unfreeze = list(self.backbone.blocks)
+                    
+        elif hasattr(self.backbone, "encoder") and hasattr(self.backbone.encoder, "layer4"):
+            modules_to_unfreeze = list(self.backbone.encoder.layer4)
+
+        elif hasattr(self.backbone, "backbone") and hasattr(self.backbone.backbone, "layer4"):
+            modules_to_unfreeze = list(self.backbone.backbone.layer4)
+        
+        # Fallback
+        else:
+            for name, module in self.backbone.named_modules():
+                if isinstance(module, nn.Sequential):
+                    modules_to_unfreeze.extend(list(module))
+
+        if not modules_to_unfreeze:
+            print("[Warning] Could not detect block structure. Unfreezing entire backbone.")
+            for p in self.backbone.parameters():
+                p.requires_grad = True
+            return
+        
+        # Unfreeze last n modules
+        num_to_unfreeze = min(num_blocks, len(modules_to_unfreeze))
+        target_modules = modules_to_unfreeze[-num_to_unfreeze:]
+        for mod in target_modules:
+            for p in mod.parameters():
+                p.requires_grad = True
+        
+        print(f"[JaguarID] Unfroze the last {num_to_unfreeze} blocks of the backbone.")
+    
+    def _extract_features(self, x):
+        """Handles backbone feature extraction with optional forward_features."""
+        if self.use_forward_features and hasattr(self.backbone, "forward_features"):
+            features = self.backbone.forward_features(x)
+            # Handle ViT-style token -> spatial map
+            if features.ndim == 3:  # [B, N, C]
+                B, N, C = features.shape
+                H = W = int(N ** 0.5)
+                features = features[:, : H * W, :]
+                features = features.permute(0, 2, 1).reshape(B, C, H, W)
+        else:
+            features = self.backbone(x)
+            if isinstance(features, (tuple, list)):
+                features = features[0]
+                
+        # if self.head_type == "triplet":
+        #     features.requires_grad_(True)
+        return features
     
     def get_embeddings(self, x):
         """Utility method to extract normalized embeddings for ReID evaluation."""
-        features = self.backbone(x)
+        features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
@@ -153,8 +251,7 @@ class JaguarIDModel(nn.Module):
                 features = self.gem(features).flatten(1)
             else:
                 features = features.mean(dim=(2, 3))
-
-        # Pass through the learned projection neck or a batch normalization layer
+        # Pass through the learned projection neck; otherwise through a batch normalization layer
         embeddings = self.neck(features)
         if not self.use_projection:
             embeddings = self.bn(embeddings)
@@ -180,8 +277,7 @@ class JaguarIDModel(nn.Module):
         return emb
 
     def forward(self, x, labels=None):
-        features = self.backbone(x)
-
+        features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]
         if features.ndim > 2:
@@ -189,18 +285,23 @@ class JaguarIDModel(nn.Module):
                 features = self.gem(features).flatten(1)
             else:
                 features = features.mean(dim=(2, 3))
-            
-        # Pass through neck or a batch normalization layer
+        # Pass through the learned projection neck; otherwise through a batch normalization layer
         embeddings = self.neck(features)
         if not self.use_projection:
             embeddings = self.bn(embeddings)
 
         # Triplet case (returns embeddings)
         if self.head_type == "triplet":
-            return F.normalize(embeddings, dim=1)
+            # return F.normalize(embeddings, dim=1)
+            embeddings = F.normalize(embeddings, dim=1) # For ArcFace/CosFace/SphereFace, normalization is done inside the head; for Triplet we do it here
+            if labels is not None:
+                loss = self.criterion(embeddings, labels)
+                return loss, embeddings
+
+            return embeddings
+        
         # Classification heads
         logits = self.head(embeddings)
-
         if labels is not None:
             if self.head_type in ["arcface", "cosface", "sphereface"]:
                 loss, scaled_logits = self.criterion(logits, labels)

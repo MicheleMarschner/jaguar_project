@@ -18,7 +18,7 @@ seed = 42
 split_data_path = "splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
-num_workers = 32
+num_workers = 4
 
 [curation]
 train_k = 1
@@ -36,11 +36,11 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-# save_dir = "checkpoints/round_1/"  
+save_dir = "checkpoints/round_2/" 
+# save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
 epochs = 30
-batch_size = 16
+batch_size = 32
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
@@ -49,24 +49,14 @@ unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if
 unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
 
 [optimizer]
-<<<<<<< HEAD
-type = "Adam"
-lr = 1e-4
-=======
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
 lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
->>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 weight_decay = 1e-3
 momentum = 0.9          # Only used for SGD
 betas = [0.9, 0.999]    # Only used for Adam/AdamW
 backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
 
 [scheduler]
-<<<<<<< HEAD
-type = "JaguardIdScheduler"
-T_max = 30
-
-=======
 type = "JaguardIdScheduler"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"
 T_max = 30                  # CosineAnnealingLR
 lr_start = 1e-5             # custom 
@@ -75,7 +65,6 @@ lr_max = 1e-3               # Custom or OneCycle
 lr_ramp_ep = 15             # Custom
 lr_sus_ep = 0               # Custom
 lr_decay = 0.8              # Custom
->>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 
 [augmentation]
 apply_augmentations = true

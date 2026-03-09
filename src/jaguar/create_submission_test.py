@@ -65,15 +65,15 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/EVA-02/round_eva_baseline_no_bs_vs_005_pairwiseAP_finetuningbackbone_noproj_fwdfeat/best_model.pth"
-    TEST_CSV_PATH = "/home/vanessa/Documents/repos/jaguar_project/data/round_1/raw/jaguar-re-id/test.csv"
+    CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_backbone/backbone_miew_id/best_model.pth"
+    TEST_CSV_PATH = "/fast/AG_Kainmueller/data/jaguar_project/data/round_2/raw/jaguar-re-id/test.csv"
 
-    BACKBONE_NAME = "EVA-02"
+    BACKBONE_NAME = "MiewID"
     EMB_DIM = 1024
     NUM_CLASSES = 31
     BATCH_SIZE = 32
-    USE_PROJECTION = False
-    USE_FORWARD_FEATURES = True
+    USE_PROJECTION = True
+    USE_FORWARD_FEATURES = False
 
     print(f"Loading model from {CHECKPOINT_PATH}...")
 

@@ -1,5 +1,5 @@
 [model]
-backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
+backbone_name = "MiewID"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
 head_type = "arcface"
 emb_dim = 1024
 freeze_backbone = true
@@ -10,7 +10,7 @@ use_forward_features = false
 
 [split]
 strategy = "closed_set"
-val_split_size = 0.2   #0.2 round_2, 0.05 round_1
+val_split_size = 0.05   #0.2 round_2, 0.05 round_1
 include_duplicates = true
 seed = 42
 

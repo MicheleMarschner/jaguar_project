@@ -9,7 +9,12 @@ import pandas as pd
 from tqdm import tqdm
 import uuid
 import imagehash
-import fiftyone as fo
+try:
+    import fiftyone as fo
+    HAS_FIFTYONE = True
+except ImportError:
+    fo = None
+    HAS_FIFTYONE = False
 
 from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, ROUND, USE_FIFTYONE
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
@@ -19,6 +24,10 @@ from jaguar.utils.utils_burst_discovery import (
     build_meta_from_jaguar_dataset, 
     load_or_create_meta_img_file, 
 )
+
+def _require_fiftyone() -> None:
+    if not HAS_FIFTYONE:
+        raise ImportError("FiftyOne is not installed or not usable in this environment.")
 
 
 # Current candidate-generation strategy:
@@ -359,6 +368,7 @@ def run_burst_grouping_from_precomputed_candidates(
 # ============================================================
 
 def _ensure_sample_field_type(dataset, field_name: str, field_cls):
+    _require_fiftyone()
     schema = dataset.get_field_schema()
     if field_name in schema and not isinstance(schema[field_name], field_cls):
         dataset.delete_sample_field(field_name)
@@ -370,6 +380,7 @@ def _series_nan_to_none(s: pd.Series) -> pd.Series:
     return s.where(s.notna(), None)
 
 def set_values_typed(dataset, view, df: pd.DataFrame, field_name: str, field_cls) -> None:
+    _require_fiftyone()
     s = df[field_name].astype("object").copy()
     def _is_missing(x): return pd.isna(x)
 
@@ -398,6 +409,7 @@ def apply_burst_groups_to_fiftyone(
     """
     Mirrors dedup assignments into FiftyOne fields/tags for visual QA and manual inspection.
     """
+    _require_fiftyone()
     df = meta_assignments.copy()
     df[filename_col] = df[filename_col].astype(str)
     view_all = dataset.select_by(filename_col, df[filename_col].tolist())
@@ -661,11 +673,13 @@ def discover_bursts(
     )
 
     # 8. EXPORT TO FIFTYONE
-    apply_burst_groups_to_fiftyone(
-        fo_wrapper.get_dataset(),
-        pd.read_parquet(final_dir / "burst_assignments.parquet"),
-    )
-    export_dir = DATA_STORE.write_root / "fiftyone" / "burst"
-    fo_wrapper.export_manifest(export_dir)
-    rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
-    print("\n[Done] Identifying and Grouping Bursts Complete.")
+    if USE_FIFTYONE:
+        apply_burst_groups_to_fiftyone(
+            fo_wrapper.get_dataset(),
+            pd.read_parquet(final_dir / "burst_assignments.parquet"),
+        )
+        export_dir = DATA_STORE.write_root / "fiftyone" / "burst"
+        fo_wrapper.export_manifest(export_dir)
+        rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
+    else:
+        print("[Burst] USE_FIFTYONE=False -> skipping FiftyOne sync/export")

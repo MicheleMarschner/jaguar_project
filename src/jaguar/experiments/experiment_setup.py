@@ -4,8 +4,6 @@ from typing import Any
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND
 from jaguar.main import deep_update, load_toml_config
-from jaguar.preprocessing.burst_discovery import discover_bursts
-from jaguar.preprocessing.split_and_curate import create_splits_and_curate
 from jaguar.utils.utils_setup import build_habitat_backgrounds, build_split_stem, get_burst_paths, get_split_paths
 from jaguar.utils.utils import ensure_dir, ensure_dirs, read_json_if_exists, resolve_path
 from jaguar.utils.utils_setup import init_fiftyone_dataset
@@ -205,6 +203,7 @@ def ensure_burst_artifacts(
     seed: int = 51,
     phash_size: int = 8,
 ):
+    from jaguar.preprocessing.burst_discovery import discover_bursts
     bursts_root = get_burst_paths()["write_root"]
 
     for cfg_path in bursts_root.rglob("config.json"):
@@ -262,6 +261,7 @@ def ensure_split_artifacts(
     val_split_size: float,
     seed: int,
 ) -> Path:
+    from jaguar.preprocessing.split_and_curate import create_splits_and_curate
     paths = get_split_paths(
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,

@@ -24,7 +24,7 @@ from collections import defaultdict, Counter
 from PIL import Image
  
 
-from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset, HAS_FIFTYONE
+from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD
 

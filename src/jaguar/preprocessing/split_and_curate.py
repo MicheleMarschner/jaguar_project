@@ -55,7 +55,12 @@ import networkx as nx
 from tqdm import tqdm
 from sklearn.metrics.pairwise import cosine_similarity
 import imagehash
-import fiftyone as fo
+try:
+    import fiftyone as fo
+    HAS_FIFTYONE = True
+except ImportError:
+    fo = None
+    HAS_FIFTYONE = False
 
 from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, USE_FIFTYONE
 from jaguar.models.foundation_models import FoundationModelWrapper
@@ -67,6 +72,11 @@ from jaguar.utils.utils_split_and_curate import (
     summarize_splits,
     
 )
+
+
+def _require_fiftyone() -> None:
+    if not HAS_FIFTYONE:
+        raise ImportError("FiftyOne is not installed or not usable in this environment.")
 
 # ============================================================
 # Splitting Strategies
@@ -333,6 +343,7 @@ def apply_post_split_curation(
 # ============================================================
 
 def _ensure_sample_field_type(dataset, field_name: str, field_cls):
+    _require_fiftyone()
     schema = dataset.get_field_schema()
     if field_name in schema and not isinstance(schema[field_name], field_cls):
         dataset.delete_sample_field(field_name)
@@ -341,6 +352,7 @@ def _ensure_sample_field_type(dataset, field_name: str, field_cls):
         dataset.add_sample_field(field_name, field_cls)
 
 def set_values_typed(dataset, view, df: pd.DataFrame, field_name: str, field_cls) -> None:
+    _require_fiftyone()
     s = df[field_name].astype("object").copy()
     def _is_missing(x): return pd.isna(x)
 
@@ -367,6 +379,7 @@ def apply_curation_assignments_to_fiftyone(
     dup_tag: str = "curation_duplicate",
     rep_train_tag: str = "curation_rep_train",
 ):
+    _require_fiftyone()
     df = final_df.copy()
     df[filepath_col] = df[filepath_col].astype(str)
 
@@ -589,10 +602,13 @@ def create_splits_and_curate(
     print(f"\nDone. Artifacts saved to {out_root}")
     
     # Change in FiftyOne and export
-    apply_curation_assignments_to_fiftyone(
-        dataset=fo_wrapper.get_dataset(),
-        final_df=final_df,
-    )
-    print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
-    fo_wrapper.export_manifest(export_dir)
-    rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
+    if USE_FIFTYONE:
+        apply_curation_assignments_to_fiftyone(
+            dataset=fo_wrapper.get_dataset(),
+            final_df=final_df,
+        )
+        print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
+        fo_wrapper.export_manifest(export_dir)
+        rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
+    else:
+        print("[Split] USE_FIFTYONE=False -> skipping FiftyOne sync/export")

@@ -146,16 +146,16 @@ class JaguarIDModel(nn.Module):
             self.criterion = ArcFaceLoss(loss_s, loss_m)
         elif self.head_type == "cosface":
             self.head = BaseMarginHead(head_input_dim, num_classes)
-            self.criterion = CosFaceLoss()
+            self.criterion = CosFaceLoss(loss_s, loss_m)
         elif self.head_type == "sphereface":
             self.head = BaseMarginHead(head_input_dim, num_classes)
-            self.criterion = SphereFaceLoss()
+            self.criterion = SphereFaceLoss(loss_s, loss_m)
         elif self.head_type == "softmax":
             self.head = LinearHead(head_input_dim, num_classes)
             self.criterion = nn.CrossEntropyLoss()
         elif self.head_type == "triplet":
             self.head = nn.Identity() # Triplet just uses the neck
-            self.criterion = TripletLoss()
+            self.criterion = TripletLoss(loss_m)
         else:
             raise ValueError(f"Unknown head type: {head_type}")
 
@@ -240,6 +240,9 @@ class JaguarIDModel(nn.Module):
             features = self.backbone(x)
             if isinstance(features, (tuple, list)):
                 features = features[0]
+                
+        # if self.head_type == "triplet":
+        #     features.requires_grad_(True)
         return features
     
     def get_embeddings(self, x):

@@ -225,9 +225,9 @@ def main():
     # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
-        batch_size=config['training']['batch_size'],
-        shuffle=True,
-        # batch_sampler=custom_batch_sampler,
+        # batch_size=config['training']['batch_size'],
+        # shuffle=True,
+        batch_sampler=custom_batch_sampler,
         num_workers=config['data']['num_workers'],
         pin_memory=True
     )

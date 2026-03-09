@@ -120,9 +120,9 @@ class TripletLoss(nn.Module):
     Batch-hard Triplet Loss for ReID, robust to small numbers of positives.
     Works directly with (embeddings, labels) instead of explicit anchor/pos/neg.
     """
-    def __init__(self, margin: float = 0.3):
+    def __init__(self, m: float = 0.3):
         super().__init__()
-        self.margin = margin
+        self.margin = m
 
     def forward(self, embeddings: torch.Tensor, labels: torch.Tensor):
         """
@@ -135,7 +135,7 @@ class TripletLoss(nn.Module):
         # masks for positives/negatives
         labels = labels.unsqueeze(1)
         mask_pos = labels.eq(labels.t())   # (B,B) same identity
-        mask_neg = ~mask_pos               # (B,B) different identity
+        mask_neg = ~mask_pos               # (B,B) different identity; we don't really need the neg one with the max_dist trick
 
         # remove self-comparisons
         mask_pos.fill_diagonal_(False)
@@ -154,5 +154,4 @@ class TripletLoss(nn.Module):
 
         # compute triplet loss
         loss = F.relu(hardest_pos - hardest_neg + self.margin)
-
         return loss.mean()

@@ -3,6 +3,7 @@ experiment_name = "loss_triplet"
 
 [model]
 head_type = "triplet"
+m = 0.5
 
 [output]
 profile = "loss"

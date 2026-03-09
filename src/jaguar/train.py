@@ -178,7 +178,7 @@ class JaguarTrainer:
     def train_epoch(self, epoch):
         # Check if it's time to unfreeze part of the backbone
         unfreeze_ep = self.config['training'].get('unfreeze_epoch', 0)
-        if unfreeze_ep > 0 and epoch == unfreeze_ep:
+        if (unfreeze_ep > 0 and epoch == unfreeze_ep and self.model.head_type != "triplet"): # or self.model.head_type == "triplet":  # For triplet loss, we want the backbone to be trainable from the start
             num_blocks = self.config['training'].get('unfreeze_blocks', 2)
             print(f"\n[Trainer] Triggering Backbone Fine-tuning at epoch {epoch}")
             self.model.unfreeze_backbone_layers(num_blocks)

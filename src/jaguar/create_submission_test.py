@@ -65,13 +65,15 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/megadescriptor/round_eva_baseline_no_bs_vs_01_epoch_19.pth"
-    TEST_CSV_PATH = "/home/vanessa/Documents/repos/jaguar_project/data/round_1/raw/jaguar-re-id/test.csv"
+    CHECKPOINT_PATH = PATHS.checkpoints / "kaggle_deduplication/best_model.pth"
+    TEST_CSV_PATH = PATHS.data / "jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"
     EMB_DIM = 1024
     NUM_CLASSES = 31
-    BATCH_SIZE = 32
+    BATCH_SIZE = 16
+    USE_PROJECTION = True
+    USE_FORWARD_FEATURES = False
 
     print(f"Loading model from {CHECKPOINT_PATH}...")
 
@@ -129,7 +131,7 @@ def generate_submission():
         test_ds,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=2,
+        num_workers=1,
         pin_memory=True
     )
 

@@ -21,12 +21,10 @@ dependencies = [
   "torchvision==0.24.0",
   "pillow==11.3.0",
   "wandb==0.23.1",
+  "opencv-python-headless>=4.10,<4.11",
   "python-dotenv==1.2.1",
-  "fiftyone>=1.13.2",
-  "grad-cam==1.5.5",
   "transformers==4.39.3", # "transformers==4.51.0",
   "timm",
-  "quantus==0.6.0",
   "pyarrow==23.0.1",
   "ImageHash",
   "seaborn==0.13.2",
@@ -36,14 +34,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest >=8.3.3", 
-]
-
-cluster = [
-  "opencv-python-headless>=4.10,<4.11",
-]
-
-local = [
-  "opencv-python>=4.10,<4.11",
 ]
 
 [tool.setuptools]

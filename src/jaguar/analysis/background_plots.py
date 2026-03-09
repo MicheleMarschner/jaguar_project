@@ -2,7 +2,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from jaguar.config import DATA_STORE, PATHS
+from jaguar.config import DATA_STORE, PATHS, USE_FIFTYONE
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
@@ -100,6 +100,7 @@ if __name__ == "__main__":
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
+        use_fiftyone=USE_FIFTYONE
     )
 
     show_jaguar_images_with_backgrounds(

@@ -19,7 +19,7 @@ from collections import defaultdict, Counter
 from PIL import Image
  
 
-from jaguar.datasets.FiftyOneDataset import FODataset
+from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset, HAS_FIFTYONE
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD
 
@@ -350,6 +350,7 @@ def load_full_jaguar_from_FO_export(
     transform=None,
     processing_fn=None,
     overwrite_db=False,
+    use_fiftyone: bool = True,
 ):
     """
     Load the full Jaguar dataset from a FiftyOne export manifest.
@@ -359,14 +360,17 @@ def load_full_jaguar_from_FO_export(
     """
     manifest_dir = Path(manifest_dir)
 
-    if dataset_name in fo.list_datasets() and not overwrite_db:
-        fo_ds = FODataset(dataset_name, overwrite=False)
+    if use_fiftyone and HAS_FIFTYONE:
+        if dataset_name in fo.list_datasets() and not overwrite_db:
+            aux_ds = FODataset(dataset_name, overwrite=False)
+        else:
+            aux_ds = FODataset.load_manifest(
+                export_dir=manifest_dir,
+                dataset_name=dataset_name,
+                overwrite_db=overwrite_db,
+            )
     else:
-        fo_ds = FODataset.load_manifest(
-            export_dir=manifest_dir,
-            dataset_name=dataset_name,
-            overwrite_db=overwrite_db,
-        )
+        aux_ds = ManifestDataset(manifest_dir)
 
     torch_ds = JaguarDataset(
         base_root=manifest_dir,
@@ -378,7 +382,7 @@ def load_full_jaguar_from_FO_export(
         include_duplicates=True,
     )
 
-    return fo_ds, torch_ds
+    return aux_ds, torch_ds
 
 
 def load_split_jaguar_from_FO_export(
@@ -390,6 +394,7 @@ def load_split_jaguar_from_FO_export(
     overwrite_db=False,
     include_duplicates=False,
     parquet_path: str = None,
+    use_fiftyone: bool = True,
 ):
     """
     Load pre-split Jaguar train/val datasets from a FiftyOne export manifest
@@ -397,14 +402,17 @@ def load_split_jaguar_from_FO_export(
     """
     manifest_dir = Path(manifest_dir)
 
-    if dataset_name in fo.list_datasets() and not overwrite_db:
-        fo_ds = FODataset(dataset_name, overwrite=False)
+    if use_fiftyone and HAS_FIFTYONE:
+        if dataset_name in fo.list_datasets() and not overwrite_db:
+            aux_ds = FODataset(dataset_name, overwrite=False)
+        else:
+            aux_ds = FODataset.load_manifest(
+                export_dir=manifest_dir,
+                dataset_name=dataset_name,
+                overwrite_db=overwrite_db,
+            )
     else:
-        fo_ds = FODataset.load_manifest(
-            export_dir=manifest_dir,
-            dataset_name=dataset_name,
-            overwrite_db=overwrite_db,
-        )
+        aux_ds = ManifestDataset(manifest_dir)
 
     torch_ds_train = JaguarDataset(
         base_root=manifest_dir,
@@ -426,7 +434,7 @@ def load_split_jaguar_from_FO_export(
         include_duplicates=include_duplicates,
     )
 
-    return fo_ds, torch_ds_train, torch_ds_val
+    return aux_ds, torch_ds_train, torch_ds_val
 
 """
 def load_jaguar_from_FO_export(

@@ -11,7 +11,7 @@ from typing import Any, Optional, Sequence
 
 from jaguar.utils.utils import denormalize_image, ensure_dir, resolve_path, tensor_img_to_hwc01
 from jaguar.utils.utils_xai import normalize_heatmap
-from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, USE_FIFTYONE
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 sns.set_theme(style="whitegrid", palette="muted")
@@ -524,6 +524,7 @@ if __name__ == "__main__":
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
+        use_fiftyone=USE_FIFTYONE
     )
 
     # show first 3 rows from saved file

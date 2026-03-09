@@ -17,6 +17,7 @@ split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_spli
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false
 num_workers = 0
+use_fiftyone = false
 
 [curation]
 train_k = 1

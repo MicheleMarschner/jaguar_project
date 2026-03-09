@@ -7,7 +7,12 @@ import shutil
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
-import fiftyone as fo
+try:
+    import fiftyone as fo
+    HAS_FIFTYONE = True
+except ImportError:
+    fo = None
+    HAS_FIFTYONE = False
 from PIL import Image
 
 
@@ -15,6 +20,13 @@ from PIL import Image
 # Minimal builder assumption
 # ----------------------------
 FNAME_RE = re.compile(r"^(train|test)_(\d+)\.(png|jpg|jpeg|webp)$", re.IGNORECASE)
+
+def _require_fiftyone() -> None:
+    if not HAS_FIFTYONE:
+        raise ImportError(
+            "FiftyOne is not installed. Use manifest-only loading on cluster "
+            "or install FiftyOne locally."
+        )
 
 
 class FODataset:
@@ -27,6 +39,8 @@ class FODataset:
     """
 
     def __init__(self, dataset_name: str, overwrite: bool = False, persistent: bool = True):
+        _require_fiftyone()
+        
         self.dataset_name = dataset_name
 
         if dataset_name in fo.list_datasets():
@@ -59,6 +73,7 @@ class FODataset:
         metadata: Optional[Dict] = None,
         detections: Optional[List[Dict]] = None,
     ) -> fo.Sample:
+        _require_fiftyone()
         abs_path = str(Path(filepath).absolute())
         sample = fo.Sample(filepath=abs_path)
 
@@ -107,6 +122,7 @@ class FODataset:
         export_dir: Union[str, Path],
         label_field: str = "ground_truth",
     ) -> Path:
+        _require_fiftyone()
         export_root = Path(export_dir)
         export_root.mkdir(parents=True, exist_ok=True)
 
@@ -129,6 +145,7 @@ class FODataset:
         overwrite_db: bool = False,
         persistent: bool = True,
     ) -> "FODataset":
+        _require_fiftyone()
         export_dir = Path(export_dir)
         if not cls._manifest_exists(export_dir):
             raise FileNotFoundError(f"Manifest missing in: {export_dir}")
@@ -148,6 +165,7 @@ class FODataset:
     # App
     # ----------------------------
     def launch(self):
+        _require_fiftyone()
         return fo.launch_app(self.dataset, auto=False)
 
 
@@ -199,6 +217,7 @@ def build_from_raw_filename_ids(
     test_dir: Union[str, Path],
     overwrite_db: bool = True,
 ) -> FODataset:
+    _require_fiftyone()
     train_dir = Path(train_dir)
     test_dir = Path(test_dir)
 
@@ -251,9 +270,11 @@ def get_or_create_manifest_dataset(
     build_fn: Callable[[], FODataset],
     overwrite_load: bool = False,
 ) -> FODataset:
+    _require_fiftyone()
     manifest_dir = Path(manifest_dir)
 
     if manifest_exists(manifest_dir):
+        print(f"[FO] Loading manifest from {manifest_dir}")
         return FODataset.load_manifest(
             export_dir=manifest_dir,
             dataset_name=dataset_name,
@@ -266,3 +287,26 @@ def get_or_create_manifest_dataset(
     print(f"[FO] Exporting manifest to {manifest_dir} (no media copy)")
     fo_ds.export_manifest(manifest_dir)
     return fo_ds
+
+
+
+class ManifestDataset:
+    """Lightweight manifest-only dataset wrapper without FiftyOne dependency."""
+
+    def __init__(self, manifest_dir: Union[str, Path]):
+        manifest_dir = Path(manifest_dir)
+        fp = manifest_dir / "samples.json"
+        if not fp.exists():
+            raise FileNotFoundError(f"Missing samples.json in: {manifest_dir}")
+
+        with fp.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        self.manifest_dir = manifest_dir
+        self.samples = data["samples"] if isinstance(data, dict) and "samples" in data else data
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def get_samples(self):
+        return self.samples

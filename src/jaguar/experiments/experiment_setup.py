@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from jaguar.analysis.eda import run_eda
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND
 from jaguar.main import deep_update, load_toml_config
 from jaguar.preprocessing.burst_discovery import discover_bursts
@@ -129,6 +128,7 @@ def ensure_background_pool():
 
 
 def run_initial_eda():
+    from jaguar.analysis.eda import run_eda
     print("[SETUP] run_initial_eda")
 
     ## check if folder exists

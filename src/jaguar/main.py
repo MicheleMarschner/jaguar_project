@@ -134,6 +134,7 @@ def main():
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"]
     )
 
     # Calculate Identities

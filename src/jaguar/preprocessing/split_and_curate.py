@@ -57,7 +57,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import imagehash
 import fiftyone as fo
 
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS
+from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, USE_FIFTYONE
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_full_jaguar_from_FO_export, load_or_extract_embeddings
 from jaguar.utils.utils_split_and_curate import (
@@ -495,7 +495,11 @@ def create_splits_and_curate(
     
     # Load Data
     print(f"Loading {fo_dataset_name}...")
-    fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(manifest_dir, dataset_name=fo_dataset_name)
+    fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(
+        manifest_dir, 
+        dataset_name=fo_dataset_name,
+        use_fiftyone=USE_FIFTYONE
+    )
     
     # Load Embeddings
     model_name = "MegaDescriptor-L"

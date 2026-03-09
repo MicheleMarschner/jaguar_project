@@ -6,8 +6,6 @@ from pathlib import Path
 import torch
 import os
 
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/"
-
 def get_device(prefer_name: str | None = None):
     """
     Select a GPU intelligently:
@@ -67,11 +65,6 @@ def is_kaggle() -> bool:
         return True
     return False
 
-def is_hpc() -> bool:
-    if Path("/fast/AG_Kainmueller/data").exists():
-        return True
-    return False
-
 def find_project_root(start: Path) -> Path:
     """
     Robust project root detection: walk upward until we find pyproject.toml or configs/.
@@ -112,24 +105,17 @@ class ArtifactStore:
 HPC_ROOT = Path("/fast/AG_Kainmueller/data/jaguar_project").resolve()
 PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
-IN_HPC = is_hpc()
 IN_COLAB = is_colab()
 IN_KAGGLE = is_kaggle()
-<<<<<<< HEAD
 ROUND = "round_2"
-=======
-ROUND = "round_2" # Options: "round_1", "round_2"
->>>>>>> 10c350b587e55586b63eb1b614594895c28e4318
 
-DATA_PATH = HPC_ROOT if IN_HPC else PROJECT_ROOT
+DATA_PATH = PROJECT_ROOT
 DATA_ROOT = Path(
     os.environ.get("JAGUAR_DATA_ROOT", str(DATA_PATH / f"data/{ROUND}"))
 ).resolve()
 
 if IN_KAGGLE and "JAGUAR_WORK_ROOT" not in os.environ:
     WORK_ROOT = Path("/kaggle/working").resolve()
-elif IN_HPC and "JAGUAR_WORK_ROOT" not in os.environ:
-    WORK_ROOT = HPC_ROOT 
 else:
     WORK_ROOT = Path(os.environ.get("JAGUAR_WORK_ROOT", str(PROJECT_ROOT))).resolve()
 

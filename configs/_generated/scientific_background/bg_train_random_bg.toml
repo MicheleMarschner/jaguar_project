@@ -1,0 +1,13 @@
+[training]
+experiment_name = "bg_train_random_bg"
+
+[preprocessing]
+train_background = "random_bg"
+val_background = "blur_bg"
+
+[output]
+profile = "background"
+experiment_group = "scientific_background"
+
+[data]
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"

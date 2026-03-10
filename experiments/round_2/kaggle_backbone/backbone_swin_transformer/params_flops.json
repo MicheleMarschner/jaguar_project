@@ -1,0 +1,8 @@
+{
+  "backbone_name": "Swin-Transformer",
+  "head_type": "arcface",
+  "total_params": 88827040,
+  "trainable_params": 5254144,
+  "input_size": 224,
+  "flops": null
+}

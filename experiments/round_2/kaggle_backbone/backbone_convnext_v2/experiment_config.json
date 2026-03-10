@@ -1,0 +1,102 @@
+{
+  "model": {
+    "backbone_name": "ConvNeXt-V2",
+    "head_type": "arcface",
+    "emb_dim": 1024,
+    "freeze_backbone": true,
+    "s": 30.0,
+    "m": 0.5,
+    "use_projection": true,
+    "use_forward_features": false
+  },
+  "split": {
+    "strategy": "closed_set",
+    "val_split_size": 0.05,
+    "include_duplicates": true,
+    "seed": 42
+  },
+  "data": {
+    "split_data_path": "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet",
+    "dataset_name": "jaguar_stage0",
+    "use_balanced_sampler": true,
+    "num_workers": 4,
+    "use_fiftyone": false
+  },
+  "curation": {
+    "train_k": 1,
+    "val_k": 50,
+    "phash_threshold": 4
+  },
+  "preprocessing": {
+    "train_background": "original",
+    "val_background": "original",
+    "bg_dir": "data/round_2/backgrounds",
+    "p_original": 0.5,
+    "edge_softness": 2,
+    "blur_radius": 10,
+    "key_for_seed": "filename"
+  },
+  "training": {
+    "monitor_metric": "pairwise_AP",
+    "save_dir": "checkpoints/round_2/kaggle_backbone/backbone_convnext_v2",
+    "experiment_name": "backbone_convnext_v2",
+    "epochs": 30,
+    "batch_size": 32,
+    "seed": 42,
+    "early_stopping": true,
+    "early_stopping_patience": 5,
+    "unfreeze_epoch": 5,
+    "unfreeze_blocks": 2
+  },
+  "optimizer": {
+    "type": "Adam",
+    "lr": 1e-05,
+    "weight_decay": 0.001,
+    "momentum": 0.9,
+    "betas": [
+      0.9,
+      0.999
+    ],
+    "backbone_lr": 2e-06
+  },
+  "scheduler": {
+    "type": "JaguardIdScheduler",
+    "T_max": 30,
+    "lr_start": 1e-05,
+    "lr_min": 9e-06,
+    "lr_max": 0.001,
+    "lr_ramp_ep": 15,
+    "lr_sus_ep": 0,
+    "lr_decay": 0.8
+  },
+  "augmentation": {
+    "apply_augmentations": true,
+    "horizontal_flip": true,
+    "affine_degrees": 0,
+    "affine_translate": [
+      0.0,
+      0.0
+    ],
+    "affine_scale": [
+      1.0,
+      1.0
+    ],
+    "color_jitter_brightness": 0.1,
+    "color_jitter_contrast": 0.1,
+    "random_erasing_p": 0.25
+  },
+  "progressive_resizing": {
+    "enabled": false,
+    "sizes": [],
+    "stage_epochs": []
+  },
+  "logging": {
+    "enabled": true,
+    "project": "jaguar-reid-SpotItLikeItsHot",
+    "mode": "online"
+  },
+  "output": {
+    "profile": "backbone",
+    "experiment_group": "kaggle_backbone"
+  }
+}

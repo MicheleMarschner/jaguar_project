@@ -7,7 +7,6 @@ after each model is trained, extract embeddings for the relevant images, normali
 
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
-
 import os
 from pathlib import Path
 from typing import Sequence
@@ -25,6 +24,47 @@ from torch.utils.data import DataLoader
 
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
+
+
+
+from pathlib import Path
+import numpy as np
+
+
+def get_embedding_cache_path(config, member_name: str, split_name: str) -> Path:
+    ensemble_name = config["ensemble"]["name"]
+    cache_dir = PATHS.runs / "ensemble_cache" / ensemble_name / member_name
+    ensure_dir(cache_dir)
+    return cache_dir / f"{split_name}_embeddings.npy"
+
+
+def load_or_extract_embeddings_cached(
+    model,
+    dataloader,
+    config,
+    member_name: str,
+    split_name: str,
+):
+    cache_path = get_embedding_cache_path(config, member_name, split_name)
+
+    if cache_path.exists():
+        print(f"[Cache] Loading embeddings from {cache_path}")
+        emb = np.load(cache_path)
+        print(f"[Cache] Loaded shape: {emb.shape}")
+        return emb
+
+    emb = extract_embeddings(
+        model=model,
+        dataloader=dataloader,
+        use_tta=config["inference"]["use_tta"],
+    )
+
+    np.save(cache_path, emb)
+    print(f"[Cache] Saved embeddings to {cache_path}")
+    return emb
+
+
+
 
 
 def evaluate_query_gallery_retrieval(
@@ -545,16 +585,20 @@ def create_simple_ensemble(config, save_dir):
             pin_memory=True,
         )
 
-        query_embeddings = extract_embeddings(
+        query_embeddings = load_or_extract_embeddings_cached(
             model=model,
             dataloader=val_loader,
-            use_tta=config["inference"]["use_tta"],
+            config=config,
+            member_name=member["name"],
+            split_name="val",
         )
 
-        train_embeddings = extract_embeddings(
+        train_embeddings = load_or_extract_embeddings_cached(
             model=model,
             dataloader=train_loader,
-            use_tta=config["inference"]["use_tta"],
+            config=config,
+            member_name=member["name"],
+            split_name="train",
         )
 
         gallery_embeddings = np.concatenate([train_embeddings, query_embeddings], axis=0)

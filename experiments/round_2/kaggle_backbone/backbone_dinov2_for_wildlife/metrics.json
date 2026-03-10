@@ -1,0 +1,21 @@
+{
+  "experiment_name": "backbone_dinov2_for_wildlife",
+  "best_epoch": 1,
+  "monitor_metric": "pairwise_AP",
+  "best_score": 0.12661778771809581,
+  "metrics": {
+    "id_balanced_mAP": 0.057008075114275004,
+    "mAP": 0.057008075114275004,
+    "pairwise_AP": 0.12661778771809581,
+    "rank1": 0.1619047619047619,
+    "rank5": 0.41904761904761906,
+    "nDCG@10": 0.6014298362747831,
+    "recall@5": 0.41904761904761906,
+    "pos_sim": 0.34283915162086487,
+    "neg_sim": 0.348450243473053,
+    "sim_gap": -0.00561109185218811,
+    "intra_dist": 1.0483934879302979,
+    "inter_dist": 1.0558415651321411,
+    "dist_gap": 0.007448077201843262
+  }
+}

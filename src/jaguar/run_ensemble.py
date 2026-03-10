@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 
 
+
+
 def top1_is_correct(sim_matrix: np.ndarray, labels: np.ndarray) -> np.ndarray:
     """
     Returns a boolean array of shape [N]:
@@ -272,6 +274,7 @@ class ReIDRectEvalBundle:
         self.sim_matrix = np.asarray(sim_matrix, dtype=np.float64).copy()
         self.query_labels = np.asarray(query_labels)
         self.gallery_labels = np.asarray(gallery_labels)
+        self.self_in_gallery_offset = self_in_gallery_offset
 
         # if gallery = train + val, the query itself sits in the val tail
         if self_in_gallery_offset is not None:
@@ -308,8 +311,18 @@ class ReIDRectEvalBundle:
 
         for i in range(len(self.query_labels)):
             for j in range(len(self.gallery_labels)):
+                # skip the query's own copy inside gallery = train + val
+                if self.self_in_gallery_offset is not None and j == self.self_in_gallery_offset + i:
+                    continue
+
+                score = float(self.sim_matrix[i, j])
+
+                # extra safety: skip non-finite values
+                if not np.isfinite(score):
+                    continue
+
                 y_true.append(int(self.query_labels[i] == self.gallery_labels[j]))
-                y_score.append(float(self.sim_matrix[i, j]))
+                y_score.append(score)
 
         return average_precision_score(y_true, y_score)
 

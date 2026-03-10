@@ -10,15 +10,15 @@ use_forward_features = false
 
 [split]
 strategy = "closed_set"
-val_split_size = 0.05   #0.2
-include_duplicates = false
+val_split_size = 0.05   #0.2 round_2, 0.05 round_1
+include_duplicates = true
 seed = 42
 
 [data]
-split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
 dataset_name = "jaguar_stage0"
-use_balanced_sampler = false    # Set to true to handle class imbalance
-num_workers = 4
+use_balanced_sampler = true    # Set to true to handle class imbalance
+num_workers = 8
 use_fiftyone = false
 
 [curation]
@@ -27,27 +27,26 @@ val_k = 50
 phash_threshold = 4
 
 [preprocessing]
-train_background = "random_bg"
-val_background = "blur_bg"
-bg_dir = "data/round_2/backgrounds"
+train_background = "original"
+val_background = "original"
+bg_dir = "data/round_1/backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10
 key_for_seed = "filename"
 
 [training]
-monitor_metric = "mAP"
-save_dir = "checkpoints/round_2/"            # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
+monitor_metric = "pairwise_AP"
+save_dir = "checkpoints/round_1/" 
 experiment_name = "scientific_base"
 epochs = 30
-batch_size = 32   #16
+batch_size = 32
 seed = 42
 early_stopping = true
-early_stopping_patience = 5  
+early_stopping_patience = 5
 # ---Fine-tuning Params---
 unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
-backbone_lr = 2e-6      # Keep this very small (1/10th or 1/100th of head LR)
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
@@ -70,20 +69,17 @@ lr_decay = 0.8              # Custom
 [augmentation]
 apply_augmentations = true
 horizontal_flip = true
-affine_degrees = 15
-affine_translate = [0.15, 0.15]
-affine_scale = [0.85, 1.15]
-color_jitter_brightness = 0.2
-color_jitter_contrast = 0.2
+affine_degrees = 0
+affine_translate = [0.0, 0.0]
+affine_scale = [1.0, 1.0]
+color_jitter_brightness = 0.1
+color_jitter_contrast = 0.1
 random_erasing_p = 0.25
 
-[evaluation]
-extra_val_backgrounds = ["original", "gray_bg"]
-
-[xai]
-seed = 51
-n_samples = 100
-ig_steps = 10
+[progressive_resizing]
+enabled = false
+sizes = []              # [224, 384, 512]
+stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true

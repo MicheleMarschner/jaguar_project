@@ -1,0 +1,21 @@
+{
+  "experiment_name": "backbone_efficientnet_b4",
+  "best_epoch": 24,
+  "monitor_metric": "pairwise_AP",
+  "best_score": 0.7189036170178218,
+  "metrics": {
+    "id_balanced_mAP": 0.3891603474208719,
+    "mAP": 0.3891603474208719,
+    "pairwise_AP": 0.7189036170178218,
+    "rank1": 0.8571428571428571,
+    "rank5": 0.8952380952380953,
+    "nDCG@10": 0.9749565755731228,
+    "recall@5": 0.8952380952380953,
+    "pos_sim": 0.5357092022895813,
+    "neg_sim": 0.03412839397788048,
+    "sim_gap": 0.5015808083117008,
+    "intra_dist": 0.9031012654304504,
+    "inter_dist": 1.3835276365280151,
+    "dist_gap": 0.4804263710975647
+  }
+}

@@ -1,0 +1,32 @@
+[experiment]
+name = "kaggle_ensemble"
+description = "Score-fusion sweep for EVA-02 + MiewID."
+base_config = "base/ensemble_base"
+mode = "ensemble"
+output_profile = "ensemble"
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_equal"
+# weights = [0.5, 0.5]
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_eva06"
+# weights = [0.6, 0.4]
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_eva07"
+# weights = [0.7, 0.3]
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_miewid06"
+# weights = [0.4, 0.6]
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_no_square"
+# weights = [0.5, 0.5]
+# square_before_fusion = false
+
+# [[experiment.runs]]
+# experiment_name = "eva_miewid_no_minmax"
+# weights = [0.5, 0.5]
+# normalize_per_model = false

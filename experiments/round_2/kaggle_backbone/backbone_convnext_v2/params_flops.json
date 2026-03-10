@@ -1,0 +1,8 @@
+{
+  "backbone_name": "ConvNeXt-V2",
+  "head_type": "arcface",
+  "total_params": 198826152,
+  "trainable_params": 2595816,
+  "input_size": 224,
+  "flops": null
+}

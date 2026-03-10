@@ -1,0 +1,21 @@
+{
+  "experiment_name": "closed_curated_traink_1_valk_1_p4",
+  "best_epoch": 10,
+  "monitor_metric": "pairwise_AP",
+  "best_score": 0.7926336800546554,
+  "metrics": {
+    "id_balanced_mAP": 0.5512379340743082,
+    "mAP": 0.5512379340743082,
+    "pairwise_AP": 0.7926336800546554,
+    "rank1": 0.8771929824561403,
+    "rank5": 0.9254385964912281,
+    "nDCG@10": 0.9561407170476145,
+    "recall@5": 0.9254385964912281,
+    "pos_sim": 0.4176270663738251,
+    "neg_sim": 0.0017516318475827575,
+    "sim_gap": 0.4158754345262423,
+    "intra_dist": 1.0545810461044312,
+    "inter_dist": 1.4098198413848877,
+    "dist_gap": 0.35523879528045654
+  }
+}

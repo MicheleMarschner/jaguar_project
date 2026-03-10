@@ -1,0 +1,5 @@
+configs/_generated/scientific_background/bg_train_blur_bg.toml
+configs/_generated/scientific_background/bg_train_gray_bg.toml
+configs/_generated/scientific_background/bg_train_mixed_original_random_bg.toml
+configs/_generated/scientific_background/bg_train_original.toml
+configs/_generated/scientific_background/bg_train_random_bg.toml

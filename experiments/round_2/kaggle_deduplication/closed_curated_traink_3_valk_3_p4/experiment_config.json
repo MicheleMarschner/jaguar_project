@@ -1,0 +1,91 @@
+{
+  "model": {
+    "backbone_name": "EVA-02",
+    "head_type": "arcface",
+    "emb_dim": 1024,
+    "freeze_backbone": true,
+    "s": 30.0,
+    "m": 0.5
+  },
+  "split": {
+    "strategy": "closed_set",
+    "val_split_size": 0.2,
+    "include_duplicates": false,
+    "seed": 51
+  },
+  "data": {
+    "split_data_path": "splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet",
+    "dataset_name": "jaguar_init",
+    "use_balanced_sampler": false,
+    "num_workers": 4,
+    "use_fiftyone": false
+  },
+  "curation": {
+    "train_k": 3,
+    "val_k": 3,
+    "phash_threshold": 4
+  },
+  "preprocessing": {
+    "train_background": "original",
+    "val_background": "original",
+    "bg_dir": "data/round_2/backgrounds",
+    "p_original": 0.5,
+    "edge_softness": 2,
+    "blur_radius": 10,
+    "key_for_seed": "filename"
+  },
+  "training": {
+    "monitor_metric": "mAP",
+    "save_dir": "checkpoints/round_2/kaggle_deduplication/closed_curated_traink_3_valk_3_p4",
+    "experiment_name": "closed_curated_traink_3_valk_3_p4",
+    "epochs": 30,
+    "batch_size": 16,
+    "seed": 42,
+    "early_stopping": true,
+    "early_stopping_patience": 5
+  },
+  "optimizer": {
+    "type": "Adam",
+    "lr": 0.0001,
+    "weight_decay": 0.001,
+    "momentum": 0.9,
+    "betas": [
+      0.9,
+      0.999
+    ]
+  },
+  "scheduler": {
+    "type": "JaguardIdScheduler",
+    "T_max": 30
+  },
+  "augmentation": {
+    "apply_augmentations": true,
+    "horizontal_flip": true,
+    "affine_degrees": 0,
+    "affine_translate": [
+      0.0,
+      0.0
+    ],
+    "affine_scale": [
+      1.0,
+      1.0
+    ],
+    "color_jitter_brightness": 0.1,
+    "color_jitter_contrast": 0.1,
+    "random_erasing_p": 0.25
+  },
+  "progressive_resizing": {
+    "enabled": false,
+    "sizes": [],
+    "stage_epochs": []
+  },
+  "logging": {
+    "enabled": true,
+    "project": "jaguar-reid-SpotItLikeItsHot",
+    "mode": "online"
+  },
+  "output": {
+    "profile": "deduplication",
+    "experiment_group": "kaggle_deduplication"
+  }
+}

@@ -65,7 +65,8 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = PATHS.checkpoints / "single_train/backbone_eva02/best_model.pth"
+    from jaguar.config import PATHS
+    CHECKPOINT_PATH = PATHS.checkpoints / "kaggle_deduplication/closed_curated_traink_3_valk_3_p4/best_model.pth"
     TEST_CSV_PATH = PATHS.data / "jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"

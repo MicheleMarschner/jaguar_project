@@ -15,9 +15,9 @@ include_duplicates = true
 seed = 42
 
 [data]
-split_data_path = "splits/default_kaggle/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
 dataset_name = "jaguar_stage0"
-use_balanced_sampler = false    # Set to true to handle class imbalance
+use_balanced_sampler = true    # Set to true to handle class imbalance
 num_workers = 4
 use_fiftyone = false
 
@@ -38,7 +38,6 @@ key_for_seed = "filename"
 [training]
 monitor_metric = "pairwise_AP"
 save_dir = "checkpoints/round_2/" 
-# save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
 epochs = 30
 batch_size = 32

@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
-#SBATCH --array=0-4%5
+#SBATCH --array=0-5%5
 #SBATCH --output=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.out
 #SBATCH --error=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.err
 

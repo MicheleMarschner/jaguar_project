@@ -1,0 +1,8 @@
+{
+  "backbone_name": "MiewID",
+  "head_type": "arcface",
+  "total_params": 53347741,
+  "trainable_params": 5522564,
+  "input_size": 440,
+  "flops": null
+}

@@ -10,28 +10,23 @@ output_profile = "background"
 experiment_name = "bg_train_original"
 train_background = "original"
 val_background = "blur_bg"
-extra_val_backgrounds = ["original", "gray_bg"]
 
 [[experiment.runs]]
 experiment_name = "bg_train_random_bg"
 train_background = "random_bg"
 val_background = "blur_bg"
-extra_val_backgrounds = ["original", "gray_bg"]
 
 [[experiment.runs]]
 experiment_name = "bg_train_mixed_original_random_bg"
 train_background = "mixed_original_random_bg"
 val_background = "blur_bg"
-extra_val_backgrounds = ["original", "gray_bg"]
 
 [[experiment.runs]]
 experiment_name = "bg_train_blur_bg"
 train_background = "blur_bg"
 val_background = "blur_bg"
-extra_val_backgrounds = ["original", "gray_bg"]
 
 [[experiment.runs]]
 experiment_name = "bg_train_gray_bg"
 train_background = "gray_bg"
 val_background = "blur_bg"
-extra_val_backgrounds = ["original", "gray_bg"]

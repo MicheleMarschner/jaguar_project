@@ -65,7 +65,7 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = PATHS.checkpoints / "kaggle_deduplication/best_model.pth"
+    CHECKPOINT_PATH = PATHS.checkpoints / "single_train/backbone_eva02/best_model.pth"
     TEST_CSV_PATH = PATHS.data / "jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"
@@ -159,10 +159,15 @@ def generate_submission():
     # --------------------------------------------------
     # 6. EXTRACT EMBEDDINGS (WITH OPTIONAL TTA)
     # --------------------------------------------------
-
     USE_TTA = True
     USE_QE = True
     USE_RERANK = False
+
+    # if ensemble TTA should always be false!
+    isEnsemble = False
+    if isEnsemble:
+        USE_TTA = False
+
 
     embeddings = []
 

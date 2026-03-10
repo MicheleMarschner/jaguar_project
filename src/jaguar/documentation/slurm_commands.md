@@ -40,4 +40,8 @@ git checkout origin/cluster -- experiments/round_2/splits
 
 
 ## Transfer
-rsync -avz --progress michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/experiments/round_2/kaggle_deduplication/ ~/Downloads/kaggle_deduplication/
+rsync -avz --progress michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/src/jaguar/submission.csv ~/Downloads/
+
+
+
+rsync -avz --progress michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/checkpoints/round_2/kaggle_deduplication/closed_curated_traink_3_valk_1_p4 ~/Downloads/

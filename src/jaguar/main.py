@@ -8,7 +8,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader, Subset
 import time
 
-from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds
+from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds, load_toml_config
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE, PROJECT_ROOT
 from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.utils.utils_output import build_output_artifacts
@@ -52,11 +52,6 @@ def parse_args():
         help="Override backbone name from config"
     )
     return parser.parse_args()
-
-
-def load_toml_config(config_name: str) -> dict:
-    with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
-        return tomllib.load(f)
 
 
 def deep_update(base: dict, override: dict) -> dict:

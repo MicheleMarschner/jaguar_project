@@ -240,11 +240,14 @@ def run_experiments():
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
 
         mode = experiment_meta.get("mode", "scientific")
-        target_script = (
-            "src/jaguar/run_xai_experiment.py"
-            if mode == "xai"
-            else args.main_script
-        )
+        if mode == "xai":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/run_xai_experiment.py"
+        elif mode == "ensemble":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/run_ensemble.py"
+        else:
+            target_script = args.main_script
 
         cmd = [
             "python",
@@ -255,7 +258,7 @@ def run_experiments():
             str(rel_path),
         ]
 
-        if mode != "xai":
+        if mode not in {"xai", "ensemble"}:
             cmd.extend([
                 "--experiment_name",
                 experiment_name,

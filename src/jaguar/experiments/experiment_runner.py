@@ -80,15 +80,45 @@ def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, 
     return cur
 
 
-def build_experiment_override(
+def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: dict) -> dict:
+    override = {
+        "ensemble": {
+            "name": run_cfg["experiment_name"],
+        }
+    }
+
+    field_to_section = {
+        "weights": ("fusion", "weights"),
+        "normalize_per_model": ("fusion", "normalize_per_model"),
+        "square_before_fusion": ("fusion", "square_before_fusion"),
+        "use_tta": ("inference", "use_tta"),
+        "use_qe": ("inference", "use_qe"),
+        "use_rerank": ("inference", "use_rerank"),
+        "batch_size": ("inference", "batch_size"),
+        "split_data_path": ("data", "split_data_path"),
+        "num_workers": ("data", "num_workers"),
+    }
+
+    for key, value in run_cfg.items():
+        if key == "experiment_name":
+            continue
+        if key not in field_to_section:
+            continue
+
+        section, target_key = field_to_section[key]
+        override.setdefault(section, {})
+        override[section][target_key] = value
+
+    return override
+    
+
+def build_training_override(
     run_cfg: dict, 
     experiment_meta: dict,
     base_config: dict
 ) -> dict:
-    override = {
-        "training": {
-            "experiment_name": run_cfg["experiment_name"],
-        }
+    override = { 
+        "training": { "experiment_name": run_cfg["experiment_name"], },
     }
 
     field_to_section = {
@@ -224,13 +254,27 @@ def run_experiments():
     generated_dir = PATHS.configs / "_generated" / experiment_name
     ensure_dir(generated_dir)
 
+    mode = experiment_meta.get("mode", "scientific")
+
     print(f"Found {len(runs)} runs.")
 
     all_cmds = []
 
     for i, run_cfg in enumerate(runs, start=1):
         experiment_name = run_cfg["experiment_name"]
-        override = build_experiment_override(run_cfg, experiment_meta=experiment_meta, base_config=base_config)
+        
+        if mode == "ensemble":
+            override = build_ensemble_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
+        else:
+            override = build_training_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
         override_text = dict_to_toml(override)
 
         print(f"\n[{i}/{len(runs)}] {experiment_name}")
@@ -239,12 +283,14 @@ def run_experiments():
         override_path.write_text(override_text, encoding="utf-8")
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
 
-        mode = experiment_meta.get("mode", "scientific")
-        target_script = (
-            "src/jaguar/run_xai_experiment.py"
-            if mode == "xai"
-            else args.main_script
-        )
+        if mode == "xai":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/run_xai_experiment.py"
+        elif mode == "ensemble":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/run_ensemble.py"
+        else:
+            target_script = args.main_script
 
         cmd = [
             "python",
@@ -255,7 +301,7 @@ def run_experiments():
             str(rel_path),
         ]
 
-        if mode != "xai":
+        if mode not in {"xai"}:
             cmd.extend([
                 "--experiment_name",
                 experiment_name,
@@ -284,10 +330,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        result = subprocess.run(cmd)
+        #result = subprocess.run(cmd)
 
-        if result.returncode != 0:
-            raise RuntimeError(f"Run failed: {experiment_name}")
+        #if result.returncode != 0:
+        #    raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

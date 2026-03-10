@@ -65,14 +65,13 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    from jaguar.config import PATHS
-    CHECKPOINT_PATH = PATHS.checkpoints / "kaggle_deduplication/closed_curated_traink_3_valk_3_p4/best_model.pth"
+    CHECKPOINT_PATH = PATHS.checkpoints / "backbone_eva02/best_model.pth"
     TEST_CSV_PATH = PATHS.data / "jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02"
     EMB_DIM = 1024
     NUM_CLASSES = 31
-    BATCH_SIZE = 16
+    BATCH_SIZE = 32
     USE_PROJECTION = True
     USE_FORWARD_FEATURES = False
 
@@ -135,7 +134,7 @@ def generate_submission():
         test_ds,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=1,
+        num_workers=2,
         pin_memory=True
     )
 

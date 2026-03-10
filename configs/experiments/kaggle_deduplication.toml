@@ -42,3 +42,20 @@ include_duplicates = false
 train_k = 1
 val_k = 1
 phash_threshold = 4
+
+[[experiment.runs]]
+experiment_name = "closed_curated_traink_5_valk_1_p4"
+split_strategy = "closed_set"
+include_duplicates = false
+train_k = 5
+val_k = 1
+phash_threshold = 4
+
+
+[[experiment.runs]]
+experiment_name = "closed_curated_traink_8_valk_1_p4"
+split_strategy = "closed_set"
+include_duplicates = false
+train_k = 8
+val_k = 1
+phash_threshold = 4

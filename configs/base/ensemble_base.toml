@@ -1,0 +1,39 @@
+[ensemble]
+name = "eva02_miew"
+
+[fusion]
+type = "score_average"         # score_average, score_average_minmax, score_average_minmax_squared
+weights = [0.5, 0.5]
+normalize_per_model = true
+square_before_fusion = true
+
+[split]
+include_duplicates = true
+seed = 42
+
+[data]
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
+dataset_name = "jaguar_stage0"
+num_workers = 8
+use_fiftyone = false
+
+[[members]]
+name = "EVA-02"
+checkpoint_path = "kaggle_backbones/backbone_eva02"
+config_path = "kaggle_backbones/backbone_eva02/config_leaderboard_exp.toml"
+
+[[members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbones/backbone_miew_id"
+config_path = "kaggle_backbones/backbone_miew_id/config_leaderboard_exp.toml"
+
+[inference]
+batch_size = 64
+use_tta = true
+use_qe = false
+use_rerank = false
+
+[logging]
+enabled = true
+project = "jaguar-reid-SpotItLikeItsHot"
+mode = "online"

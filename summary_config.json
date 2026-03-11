@@ -4,29 +4,29 @@
         "total_identities": 31,
         "splits": {
             "train": {
-                "samples": 1790,
-                "sample_percentage": 0.9446,
+                "samples": 1776,
+                "sample_percentage": 0.9372,
                 "identities": 31
             },
             "val": {
-                "samples": 105,
-                "sample_percentage": 0.0554,
+                "samples": 119,
+                "sample_percentage": 0.0628,
                 "identities": 25
             }
         }
     },
     "curated_data": {
-        "total_samples": 1787,
+        "total_samples": 1807,
         "total_identities": 31,
         "splits": {
             "train": {
-                "samples": 1722,
-                "sample_percentage": 0.9636,
+                "samples": 1740,
+                "sample_percentage": 0.9629,
                 "identities": 31
             },
             "val": {
-                "samples": 65,
-                "sample_percentage": 0.0364,
+                "samples": 67,
+                "sample_percentage": 0.0371,
                 "identities": 25
             }
         }

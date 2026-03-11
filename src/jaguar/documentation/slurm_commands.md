@@ -9,7 +9,7 @@ tar -xzf raw.tar.gz
 
 ## Monitoring
 - squeue --me
-- tail -n 100 -f /sc/home/michele.marschner/project/jaguar_project/logs/array_1759584_1.out
+- tail -n 100 -f /sc/home/michele.marschner/project/jaguar_project/logs/array_1759790_1.out
 
 ## Logs
 less /sc/home/michele.marschner/project/jaguar_project/logs/array_<JOBID>_<TASKID>.out
@@ -55,7 +55,7 @@ python src/jaguar/experiments/experiment_runner.py \
 rsync -avz --progress michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/checkpoints/round_2/kaggle_deduplication/closed_curated_traink_3_valk_1_p4 ~/Downloads/
 
 
-rsync -avz --progress ~/Downloads/fiftyone michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/data/round_1/
+rsync -avz --progress ~/Downloads/strclosed_set__dupFalse__kTrain3__kVal1__p4 michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/experiments/round_1/splits/
 
 
 

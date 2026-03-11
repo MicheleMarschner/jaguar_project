@@ -1,17 +1,69 @@
 [experiment]
 name = "kaggle_progressive_resizing"
-description = "Fixed resolution versus progressive resizing."
+description = "Fixed resolution versus progressive resizing in pre-trained models that allow it."
 base_config = "base/kaggle_base"
 mode = "kaggle"
 setup_name = "kaggle_base"
 output_profile = "resizing"
 
-[[experiment.runs]]
-experiment_name = "fixed_384"
-pr_enabled = false
+# [[experiment.runs]]
+# experiment_name = "fixed_cnv2_unfreeze_4"
+# backbone_name = "ConvNeXt-V2"
+# pr_enabled = false
+# unfreeze_epoch = 3
+# unfreeze_blocks = 4
+# epochs = 50
+# s = 40    # higher scale and lower intra-margin class variation 
+# m = 0.40
+# random_resized_crop = true
+
+# [[experiment.runs]]
+# experiment_name = "fixed_cnv2_unfreeze_all_largerlr"
+# backbone_name = "ConvNeXt-V2"
+# pr_enabled = false
+# unfreeze_epoch = 3
+# unfreeze_blocks = 100
+# scheduler_lr_start = 3e-4
+# optimizer_backbone_lr = 3e-5
+# epochs = 50
+# s = 40
+# m = 0.40
+# random_resized_crop = true
+
+# [[experiment.runs]]
+# experiment_name = "fixed_cnv2_unfreeze_all"
+# backbone_name = "ConvNeXt-V2"
+# pr_enabled = false
+# unfreeze_epoch = 3
+# unfreeze_blocks = 100  
+# # optimizer_backbone_lr = 1e-5 
+# epochs = 50
+# s = 40
+# m = 0.40
+# random_resized_crop = true
 
 [[experiment.runs]]
-experiment_name = "progressive_224_384_512"
+experiment_name = "progressive_epochs_10_cnv2"
+backbone_name = "ConvNeXt-V2"
 pr_enabled = true
-pr_sizes = [224, 384, 512]
 pr_stage_epochs = [10, 10, 10]
+unfreeze_epoch = 3
+unfreeze_blocks = 100  
+# optimizer_backbone_lr = 1e-5 
+epochs = 30
+s = 40
+m = 0.40
+random_resized_crop = true
+
+[[experiment.runs]]
+experiment_name = "progressive_varying_epochs_cnv2"
+backbone_name = "ConvNeXt-V2"
+pr_enabled = true
+pr_stage_epochs = [5, 10, 15]
+unfreeze_epoch = 3
+unfreeze_blocks = 100  
+# optimizer_backbone_lr = 1e-5 
+epochs = 30
+s = 40
+m = 0.40
+random_resized_crop = true

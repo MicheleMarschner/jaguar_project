@@ -69,6 +69,7 @@ class EmbeddingHead(nn.Module):
 # ---------------------------
 # Main Jaguar ID Model
 # ---------------------------
+    
 class JaguarIDModel(nn.Module):
     def __init__(
         self,
@@ -160,6 +161,21 @@ class JaguarIDModel(nn.Module):
             raise ValueError(f"Unknown head type: {head_type}")
 
         self.to(device)
+    
+    def _infer_feature_dim(self):
+        """Infer backbone output feature dimension."""
+        with torch.no_grad():
+            dummy = torch.randn(1, 3, self.input_size, self.input_size)
+
+            features = self.backbone(dummy)
+
+            if isinstance(features, (list, tuple)):
+                features = features[0]
+
+            if len(features.shape) == 4:
+                features = torch.flatten(features, 1)
+
+            return features.shape[1]
         
     def unfreeze_backbone_layers(self, num_blocks: int):
         """

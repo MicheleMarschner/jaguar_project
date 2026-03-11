@@ -52,7 +52,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.layer4[-1], 
                 "reshape_transform": None
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "DINO-Small": {
             "loader": lambda: load_dino_model("dino", "small", patch_size=8, pretrained=True),
@@ -66,7 +67,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "DINOv2-Base": {
             "loader": lambda: load_dino_model("dinov2", "base", patch_size=14, pretrained=True, with_register_tokens=False),
@@ -81,7 +83,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "DINOv3-Base": {
             "loader": lambda: load_dino_model("dinov3", "base", patch_size=16, pretrained=True, with_register_tokens=False),
@@ -95,7 +98,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "DINOv3-Large": {
             "loader": lambda: load_dino_model("dinov3", "large", patch_size=16, pretrained=True, with_register_tokens=False),
@@ -109,7 +113,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "DINOv2_for_wildlife": {
             "loader": lambda: load_megadescriptor_dino_model(),
@@ -124,7 +129,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "ConvNeXt-V2": {
             "loader": lambda: load_convnext_v2("large"),
@@ -139,6 +145,7 @@ class FoundationModelWrapper:
                 "layer_getter": lambda m: m.features[-1][-1],
                 "reshape_transform": None 
             },
+            "supports_progressive_resizing": True,
         },
         "EfficientNet-B4": {
             "loader": lambda: load_efficientnet_b4(),
@@ -153,6 +160,7 @@ class FoundationModelWrapper:
                 "layer_getter": lambda m: m.features[-1],
                 "reshape_transform": None
             },
+            "supports_progressive_resizing": True,
         },
         "Swin-Transformer": {
             "loader": lambda: load_swin_transformer("base"),
@@ -166,7 +174,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.features[-1][-1].norm1,
                 "reshape_transform": swin_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "EVA-02": {
             "loader": lambda: load_eva_02(),
@@ -180,7 +189,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.blocks[-1].norm1,
                 "reshape_transform": vit_reshape_transform
-            }
+            },
+            "supports_progressive_resizing": False,
         },
         "MiewID": {
             "loader": lambda: load_miewid(),
@@ -194,7 +204,8 @@ class FoundationModelWrapper:
             "grad_cam": {
                 "layer_getter": lambda m: m.backbone.conv_head,
                 "reshape_transform": None
-            }
+            },
+            "supports_progressive_resizing": False,
         }
     }
 
@@ -207,6 +218,9 @@ class FoundationModelWrapper:
         self.registry_entry = self.MODEL_REGISTRY[model_name]
         self.input_size = self.registry_entry.get("input_size") 
         self.model = self.MODEL_REGISTRY[model_name]["loader"]()
+        self.supports_progressive_resizing = self.registry_entry.get(
+            "supports_progressive_resizing", False
+        )
         self.model.to(device)
         self.model.eval()
 

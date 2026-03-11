@@ -41,10 +41,22 @@ backbone_name = "DINOv2-Base"
 [[experiment.runs]]
 experiment_name = "backbone_convnext_v2"
 backbone_name = "ConvNeXt-V2"
+unfreeze_epoch = 3
+unfreeze_blocks = 100  
+epochs = 50
+s = 40
+m = 0.40
+random_resized_crop = true
 
 [[experiment.runs]]
 experiment_name = "backbone_efficientnet_b4"
 backbone_name = "EfficientNet-B4"
+unfreeze_epoch = 3      # to be tested if the same parameters as for ConvNext are valid, but they should be !
+unfreeze_blocks = 100  
+epochs = 50
+s = 40
+m = 0.40
+random_resized_crop = true
 
 [[experiment.runs]]
 experiment_name = "backbone_swin_transformer"

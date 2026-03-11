@@ -1,2 +1,25 @@
-[training]
-experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP"
+#[training]
+# experiment_name = "round_eva_baseline_no_bs_vs_005_pairwiseAP"
+
+[experiment]
+name = "kaggle_baseline_improvement"
+description = "Improvement of the training scheme and architecture of a fixed backbone/baseline for Kaggle-oriented training runs."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_base"
+output_profile = "baseline_improvement"
+
+[[experiment.runs]]
+experiment_name = "baseline_improvement_ema"
+backbone_name = "EVA-02"
+ema = true
+ema_decay = 0.995
+monitor_metric = "mAP"  #Options: "pairwise_AP"; "mAP"
+
+[[experiment.runs]]
+experiment_name = "baseline_improvement_emb_dim"
+backbone_name = "EVA-02"
+ema = false
+monitor_metric = "mAP" 
+emb_dim = 1536
+

@@ -111,15 +111,23 @@ def build_experiment_override(
         "val_background": ("preprocessing", "val_background"),
 
         "backbone_name": ("model", "backbone_name"),
-
+        "emb_dim": ("model", "emb_dim"),
         "head_type": ("model", "head_type"),
         "s": ("model", "s"),
         "m": ("model", "m"),
         "use_projection": ("model", "use_projection"),
         "use_forward_features": ("model", "use_forward_features"),
+        
+        "ema": ("training", "ema"),
+        "ema_decay": ("training", "ema_decay"),
+        "monitor_metric": ("training", "monitor_metric"),
+        "epochs": ("training", "epochs"),
+        "unfreeze_epoch": ("training", "unfreeze_epoch"),
+        "unfreeze_blocks": ("training", "unfreeze_blocks"),
 
         "optimizer_type": ("optimizer", "type"),
         "optimizer_lr": ("optimizer", "lr"),
+        "optimizer_backbone_lr": ("optimizer", "backbone_lr"),
         "optimizer_weight_decay": ("optimizer", "weight_decay"),
         "optimizer_momentum": ("optimizer", "momentum"),
         "optimizer_betas": ("optimizer", "betas"),
@@ -139,6 +147,8 @@ def build_experiment_override(
 
         "apply_augmentations": ("augmentation", "apply_augmentations"),
         "horizontal_flip": ("augmentation", "horizontal_flip"),
+        "random_resized_crop": ("augmentation", "random_resized_crop"),
+        "gaussian_blur": ("augmentation", "gaussian_blur"),
         "affine_degrees": ("augmentation", "affine_degrees"),
         "affine_translate": ("augmentation", "affine_translate"),
         "affine_scale": ("augmentation", "affine_scale"),
@@ -332,7 +342,7 @@ def run_experiments():
         "#SBATCH --mem=200GB",
         "#SBATCH --account=kainmueller",
         f"#SBATCH --array=0-{len(config_paths)-1}",
-        "#SBATCH --nodelist=maxg[10,20]",
+        "#SBATCH --nodelist=maxg[09,10,20]",
         "#SBATCH --partition=h100",
         "#SBATCH --output=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.out",
         "#SBATCH --error=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.err",

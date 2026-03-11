@@ -7,11 +7,13 @@ import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
 from muon import MuData
+from torch.cuda.amp import autocast, GradScaler
+from timm.utils import ModelEmaV3
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import PATHS, DEVICE 
 from jaguar.utils.utils_scheduler import JaguardIdScheduler
-
+    
 class JaguarTrainer:
     def __init__(self, model, train_loader, val_loader, config):
         self.model = model
@@ -29,6 +31,20 @@ class JaguarTrainer:
         # Initial setup of optimizer and scheduler
         self._setup_optimizer()
         self._setup_scheduler()
+        
+        # EMA Setup
+        self.use_ema = self.config['training'].get("ema", False)
+        self.ema_decay = self.config['training'].get("ema_decay", 0.995)
+        self.ema_model = None
+        if self.use_ema:
+            print(f"[Trainer] Using EMA with decay={self.ema_decay}")
+            self.ema_model = ModelEmaV3(
+                model, 
+                decay=self.ema_decay
+            )
+
+        # AMP Scaler
+        self.scaler = GradScaler()
 
     def _setup_optimizer(self):
         """Logic to create optimizer with optional differential learning rates."""
@@ -196,15 +212,25 @@ class JaguarTrainer:
             labels = batch["label_idx"].to(self.device)
             
             self.optimizer.zero_grad()
+            # # JaguarIDModel returns (loss, logits) when labels are provided
+            # loss, _ = self.model(imgs, labels)
             
-            # JaguarIDModel returns (loss, logits) when labels are provided
-            loss, _ = self.model(imgs, labels)
+            # loss.backward()
+            # self.optimizer.step()
             
-            loss.backward()
-            self.optimizer.step()
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            with torch.autocast(device_type=device, dtype=torch.float16):
+                loss, _ = self.model(imgs, labels)
 
-            if self.config["scheduler"]["type"] == "OneCycleLR":            ## !TODO check in with Vanessa if ok!
-                self.scheduler.step()
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+            
+            if self.use_ema and self.ema_model is not None:
+                self.ema_model.update(self.model)
+
+            # if self.config["scheduler"]["type"] == "OneCycleLR":            ## !TODO check in with Vanessa if ok!
+            #     self.scheduler.step()
             
             running_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -213,7 +239,10 @@ class JaguarTrainer:
 
     @torch.no_grad()
     def validate(self):
-        self.model.eval()
+        # self.model.eval()
+        eval_model = self.ema_model.module if self.use_ema and hasattr(self.ema_model, "module") else self.model
+        eval_model.eval()
+            
         all_embeddings = []
         all_labels = []
         
@@ -221,7 +250,7 @@ class JaguarTrainer:
         for batch in tqdm(self.val_loader, desc="Extracting Val Embeds"):
             imgs = batch["img"].to(self.device)
             # Use the model utility to get normalized embeddings
-            emb = self.model.get_embeddings(imgs)
+            emb = eval_model.get_embeddings(imgs) #self.model.get_embeddings(imgs)
             
             all_embeddings.append(emb.cpu())
             all_labels.append(batch["label_idx"])
@@ -241,13 +270,23 @@ class JaguarTrainer:
         path = self.save_dir
         os.makedirs(path, exist_ok=True)
         save_path = path / "best_model.pth"
-        torch.save({                                                ## !TODO should be in experiments folder!!
+        save_dict = {                                                ## !TODO should be in experiments folder!!
             'epoch': epoch,
-            'model_state_dict': self.model.state_dict(),
+            # 'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
             'config': self.config
-        }, save_path)
+        }
+        
+        if self.ema_model is not None:
+            save_dict['model_state_dict'] = self.ema_model.module.state_dict() # EMA weights
+        else:
+            save_dict['model_state_dict'] = self.model.state_dict()
+    
+        # if self.use_ema and self.ema_model is not None:
+        #     save_dict['ema_state_dict'] = self.ema_model.state_dict()
+
+        torch.save(save_dict, save_path)
         print(f"[Info] Saved checkpoint: {save_path}")
         
         # save final runtime config

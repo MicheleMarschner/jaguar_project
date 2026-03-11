@@ -65,11 +65,13 @@ def generate_submission():
     # --------------------------------------------------
     # 1. CONFIG
     # --------------------------------------------------
-    CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_backbone/backbone_miew_id/best_model.pth"
+    # closed_curated_traink_1_valk_50_p4; closed_keep_all; closed_curated_traink_3_valk_3_p4 < best one 
+    CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_progressive_resizing/fixed_cnv2_unfreeze_all/best_model.pth"
+    # CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_backbone/backbone_eva02/best_model.pth"
     TEST_CSV_PATH = "/fast/AG_Kainmueller/data/jaguar_project/data/round_2/raw/jaguar-re-id/test.csv"
 
-    BACKBONE_NAME = "MiewID"
-    EMB_DIM = 1024
+    BACKBONE_NAME = "ConvNeXt-V2"
+    EMB_DIM = 1024 #1536
     NUM_CLASSES = 31
     BATCH_SIZE = 32
     USE_PROJECTION = True

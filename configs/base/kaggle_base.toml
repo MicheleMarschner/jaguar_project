@@ -11,18 +11,20 @@ use_forward_features = false
 [split]
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
-include_duplicates = true
+include_duplicates = false
 seed = 42
 
 [data]
-split_data_path = "splits/default_kaggle/full_split.parquet"
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
+# split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
+# split_data_path = "/splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
 num_workers = 32
 
 [curation]
 train_k = 1
-val_k = 50
+val_k = 30    #50
 phash_threshold = 4
 
 [preprocessing]
@@ -35,18 +37,21 @@ blur_radius = 10
 key_for_seed = "filename"
 
 [training]
-monitor_metric = "pairwise_AP"
+monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
 save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
 # save_dir = "checkpoints/round_1/"  
 experiment_name = "kaggle_base"
 epochs = 30
-batch_size = 16
+batch_size = 32  # 16
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
 # ---Fine-tuning Params---
 unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
+# ---EMA Params---
+ema = false
+ema_decay = 0.995
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
@@ -69,6 +74,8 @@ lr_decay = 0.8              # Custom
 [augmentation]
 apply_augmentations = true
 horizontal_flip = true
+random_resized_crop = false
+gaussian_blur = false
 affine_degrees = 15
 affine_translate = [0.15, 0.15]
 affine_scale = [0.85, 1.15]
@@ -76,9 +83,16 @@ color_jitter_brightness = 0.2
 color_jitter_contrast = 0.2
 random_erasing_p = 0.25
 
+[evaluation]
+extra_val_backgrounds = ["original", "gray_bg"]
+
+[xai]
+seed = 42
+n_samples = 100
+ig_steps = 10
+
 [progressive_resizing]
 enabled = false
-sizes = []              # [224, 384, 512]
 stage_epochs = []       # [10, 10, 10]
 
 [logging]

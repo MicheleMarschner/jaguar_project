@@ -24,6 +24,7 @@ Important project assumptions:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
+from jaguar.retrieval_core import get_ranked_candidates_for_query, get_val_query_indices, prepare_query_gallery_retrieval
 import numpy as np
 import pandas as pd
 import torch
@@ -65,64 +66,16 @@ class XAIConfig:
     # Output root; each run creates its own subfolder under here
     out_root: Path = Path()
 
-# ============================================================
-# Step 1: deterministic query selection (curated val subset)
-# ============================================================
-
-
-def get_curated_indices(split_df: pd.DataFrame, splits: Sequence[str]) -> np.ndarray:
-    # training/eval/XAI should only use kept images.
-    df = split_df[
-        split_df["split_final"].isin(list(splits))
-        & split_df["keep_curated"].fillna(False).astype(bool)
-    ]
-
-    return df["emb_row"].astype(np.int64).to_numpy()
-
-
-def sample_indices(indices: np.ndarray, n_samples: int, seed: int) -> np.ndarray:
-    # Deterministic sampling
-    indices = np.asarray(indices, dtype=np.int64).reshape(-1)
-    
-    if len(indices) == 0:
-        return indices
-    
-    rng = np.random.default_rng(seed)
-    chosen = rng.choice(indices, size=min(n_samples, len(indices)), replace=False)
-
-    return np.sort(chosen)
-
-
-def get_val_query_indices(
-    split_df: pd.DataFrame,
-    out_root: Path,
-    n_samples: int,
-    seed: int,
-) -> np.ndarray:
-    """
-    Cache the exact query subset so explainers/models can be compared on the same images 
-    across repeated runs (reproducible qualitative analysis)
-    """
-    idx_path = out_root / f"xai_val_idx_n{n_samples}.npy"
-    if idx_path.exists():
-        return np.load(idx_path)
-
-    val_pool = get_curated_indices(split_df, splits=["val"])
-    val_chosen = sample_indices(val_pool, n_samples=n_samples, seed=seed)
-
-    ensure_dir(idx_path.parent)
-    save_npy(idx_path, val_chosen)
-    return val_chosen
 
 
 # ============================================================
-# Step 2: mine references for each pair_type (easy_pos/hard_neg)
+# Step 2: mine references for pair types 
 # ============================================================
 
 def mine_references_from_gallery(
     torch_ds,
-    query_indices: np.ndarray,   # [N] Global indices of queries
-    gallery_indices: np.ndarray, # [M] Global indices of the pool (e.g. all Val)
+    query_indices: np.ndarray,
+    gallery_indices: np.ndarray,
     split_df,
     model_wrapper: FoundationModelWrapper,
     out_root: Path,
@@ -146,89 +99,42 @@ def mine_references_from_gallery(
     
     print(f"[Mining] Queries: {n_queries} vs Gallery: {len(gallery_indices)}")
 
-    # Load Embeddings
-    all_embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, num_workers=0)
-    
-    # Slice specific sets
-    q_global = np.asarray(query_indices, dtype=np.int64)
-    g_global = np.asarray(gallery_indices, dtype=np.int64)
-    
-    emb_q = all_embeddings[q_global] # [N, D]
-    emb_g = all_embeddings[g_global] # [M, D]
-
-    # Normalize
-    emb_q = emb_q / (np.linalg.norm(emb_q, axis=1, keepdims=True) + 1e-12)
-    emb_g = emb_g / (np.linalg.norm(emb_g, axis=1, keepdims=True) + 1e-12)
-
-    # Rectangular Similarity [N, M]: Row i = query i, Col j = gallery item j
-    sim_matrix = emb_q @ emb_g.T 
-    
-    # Filter labels
-    all_labels = np.asarray(torch_ds.labels)
-    labels_q = all_labels[q_global]
-    labels_g = all_labels[g_global]
-
-    # burst filtering: Skip same-burst matches so “easy positives” aren’t just near-duplicate frames.
-    bg = split_df.set_index("emb_row")["burst_group_id"]  
-    burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
-    burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
+    retrieval = prepare_query_gallery_retrieval(
+        torch_ds=torch_ds,
+        query_indices=query_indices,
+        gallery_indices=gallery_indices,
+        split_df=split_df,
+        model_wrapper=model_wrapper,
+    )
 
     rows = []
 
-    # Iterate over queries
     for i in tqdm(range(n_queries), desc="Mining Refs"):
-        
-        # Get ranks for specific query (descending similarity); processes row i of sim_matrix
-        sims_i = sim_matrix[i]
-        ranked_g_indices = np.argsort(-sims_i) # These are indices into G (0..M-1)
-
-        q_idx_global = int(q_global[i])
-        q_label = labels_q[i]
+        q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
 
         found_pairs = {pt: False for pt in pair_types}
-
-        hard_pos_candidate = None  # keep last same-ID encountered (lowest sim)
-        # if hard_pos is requested, we must scan full ranked list (no early break)
+        hard_pos_candidate = None
         need_tail_scan = ("hard_pos" in pair_types)
-        
-        # --- Mining Logic ---
-        # iterate through the ranked gallery items
-        valid_rank = 0
-        for g_idx in ranked_g_indices:
-            # early break is only safe if we don't need hard_pos
+
+        for cand in ranked_candidates:
             if (not need_tail_scan) and all(found_pairs.values()):
                 break
 
-            g_idx_global = int(g_global[g_idx])
-            
-            # Skip Self-Match
-            if q_idx_global == g_idx_global:
-                continue
+            current_sim = cand["sim"]
+            g_idx_global = cand["gallery_global_idx"]
+            is_same_id = cand["is_same_id"]
 
-            # Skip same burst group (avoid trivial near-duplicates)
-            if burst_q[i] != -1 and burst_g[g_idx] == burst_q[i]:
-                continue
-            
-            valid_rank += 1
-
-            current_sim = float(sims_i[g_idx])
-            g_label = labels_g[g_idx]
-            is_same_id = (q_label == g_label)
-
-            # Check Pair Types
-            # Easy Positive: First (highest sim) match with same identity (TP, high-sim - success case)
-            if "easy_pos" in pair_types and not found_pairs.get("easy_pos", False): 
+            if "easy_pos" in pair_types and not found_pairs.get("easy_pos", False):
                 if is_same_id:
                     rows.append({
                         "pair_type": "easy_pos",
                         "query_idx": q_idx_global,
                         "ref_idx": g_idx_global,
                         "pair_sim": current_sim,
-                        "rank_in_gallery": valid_rank
+                        "rank_in_gallery": cand["rank_in_gallery"]
                     })
                     found_pairs["easy_pos"] = True
 
-            # Hard Negative: First (highest sim) match with different identity (FP, high-sim - confusion case)
             if "hard_neg" in pair_types and not found_pairs.get("hard_neg", False):
                 if not is_same_id:
                     rows.append({
@@ -236,29 +142,25 @@ def mine_references_from_gallery(
                         "query_idx": q_idx_global,
                         "ref_idx": g_idx_global,
                         "pair_sim": current_sim,
-                        "rank_in_gallery": valid_rank
+                        "rank_in_gallery": cand["rank_in_gallery"]
                     })
                     found_pairs["hard_neg"] = True
 
-            # Hard Positive: keep overwriting -> last same-ID (lowest sim)
             if "hard_pos" in pair_types and is_same_id:
                 hard_pos_candidate = {
                     "pair_type": "hard_pos",
                     "query_idx": q_idx_global,
                     "ref_idx": g_idx_global,
                     "pair_sim": current_sim,
-                    "rank_in_gallery": valid_rank
+                    "rank_in_gallery": cand["rank_in_gallery"]
                 }
-                found_pairs["hard_pos"] = True  # means "exists at least one positive"
+                found_pairs["hard_pos"] = True
 
-        # append hard_pos after loop (tail-based)
         if "hard_pos" in pair_types and hard_pos_candidate is not None:
             rows.append(hard_pos_candidate)
 
-    
     ref_df = pd.DataFrame(rows)
 
-    # Check for missing pairs
     expected_count = n_queries * len(pair_types)
     if len(ref_df) < expected_count:
         print(f"[Warning] Mined {len(ref_df)} pairs, expected {expected_count}. Some queries lack positives.")

@@ -4,6 +4,8 @@ import torch
 import numpy as np
 import timm
 import functools
+from tqdm import tqdm
+from torch.utils.data import DataLoader
 from transformers import AutoModel
 from torchvision.models import (
     convnext_large, ConvNeXt_Large_Weights,
@@ -224,6 +226,70 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
     print(f"[Info] Embeddings not found at {path}. Extracting...")
     imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
     emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
+    save_npy(path, emb)
+    print(f"[Info] Saved embeddings to {path}")
+    return emb
+
+
+def load_or_extract_jaguarid_embeddings(
+    model,
+    torch_ds,
+    split: str = "training",
+    batch_size: int = 32,
+    num_workers: int = 0,
+    use_tta: bool = False,
+    cache_prefix: str | None = None,
+    folder=None,
+):
+    """
+    Returns embeddings as np.ndarray [N, D].
+    Loads from disk if available; otherwise extracts with JaguarIDModel.get_embeddings() and saves.
+    """
+    if folder is None:
+        folder = resolve_path("embeddings", DATA_STORE)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    model_name = model.backbone_wrapper.name
+    head_type = getattr(model, "head_type", "unknown")
+    tta_tag = "tta" if use_tta else "no_tta"
+
+    prefix = f"{cache_prefix}_" if cache_prefix else ""
+    filename = f"{prefix}embeddings_{model_name}_{head_type}_{split}_{tta_tag}.npy"
+    path = folder / filename
+
+    if path.exists():
+        emb = np.load(path)
+        print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
+        return emb
+
+    print(f"[Info] Embeddings not found at {path}. Extracting...")
+
+    loader = DataLoader(
+        torch_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=(str(model.device).startswith("cuda") or getattr(model.device, "type", "") == "cuda"),
+    )
+
+    model.eval()
+    all_embeddings = []
+
+    with torch.no_grad():
+        for batch in tqdm(loader, desc=f"Extract embeddings [{split}]"):
+            imgs = batch["img"].to(model.device)
+
+            feats = model.get_embeddings(imgs)
+
+            if use_tta:
+                flipped = torch.flip(imgs, dims=[3])
+                feats_flip = model.get_embeddings(flipped)
+                feats = (feats + feats_flip) / 2.0
+                feats = torch.nn.functional.normalize(feats, dim=1)
+
+            all_embeddings.append(feats.cpu().numpy())
+
+    emb = np.concatenate(all_embeddings, axis=0)
     save_npy(path, emb)
     print(f"[Info] Saved embeddings to {path}")
     return emb

@@ -1,26 +1,183 @@
 import json
-from jaguar.evaluation.run_background_reliance_eval import build_original_gallery_base, extract_query_variant_embeddings
-from jaguar.utils.utils_evaluation import map_emb_rows_to_local_indices
-from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
-from jaguar.utils.utils_xai import get_val_query_indices, manual_gradcam_class
 import torch
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
 import cv2
-from PIL import Image
-import matplotlib.pyplot as plt
-from collections import defaultdict
 import torch.nn.functional as F
 from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE, SEED
-from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
-from jaguar.models.jaguarid_models import JaguarIDModel
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE
 from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
+from jaguar.utils.utils_evaluation import build_original_gallery_base, select_val_samples_from_emb_rows
+from jaguar.utils.utils_xai import get_val_query_indices, manual_gradcam_class
+
+
+def extract_query_variant_embeddings(model, dataloader, device):
+    """Extracts embeddings for original, jaguar-only, and background-only query views."""
+    model.eval()
+
+    emb_orig_all = []
+    emb_jag_all = []
+    emb_bg_all = []
+
+    query_ids = []
+    query_files = []
+
+    with torch.no_grad():
+        for batch in tqdm(dataloader, desc="Extract query embeddings"):
+            if batch is None:
+                continue
+
+            x_orig = batch["t_orig"].to(device)
+            x_jag  = batch["t_bg_masked"].to(device)   # jaguar-only
+            x_bg   = batch["t_fg_masked"].to(device)   # bg-only
+
+            emb_orig = model.get_embeddings(x_orig).detach().cpu().numpy()
+            emb_jag  = model.get_embeddings(x_jag).detach().cpu().numpy()
+            emb_bg   = model.get_embeddings(x_bg).detach().cpu().numpy()
+
+            emb_orig_all.append(emb_orig)
+            emb_jag_all.append(emb_jag)
+            emb_bg_all.append(emb_bg)
+
+            query_ids.extend(batch["id"])
+            query_files.extend([Path(p).name for p in batch["filepath"]])
+
+    return (
+        np.vstack(emb_orig_all),
+        np.vstack(emb_jag_all),
+        np.vstack(emb_bg_all),
+        list(query_ids),
+        list(query_files),
+    )
+
+
+def compute_retrieval_metrics_per_query(
+    query_emb: np.ndarray,
+    query_ids: list[str],
+    query_files: list[str],
+    gallery_emb: np.ndarray,
+    gallery_ids: list[str],
+    gallery_files: list[str],
+) -> pd.DataFrame:
+    """
+    Computes per-query retrieval outcomes; excludes exact self-match via filename.
+    Assumes embeddings are normalized.
+    """
+    sim = query_emb @ gallery_emb.T
+
+    gallery_ids = np.asarray(gallery_ids)
+    gallery_files = np.asarray(gallery_files)
+
+    rows = []
+
+    for i in range(len(query_ids)):
+        gold_id = query_ids[i]
+        qfile = query_files[i]
+
+        scores = sim[i].copy()
+
+        self_mask = (gallery_files == qfile)
+        scores[self_mask] = -np.inf
+
+        ranked_idx = np.argsort(-scores)
+
+        gold_mask = (gallery_ids == gold_id) & (~self_mask)
+        non_gold_mask = (gallery_ids != gold_id) & (~self_mask)
+
+        if not gold_mask.any():
+            rows.append({
+                "id": gold_id,
+                "filepath": qfile,
+                "gold_rank": np.nan,
+                "is_rank1": False,
+                "is_rank5": False,
+                "best_gold_similarity": np.nan,
+                "best_impostor_similarity": np.nan,
+                "margin_gold_minus_impostor": np.nan,
+            })
+            continue
+
+        best_gold_similarity = float(scores[gold_mask].max())
+        best_impostor_similarity = float(scores[non_gold_mask].max()) if non_gold_mask.any() else np.nan
+
+        ranked_gallery_ids = gallery_ids[ranked_idx]
+        first_gold_pos = int(np.where(ranked_gallery_ids == gold_id)[0][0]) + 1
+
+        rows.append({
+            "id": gold_id,
+            "filepath": qfile,
+            "gold_rank": first_gold_pos,
+            "is_rank1": first_gold_pos <= 1,
+            "is_rank5": first_gold_pos <= 5,
+            "best_gold_similarity": best_gold_similarity,
+            "best_impostor_similarity": best_impostor_similarity,
+            "margin_gold_minus_impostor": (
+                best_gold_similarity - best_impostor_similarity
+                if not np.isnan(best_impostor_similarity) else np.nan
+            ),
+        })
+
+    return pd.DataFrame(rows)
+
+
+def compute_retrieval_bg_vs_jaguar(
+    query_emb_orig: np.ndarray,
+    query_emb_jaguar_only: np.ndarray,
+    query_emb_bg_only: np.ndarray,
+    query_ids: list[str],
+    query_files: list[str],
+    gallery_emb: np.ndarray,
+    gallery_ids: list[str],
+    gallery_files: list[str],
+) -> pd.DataFrame:
+    """Compares whether Jaguar identity is driven more by the animal region or the background."""
+    df_orig = compute_retrieval_metrics_per_query(
+        query_emb_orig, query_ids, query_files,
+        gallery_emb, gallery_ids, gallery_files
+    ).add_suffix("_orig")
+
+    df_jag = compute_retrieval_metrics_per_query(
+        query_emb_jaguar_only, query_ids, query_files,
+        gallery_emb, gallery_ids, gallery_files
+    ).add_suffix("_jaguar_only")
+
+    df_bg = compute_retrieval_metrics_per_query(
+        query_emb_bg_only, query_ids, query_files,
+        gallery_emb, gallery_ids, gallery_files
+    ).add_suffix("_bg_only")
+
+    df = pd.concat([df_orig, df_jag, df_bg], axis=1)
+
+    # restore clean identifiers
+    df["id"] = df["id_orig"]
+    df["filepath"] = df["filepath_orig"]
+
+    df["bg_better_than_jag_rank"] = df["gold_rank_bg_only"] < df["gold_rank_jaguar_only"]
+    df["bg_better_than_jag_rank1"] = (
+        df["is_rank1_bg_only"].astype(int) > df["is_rank1_jaguar_only"].astype(int)
+    )
+    df["bg_better_than_jag_rank5"] = (
+        df["is_rank5_bg_only"].astype(int) > df["is_rank5_jaguar_only"].astype(int)
+    )
+    df["bg_better_than_jag_margin"] = (
+        df["margin_gold_minus_impostor_bg_only"] >
+        df["margin_gold_minus_impostor_jaguar_only"]
+    )
+
+    df["gold_rank_delta_bg_minus_jag"] = (
+        df["gold_rank_bg_only"] - df["gold_rank_jaguar_only"]
+    )
+    df["margin_delta_bg_minus_jag"] = (
+        df["margin_gold_minus_impostor_bg_only"] -
+        df["margin_gold_minus_impostor_jaguar_only"]
+    )
+
+    return df
 
 
 def compute_logit_sensitivity(model, dataloader, device):
@@ -203,7 +360,6 @@ def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
             cv2.imwrite(str(output_dir / f"cam_grid__grad__{stem}.png"), grad_grid)
 
 
-
 def summarize_retrieval_variant(df: pd.DataFrame, suffix: str) -> dict:
     return {
         "rank1": float(df[f"is_rank1_{suffix}"].mean()),
@@ -236,82 +392,38 @@ def summarize_embedding_stability(df: pd.DataFrame) -> dict:
     }
 
 
-
-def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> list[dict]:
-    """
-    Resolve global val emb_row ids to the corresponding val dataset samples.
-    """
-    val_local_idx = map_emb_rows_to_local_indices(
-        query_emb_rows,
-        ctx_orig.val_local_to_emb_row,
-    )
-    return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]
-
-if __name__ == "__main__":
-    n_samples = 10
-    dataset_name = "jaguar_init"
-    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
-    run_name = f"{backbone_name}__{head_type}__bg-{BACKGROUND}"
-    config = ""
-
-    save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
-    ensure_dir(save_path)
-    results_path = resolve_path("xai/background_sensitivity", RESULTS_STORE)
-    ensure_dir(results_path)
-
-    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
-    base = build_original_gallery_base(
-        config=config,
-        checkpoint_dir=checkpoint_dir,
-    )
-    ctx_orig = base["ctx_orig"]
-        
-    # Load Sample List
-    query_emb_rows = get_val_query_indices(
-        split_df=ctx_orig.split_df,
-        out_root=save_path,
-        n_samples=n_samples,
-        seed=config["xai"]["seed"],
-    )
-
-    samples_list = select_val_samples_from_emb_rows(
-        ctx_orig=ctx_orig,
-        query_emb_rows=query_emb_rows,
-    )
-
+def run_xai_classification_analysis(
+    model,
+    query_loader,
+    results_path: Path,
+) -> dict:
     
-    """
-    # load model weights
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    tmp_state = ckpt["model_state_dict"]
-    state = {k.replace("module.", "", 1): v for k, v in tmp_state.items()}
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    print("full model missing:", len(missing), "unexpected:", len(unexpected))
-    model = model.to(DEVICE).eval()
-    """
+    # Run Sensitivity Analysis on classification (logits)
+    logits_res = compute_logit_sensitivity(model, query_loader, DEVICE)
+    # Run Stability (ReID) anaylsis on similarity (cosine)
+    similarity_res = compute_embedding_stability(model, query_loader, DEVICE)
 
-    # Create DataLoaders
-    gallery_ds.transform = ctx_orig.model.backbone_wrapper.transform
+    generate_visuals_logits(model, query_loader, logits_res, results_path, DEVICE)
 
-    # 2) build query dataset/loader
-    query_ds = MaskAwareJaguarDataset(
-        jaguar_model=ctx_orig.model,
-        base_root=PATHS.data_train,
-        data_root=PATHS.data.parent,
-        samples_list=samples_list,
+    return {
+        "logits_res": logits_res,
+        "similarity_res": similarity_res,
+    }
+
+
+def run_bg_vs_jaguar_stress_analysis(
+    model,
+    query_loader,
+    gallery_emb,
+    gallery_ids,
+    gallery_files,
+) -> dict:
+    query_emb_orig, query_emb_jag, query_emb_bg, query_ids, query_files = extract_query_variant_embeddings(
+        model,
+        query_loader,
+        DEVICE,
     )
-    query_loader = torch.utils.data.DataLoader(
-        query_ds,
-        batch_size=config["inference"]["batch_size"],
-        shuffle=False,
-    )
-    
-    
-    # 3) embeddings
-    
 
-
-    # 4) retrieval dataframe
     retrieval_df = compute_retrieval_bg_vs_jaguar(
         query_emb_orig=query_emb_orig,
         query_emb_jaguar_only=query_emb_jag,
@@ -323,12 +435,106 @@ if __name__ == "__main__":
         gallery_files=gallery_files,
     )
 
-    # Run Sensitivity Analysis on classification (logits)
-    logits_res = compute_logit_sensitivity(model, query_loader, DEVICE)
+    return {
+        "retrieval_df": retrieval_df,
+    }
 
-    # Run Stability (ReID) anaylsis on similarity (cosine)
-    similarity_res = compute_embedding_stability(model, query_loader, DEVICE)
-    
+
+def save_bg_sensitivity_outputs(
+    save_path: Path,
+    results_path: Path,
+    config: dict,
+    n_samples: int,
+    dataset_name: str,
+    manifest_dir: Path,
+    ctx_orig,
+    query_ds,
+    query_emb_rows: np.ndarray,
+    logits_res: pd.DataFrame,
+    similarity_res: pd.DataFrame,
+    retrieval_df: pd.DataFrame,
+    analysis_df: pd.DataFrame,
+    retrieval_summary: dict,
+    similarity_summary: dict,
+) -> None:
+    backbone_name = config["model"]["backbone_name"]
+    head_type = config["model"]["head_type"]
+
+    save_parquet(
+        save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet",
+        logits_res,
+    )
+
+    save_parquet(
+        save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet",
+        similarity_res,
+    )
+
+    save_parquet(
+        save_path / f"analysis_merged__{backbone_name}_{head_type}__n{n_samples}.parquet",
+        analysis_df,
+    )
+
+    save_parquet(
+        save_path / f"retrieval_bg_vs_jaguar__{backbone_name}_{head_type}__n{n_samples}.parquet",
+        retrieval_df,
+    )
+
+    with open(save_path / f"similarity_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
+        json.dump(similarity_summary, f, indent=2)
+
+    with open(save_path / f"retrieval_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
+        json.dump(retrieval_summary, f, indent=2)
+
+    run_config = {
+        "n_samples": n_samples,
+        "query_emb_rows": [int(x) for x in query_emb_rows],
+        "seed": config["xai"]["seed"],
+        "data": {
+            "dataset_name": dataset_name,
+            "manifest_dir": to_rel_path(manifest_dir),
+            "gallery_source": "original_train_plus_val_from_shared_base",
+        },
+        "model": {
+            "checkpoint_dir": to_rel_path(ctx_orig.checkpoint_dir),
+            "model_backbone": backbone_name,
+            "head_type": head_type,
+        },
+        "masking": {
+            "alpha_threshold": query_ds.alpha_threshold,
+            "mask_fill_color": query_ds.mask_fill_color,
+        },
+        "outputs": {
+            "logits_parquet": to_rel_path(
+                save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet"
+            ),
+            "similarity_parquet": to_rel_path(
+                save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet"
+            ),
+            "retrieval_parquet": to_rel_path(
+                save_path / f"retrieval_bg_vs_jaguar__{backbone_name}_{head_type}__n{n_samples}.parquet"
+            ),
+            "retrieval_summary_json": to_rel_path(
+                save_path / f"retrieval_summary__{backbone_name}_{head_type}__n{n_samples}.json"
+            ),
+            "similarity_summary_json": to_rel_path(
+                save_path / f"similarity_summary__{backbone_name}_{head_type}__n{n_samples}.json"
+            ),
+            "heatmaps_dir": to_rel_path(results_path / "heatmaps"),
+            "analysis_merged_parquet": to_rel_path(
+                save_path / f"analysis_merged__{backbone_name}_{head_type}__n{n_samples}.parquet"
+            ),
+        },
+    }
+
+    with open(save_path / f"run_config__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
+        json.dump(run_config, f, indent=2)
+
+
+def build_bg_sensitivity_summaries(
+    retrieval_df: pd.DataFrame,
+    similarity_res: pd.DataFrame,
+) -> dict:
     analysis_df = retrieval_df.merge(
         similarity_res,
         on=["id", "filepath"],
@@ -344,85 +550,130 @@ if __name__ == "__main__":
     analysis_correct = analysis_df[analysis_df["is_rank1_orig"]].copy()
     analysis_wrong = analysis_df[~analysis_df["is_rank1_orig"]].copy()
 
-    summary_all = summarize_bg_vs_jaguar(analysis_df)
-    summary_correct = summarize_bg_vs_jaguar(analysis_correct)
-    summary_wrong = summarize_bg_vs_jaguar(analysis_wrong)
+    retrieval_summary = {
+        "all": summarize_bg_vs_jaguar(analysis_df),
+        "orig_rank1_correct": summarize_bg_vs_jaguar(analysis_correct),
+        "orig_rank1_wrong": summarize_bg_vs_jaguar(analysis_wrong),
+        "variant_summary": retrieval_variant_summary,
+    }
 
     similarity_summary = {
         "all": summarize_embedding_stability(analysis_df),
         "orig_rank1_correct": summarize_embedding_stability(analysis_correct),
         "orig_rank1_wrong": summarize_embedding_stability(analysis_wrong),
     }
-    
-    # save results
-    similarity_res.to_csv(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.csv", index=False)
-    
-    # classification_sensitivity.parquet
-    save_parquet(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet", logits_res)
-    # similarity_stability.parquet
-    save_parquet(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet", similarity_res)
-    
-    # analysis_merged.parquet
-    save_parquet(
-        save_path / f"analysis_merged__{backbone_name}_{head_type}__n{n_samples}.parquet",
-        analysis_df
-    )
 
-    config = {
-        "n_samples": n_samples,
-        "sample_indices": [int(x) for x in torch_idx],
-        "background_setting": BACKGROUND,
-        "seed": SEED,
-        "data": {
-            "dataset_name": dataset_name,
-            "manifest_dir": to_rel_path(manifest_dir),
-            "gallery_source": "train_full"          ## !TODO muss eigentlich abhängig vom Modell sein oder? Was es im training gesehen hat - split data als source of truth
-        },
-        "model": {
-            "checkpoint_path": to_rel_path(checkpoint_path),
-            "num_classes":  num_classes,
-            "model_backbone": backbone_name,
-            "head_type": head_type,
-        },
-        "masking": {
-            "alpha_threshold": query_ds.alpha_threshold,
-            "mask_fill_color": query_ds.mask_fill_color
-        },
-        "outputs": {
-            "logits_parquet": to_rel_path(save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet"),
-            "similarity_parquet": to_rel_path(save_path / f"similarity_stability__{backbone_name}_{head_type}__n{n_samples}.parquet"),
-            "retrieval_parquet": to_rel_path(save_path / f"retrieval_bg_vs_jaguar__{backbone_name}_{head_type}__n{n_samples}.parquet"),
-            "retrieval_summary_json": to_rel_path(save_path / f"retrieval_summary__{backbone_name}_{head_type}__n{n_samples}.json"),
-            "similarity_summary_json": to_rel_path(save_path / f"similarity_summary__{backbone_name}_{head_type}__n{n_samples}.json"),
-            "heatmaps_dir": to_rel_path(results_path / "heatmaps"),
-            "analysis_merged_parquet": to_rel_path(save_path / f"analysis_merged__{backbone_name}_{head_type}__n{n_samples}.parquet"),
-        },
+    return {
+        "analysis_df": analysis_df,
+        "retrieval_summary": retrieval_summary,
+        "similarity_summary": similarity_summary,
     }
 
-    # run_config.json
-    with open(save_path / f"run_config__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
-        json.dump(config, f, indent=2)
-    
-    # similarity_summary.json
-    with open(save_path / f"similarity_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
-        json.dump(similarity_summary, f, indent=2)
 
-    # retrieval_bg_vs_jaguar.parquet
-    save_parquet(
-        save_path / f"retrieval_bg_vs_jaguar__{backbone_name}_{head_type}__n{n_samples}.parquet",
-        retrieval_df
+
+if __name__ == "__main__":
+    n_samples = 10
+    dataset_name = "jaguar_init"
+    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
+    
+    config = ""
+
+    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
+    backbone_name = config["model"]["backbone_name"]
+    head_type= config["model"]["head_type"]
+    run_name = f"{backbone_name}__{head_type}__bg-sensitivity"
+
+    save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
+    ensure_dir(save_path)
+    results_path = resolve_path("xai/background_sensitivity", RESULTS_STORE)
+    ensure_dir(results_path)
+
+    base = build_original_gallery_base(
+        config=config,
+        checkpoint_dir=checkpoint_dir,
     )
 
-    retrieval_summary = {
-        "all": summary_all,
-        "orig_rank1_correct": summary_correct,
-        "orig_rank1_wrong": summary_wrong,
-        "variant_summary": retrieval_variant_summary,
-    }
+    ctx_orig = base["ctx_orig"]
 
-    # retrieval_summary.json
-    with open(save_path / f"retrieval_summary__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
-        json.dump(retrieval_summary, f, indent=2)
+    gallery_emb = base["gallery_embeddings_orig"]
+    gallery_ids = list(base["gallery_labels_orig"])
+    gallery_files = list(base["gallery_files_orig"])
 
-    # save heatmaps
-    generate_visuals_logits(model, query_loader, logits_res, results_path, DEVICE)
+    query_emb_rows = get_val_query_indices(
+        split_df=ctx_orig.split_df,
+        out_root=save_path,
+        n_samples=n_samples,
+        seed=config["xai"]["seed"],
+    )
+
+    samples_list = select_val_samples_from_emb_rows(
+        ctx_orig=ctx_orig,
+        query_emb_rows=query_emb_rows,
+    )
+        
+    """
+    # load model weights
+    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    tmp_state = ckpt["model_state_dict"]
+    state = {k.replace("module.", "", 1): v for k, v in tmp_state.items()}
+    missing, unexpected = model.load_state_dict(state, strict=False)
+    print("full model missing:", len(missing), "unexpected:", len(unexpected))
+    model = model.to(DEVICE).eval()
+    """
+    
+    query_ds = MaskAwareJaguarDataset(
+        jaguar_model=ctx_orig.model,
+        base_root=PATHS.data_train,
+        data_root=PATHS.data.parent,
+        samples_list=samples_list,
+    )
+    query_loader = torch.utils.data.DataLoader(
+        query_ds,
+        batch_size=config["inference"]["batch_size"],
+        shuffle=False,
+    )
+
+    xai_result = run_xai_classification_analysis(
+        model=ctx_orig.model,
+        query_loader=query_loader,
+        results_path=results_path,
+    )
+
+    stress_result = run_bg_vs_jaguar_stress_analysis(
+        model=ctx_orig.model,
+        query_loader=query_loader,
+        gallery_emb=gallery_emb,
+        gallery_ids=gallery_ids,
+        gallery_files=gallery_files,
+    )
+
+    logits_res = xai_result["logits_res"]
+    similarity_res = xai_result["similarity_res"]
+    retrieval_df = stress_result["retrieval_df"]
+
+    summary_result = build_bg_sensitivity_summaries(
+        retrieval_df=retrieval_df,
+        similarity_res=similarity_res,
+    )
+
+    analysis_df = summary_result["analysis_df"]
+    retrieval_summary = summary_result["retrieval_summary"]
+    similarity_summary = summary_result["similarity_summary"]
+    
+    save_bg_sensitivity_outputs(
+        save_path=save_path,
+        results_path=results_path,
+        config=config,
+        n_samples=n_samples,
+        dataset_name=dataset_name,
+        manifest_dir=manifest_dir,
+        ctx_orig=ctx_orig,
+        query_ds=query_ds,
+        query_emb_rows=query_emb_rows,
+        logits_res=logits_res,
+        similarity_res=similarity_res,
+        retrieval_df=retrieval_df,
+        analysis_df=analysis_df,
+        retrieval_summary=retrieval_summary,
+        similarity_summary=similarity_summary,
+    )

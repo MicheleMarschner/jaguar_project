@@ -3,7 +3,7 @@ name = "eva02_miew_con"
 
 
 [fusion]
-weights = [0.5, 0.5]
+weights = [0.4, 0.4, 0.2]
 normalize_mode = "global_minmax"           #  "none", "global_minmax", "row_minmax", "row_zscore"
 square_before_fusion = true
 
@@ -30,10 +30,28 @@ config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
 cache_prefix = "backbone_miew_id"
 
 [[members]]
-name = "MiewID"
-checkpoint_path = "kaggle_backbone/backbone_miew_id"
-config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
-cache_prefix = "backbone_miew_id"
+name = "ConvNeXt-V2"
+checkpoint_path = "kaggle_backbone/backbone_convnext_v2"
+config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
+cache_prefix = "backbone_convnext_v2"
+
+# [[members]]
+# name = "DINOv2-Base"
+# checkpoint_path = "kaggle_backbone/backbone_dinov2_base"
+# config_path = "kaggle_backbone/backbone_dinov2_base/config_leaderboard_exp.toml"
+# cache_prefix = "backbone_dinov2_base"
+
+# [[members]]
+# name = "MegaDescriptor-L"
+# checkpoint_path = "kaggle_backbone/backbone_megadescriptor_l"
+# config_path = "kaggle_backbone/backbone_megadescriptor_l/config_leaderboard_exp.toml"
+# cache_prefix = "backbone_megadescriptor_l"
+
+# [[members]]
+# name = "Swin-Transformer"
+# checkpoint_path = "kaggle_backbone/backbone_swin_transformer"
+# config_path = "kaggle_backbone/backbone_swin_transformer/config_leaderboard_exp.toml"
+# cache_prefix = "backbone_swin_transformer"
 
 [inference]
 batch_size = 64

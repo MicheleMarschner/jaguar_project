@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from jaguar.utils.utils_models import load_checkpoint_into_model
+from jaguar.utils.utils_models import load_checkpoint_into_model, load_or_extract_jaguarid_embeddings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -363,5 +363,145 @@ def evaluate_query_gallery_retrieval(
     return query_df, summary
 
 
+def build_original_gallery_base(config: dict, checkpoint_dir: Path):
+    """
+    Builds the shared original gallery used as the fixed reference for background-reliance
+    comparisons across query settings.
+    """
+    ctx_orig = build_eval_context(
+        config=config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+
+    train_embeddings_orig = load_or_extract_jaguarid_embeddings(
+        model=ctx_orig.model,
+        torch_ds=ctx_orig.train_ds,
+        split="train",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix="original_train",
+    )
+
+    ##  !TODO klären welchen background die haben sollten
+    val_embeddings_orig = load_or_extract_jaguarid_embeddings(
+        model=ctx_orig.model,
+        torch_ds=ctx_orig.val_ds,
+        split="val",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix="original_val",
+    )
+
+    gallery_embeddings_orig = np.concatenate(
+        [train_embeddings_orig, val_embeddings_orig],
+        axis=0,
+    )
+
+    gallery_labels_orig = np.concatenate(
+        [np.asarray(ctx_orig.train_ds.labels), np.asarray(ctx_orig.val_ds.labels)],
+        axis=0,
+    )
+
+    gallery_global_indices_orig = np.concatenate(
+        [ctx_orig.train_local_to_emb_row, ctx_orig.val_local_to_emb_row],
+        axis=0,
+    )
+
+    train_files = [str(s["filename"]) for s in ctx_orig.train_ds.samples]
+    val_files = [str(s["filename"]) for s in ctx_orig.val_ds.samples]
+    gallery_files_orig = train_files + val_files
+
+    #query_emb_rows = get_val_query_indices(
+    #    split_df=ctx_orig.split_df,
+    #    out_root=save_dir,
+    #    n_samples=config["evaluation"]["n_queries"],
+    #    seed=config["evaluation"]["seed"],
+    #)
+
+    return {
+        "ctx_orig": ctx_orig,
+        "train_embeddings_orig": train_embeddings_orig,
+        "val_embeddings_orig": val_embeddings_orig,
+        "gallery_embeddings_orig": gallery_embeddings_orig,
+        "gallery_labels_orig": gallery_labels_orig,
+        "gallery_global_indices_orig": gallery_global_indices_orig,
+        "gallery_files_orig": gallery_files_orig,
+    }
 
 
+def build_query_for_setting(
+    config: dict,
+    ctx_orig,
+    setting: str,
+) -> dict:
+    """
+    Builds the query side for one background setting so retrieval can be compared
+    against the same fixed original gallery.
+    """
+    val_processing_fn = build_eval_processing_fn(setting, config)
+
+    _, _, val_ds = load_split_jaguar_from_FO_export(
+        PATHS.data_export / "splits_curated",
+        overwrite_db=False,
+        parquet_path=ctx_orig.parquet_root,
+        dataset_name="jaguar_splits_curated",
+        train_processing_fn=None,
+        val_processing_fn=val_processing_fn,
+        include_duplicates=config["split"]["include_duplicates"],
+    )
+
+    val_ds.transform = get_transforms(
+        config,
+        ctx_orig.model.backbone_wrapper,
+        is_training=False,
+    )
+
+    val_local_to_emb_row = build_local_to_emb_row(
+        val_ds,
+        ctx_orig.split_df,
+        split="val",
+    )
+
+    query_embeddings = load_or_extract_jaguarid_embeddings(
+        model=ctx_orig.model,
+        torch_ds=val_ds,
+        split="val",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix=f"{setting}_val",
+    )
+
+    query_labels = np.asarray(val_ds.labels)
+    query_global_indices = val_local_to_emb_row
+
+
+    #query_local_idx_setting = map_emb_rows_to_local_indices(
+    #    emb_rows=query_emb_rows,
+    #    local_to_emb_row=ctx_setting.val_local_to_emb_row,
+    #)
+
+    #query_embeddings = val_embeddings_setting[query_local_idx_setting]
+    #query_labels = np.asarray(ctx_setting.val_ds.labels)[query_local_idx_setting]
+    #query_global_indices = query_emb_rows
+
+    return {
+        "query_embeddings": query_embeddings,
+        "query_labels": query_labels,
+        "query_global_indices": query_global_indices,
+        "val_ds": val_ds,
+    }
+
+
+def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> list[dict]:
+    """
+    Resolve global val emb_row ids to the corresponding val dataset samples.
+    """
+    val_local_idx = map_emb_rows_to_local_indices(
+        query_emb_rows,
+        ctx_orig.val_local_to_emb_row,
+    )
+    return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]

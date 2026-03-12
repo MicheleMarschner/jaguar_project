@@ -8,22 +8,21 @@ after each model is trained, extract embeddings for the relevant images, normali
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
 import os
-from pathlib import Path
 
-from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_evaluation import build_local_to_emb_row
-from jaguar.utils.utils_models import load_or_extract_embeddings
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-import pandas as pd
-from jaguar.utils.utils import ensure_dir, read_toml_from_path, resolve_path, save_parquet
+from pathlib import Path
 import torch
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
 
+from jaguar.utils.utils_datasets import build_processing_fn, load_split_jaguar_from_FO_export
+from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 
 
 
@@ -37,17 +36,27 @@ def get_embedding_cache_path(
     ensemble_name = config["ensemble"]["name"]
     cache_dir = PATHS.runs / "ensemble_cache" / ensemble_name / member_name
     ensure_dir(cache_dir)
-    return cache_dir / f"{split_name}_embeddings.npy"
+
+    tta_tag = "tta" if config["inference"]["use_tta"] else "no_tta"
+    prefix = f"{cache_prefix}__" if cache_prefix else ""
+
+    return cache_dir / f"{prefix}{split_name}_{tta_tag}_embeddings.npy"
 
 
-def load_or_extract_embeddings_cached(
+def load_or_extract_jaguarid_embeddings_cached(
     model,
-    dataloader,
+    torch_ds,
     config,
     member_name: str,
     split_name: str,
+    cache_prefix: str | None = None,
 ):
-    cache_path = get_embedding_cache_path(config, member_name, split_name)
+    cache_path = get_embedding_cache_path(
+        config=config,
+        member_name=member_name,
+        split_name=split_name,
+        cache_prefix=cache_prefix,
+    )
 
     if cache_path.exists():
         print(f"[Cache] Loading embeddings from {cache_path}")
@@ -55,270 +64,17 @@ def load_or_extract_embeddings_cached(
         print(f"[Cache] Loaded shape: {emb.shape}")
         return emb
 
-    emb = extract_embeddings(
+    emb = load_or_extract_jaguarid_embeddings(
         model=model,
-        dataloader=dataloader,
+        torch_ds=torch_ds,
+        split=split_name,
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
         use_tta=config["inference"]["use_tta"],
+        cache_prefix=cache_prefix,
+        folder=cache_path.parent,
     )
-
-    np.save(cache_path, emb)
-    print(f"[Cache] Saved embeddings to {cache_path}")
     return emb
-
-
-def evaluate_query_gallery_retrieval(
-    torch_ds,
-    query_indices: np.ndarray,
-    gallery_indices: np.ndarray,
-    split_df,
-    model_wrapper: FoundationModelWrapper,
-) -> tuple[pd.DataFrame, dict]:
-    """
-    Evaluate retrieval on a rectangular query->gallery setup using the shared core logic.
-
-    Returns:
-    - query_df: one row per query with AP / rank1 info
-    - summary: aggregate metrics
-    """
-    retrieval = prepare_query_gallery_retrieval(
-        torch_ds=torch_ds,
-        query_indices=query_indices,
-        gallery_indices=gallery_indices,
-        split_df=split_df,
-        model_wrapper=model_wrapper,
-    )
-
-    query_rows = []
-    ap_list = []
-    rank1_hits = []
-
-    n_queries = len(retrieval["q_global"])
-
-    for i in tqdm(range(n_queries), desc="Evaluating Retrieval"):
-        q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
-
-        if len(ranked_candidates) == 0:
-            continue
-
-        rels = np.array([int(c["is_same_id"]) for c in ranked_candidates], dtype=np.int64)
-        sims = np.array([c["sim"] for c in ranked_candidates], dtype=np.float64)
-
-        num_rel = rels.sum()
-        if num_rel == 0:
-            continue
-
-        precision_at_k = np.cumsum(rels) / (np.arange(len(rels)) + 1)
-        ap = float((precision_at_k * rels).sum() / num_rel)
-
-        rank1_correct = bool(ranked_candidates[0]["is_same_id"])
-        first_pos_rank = int(np.where(rels == 1)[0][0] + 1)
-
-        ap_list.append(ap)
-        rank1_hits.append(rank1_correct)
-
-        query_rows.append({
-            "query_idx": q_idx_global,
-            "query_label": q_label,
-            "n_gallery_valid": len(ranked_candidates),
-            "n_relevant": int(num_rel),
-            "rank1_correct": rank1_correct,
-            "ap": ap,
-            "first_pos_rank": first_pos_rank,
-            "top1_idx": ranked_candidates[0]["gallery_global_idx"],
-            "top1_label": ranked_candidates[0]["gallery_label"],
-            "top1_sim": ranked_candidates[0]["sim"],
-        })
-
-    query_df = pd.DataFrame(query_rows)
-
-    summary = {
-        "mAP": float(np.mean(ap_list)) if ap_list else 0.0,
-        "rank1": float(np.mean(rank1_hits)) if rank1_hits else 0.0,
-        "n_queries_eval": len(ap_list),
-    }
-
-    return query_df, summary
-
-
-def prepare_query_gallery_retrieval(
-    torch_ds,
-    query_indices: np.ndarray,
-    gallery_indices: np.ndarray,
-    split_df,
-    model_wrapper: FoundationModelWrapper,
-):
-    """
-    Build rectangular query-gallery retrieval state.
-    """
-    all_embeddings = load_or_extract_embeddings(model_wrapper, torch_ds, num_workers=0)
-
-    q_global = np.asarray(query_indices, dtype=np.int64)
-    g_global = np.asarray(gallery_indices, dtype=np.int64)
-
-    emb_q = all_embeddings[q_global]
-    emb_g = all_embeddings[g_global]
-
-    emb_q = emb_q / (np.linalg.norm(emb_q, axis=1, keepdims=True) + 1e-12)
-    emb_g = emb_g / (np.linalg.norm(emb_g, axis=1, keepdims=True) + 1e-12)
-
-    sim_matrix = emb_q @ emb_g.T
-
-    all_labels = np.asarray(torch_ds.labels)
-    labels_q = all_labels[q_global]
-    labels_g = all_labels[g_global]
-
-    bg = split_df.set_index("emb_row")["burst_group_id"]
-    burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
-    burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
-
-    return {
-        "q_global": q_global,
-        "g_global": g_global,
-        "sim_matrix": sim_matrix,
-        "labels_q": labels_q,
-        "labels_g": labels_g,
-        "burst_q": burst_q,
-        "burst_g": burst_g,
-    }
-
-
-def get_ranked_candidates_for_query(retrieval: dict, i: int):
-    """
-    Shared core: return valid ranked gallery candidates for one query.
-    Keeps the exact filtering logic from your original function.
-    """
-    sims_i = retrieval["sim_matrix"][i]
-    ranked_g_indices = np.argsort(-sims_i)
-
-    q_idx_global = int(retrieval["q_global"][i])
-    q_label = retrieval["labels_q"][i]
-
-    rows = []
-    valid_rank = 0
-
-    for g_idx in ranked_g_indices:
-        g_idx_global = int(retrieval["g_global"][g_idx])
-
-        # Skip Self-Match
-        if q_idx_global == g_idx_global:
-            continue
-
-        # Skip same burst group
-        if retrieval["burst_q"][i] != -1 and retrieval["burst_g"][g_idx] == retrieval["burst_q"][i]:
-            continue
-
-        valid_rank += 1
-
-        rows.append({
-            "gallery_local_idx": int(g_idx),
-            "gallery_global_idx": g_idx_global,
-            "gallery_label": retrieval["labels_g"][g_idx],
-            "sim": float(sims_i[g_idx]),
-            "rank_in_gallery": valid_rank,
-            "is_same_id": bool(q_label == retrieval["labels_g"][g_idx]),
-        })
-
-    return q_idx_global, q_label, rows
-
-
-### !TODO for xai_similarity
-def mine_references_from_gallery(
-    torch_ds,
-    query_indices: np.ndarray,
-    gallery_indices: np.ndarray,
-    split_df,
-    model_wrapper: FoundationModelWrapper,
-    out_root: Path,
-    split: str,
-    pair_types: Sequence[str],
-) -> pd.DataFrame:
-    """
-    Mines reference pairs by searching for Queries within the Gallery.
-    
-    This stage defines the *cases we want to explain* (pair taxonomy):
-    - easy_pos: “model should clearly match” (sanity case)
-    - hard_neg: “model is likely to confuse” (failure-analysis case)
-    - hard_pos: 
-    """
-    n_queries = len(query_indices)
-    out_path = out_root / f"refs_n{n_queries}.parquet"
-
-    if out_path.exists():
-        print(f"[Info] Loading existing refs from {out_path}")
-        return pd.read_parquet(out_path)
-    
-    print(f"[Mining] Queries: {n_queries} vs Gallery: {len(gallery_indices)}")
-
-    retrieval = prepare_query_gallery_retrieval(
-        torch_ds=torch_ds,
-        query_indices=query_indices,
-        gallery_indices=gallery_indices,
-        split_df=split_df,
-        model_wrapper=model_wrapper,
-    )
-
-    rows = []
-
-    for i in tqdm(range(n_queries), desc="Mining Refs"):
-        q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
-
-        found_pairs = {pt: False for pt in pair_types}
-        hard_pos_candidate = None
-        need_tail_scan = ("hard_pos" in pair_types)
-
-        for cand in ranked_candidates:
-            if (not need_tail_scan) and all(found_pairs.values()):
-                break
-
-            current_sim = cand["sim"]
-            g_idx_global = cand["gallery_global_idx"]
-            is_same_id = cand["is_same_id"]
-
-            if "easy_pos" in pair_types and not found_pairs.get("easy_pos", False):
-                if is_same_id:
-                    rows.append({
-                        "pair_type": "easy_pos",
-                        "query_idx": q_idx_global,
-                        "ref_idx": g_idx_global,
-                        "pair_sim": current_sim,
-                        "rank_in_gallery": cand["rank_in_gallery"]
-                    })
-                    found_pairs["easy_pos"] = True
-
-            if "hard_neg" in pair_types and not found_pairs.get("hard_neg", False):
-                if not is_same_id:
-                    rows.append({
-                        "pair_type": "hard_neg",
-                        "query_idx": q_idx_global,
-                        "ref_idx": g_idx_global,
-                        "pair_sim": current_sim,
-                        "rank_in_gallery": cand["rank_in_gallery"]
-                    })
-                    found_pairs["hard_neg"] = True
-
-            if "hard_pos" in pair_types and is_same_id:
-                hard_pos_candidate = {
-                    "pair_type": "hard_pos",
-                    "query_idx": q_idx_global,
-                    "ref_idx": g_idx_global,
-                    "pair_sim": current_sim,
-                    "rank_in_gallery": cand["rank_in_gallery"]
-                }
-                found_pairs["hard_pos"] = True
-
-        if "hard_pos" in pair_types and hard_pos_candidate is not None:
-            rows.append(hard_pos_candidate)
-
-    ref_df = pd.DataFrame(rows)
-
-    expected_count = n_queries * len(pair_types)
-    if len(ref_df) < expected_count:
-        print(f"[Warning] Mined {len(ref_df)} pairs, expected {expected_count}. Some queries lack positives.")
-        
-    ensure_dir(out_path.parent)
-    save_parquet(out_path, ref_df)
-    return ref_df
-
 
 
 
@@ -606,36 +362,24 @@ def create_simple_ensemble(config, save_dir):
         val_ds.transform = model.backbone_wrapper.transform
         train_ds.transform = model.backbone_wrapper.transform
 
-        val_loader = DataLoader(
-            val_ds,
-            batch_size=config["inference"]["batch_size"],
-            shuffle=False,
-            num_workers=config["data"]["num_workers"],
-            pin_memory=True,
-        )
+        cache_prefix = member.get("cache_prefix", member["name"])
 
-        train_loader = DataLoader(
-            train_ds,
-            batch_size=config["inference"]["batch_size"],
-            shuffle=False,
-            num_workers=config["data"]["num_workers"],
-            pin_memory=True,
-        )
-
-        query_embeddings = load_or_extract_embeddings_cached(
+        query_embeddings = load_or_extract_jaguarid_embeddings_cached(
             model=model,
-            dataloader=val_loader,
+            torch_ds=val_ds,
             config=config,
             member_name=member["name"],
             split_name="val",
+            cache_prefix=cache_prefix,
         )
 
-        train_embeddings = load_or_extract_embeddings_cached(
+        train_embeddings = load_or_extract_jaguarid_embeddings_cached(
             model=model,
-            dataloader=train_loader,
+            torch_ds=train_ds,
             config=config,
             member_name=member["name"],
             split_name="train",
+            cache_prefix=cache_prefix,
         )
 
         gallery_embeddings = np.concatenate([train_embeddings, query_embeddings], axis=0)

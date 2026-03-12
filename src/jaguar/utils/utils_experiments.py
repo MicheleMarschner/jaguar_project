@@ -1,4 +1,7 @@
+<<<<<<< HEAD
 from pathlib import Path
+=======
+>>>>>>> Background_exp
 import tomllib
 
 from jaguar.config import PATHS
@@ -95,7 +98,7 @@ def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: d
     return override
     
 
-def build_training_override(
+def build_standard_override(
     run_cfg: dict, 
     experiment_meta: dict,
     base_config: dict
@@ -220,4 +223,3 @@ def build_training_override(
             override["data"]["split_data_path"] = split_relpath
 
     return override
-

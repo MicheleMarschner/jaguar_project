@@ -3,15 +3,11 @@ import subprocess
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir
-<<<<<<< HEAD
-from jaguar.utils.utils_experiments import build_ensemble_override, build_training_override, dict_to_toml, load_toml_config
-=======
 from jaguar.utils.utils_experiments import build_ensemble_override, build_standard_override, dict_to_toml, load_toml_config
->>>>>>> Background_exp
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run experiments")
+    parser = argparse.ArgumentParser(description="Run ablation experiments")
     parser.add_argument(
         "--base_config",
         type=str,
@@ -38,37 +34,6 @@ def parse_args():
     return parser.parse_args()
 
 
-
-def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) -> str:
-    if mode == "train":
-        return main_script
-
-    if mode == "ensemble":
-        return "src/jaguar/experiments/run_ensemble.py"
-
-    if mode == "eval":
-        eval_type = experiment_meta.get("eval_type")
-        if eval_type == "background_reliance":
-            return "src/jaguar/experiments/run_background_reliance_eval.py"
-        if eval_type == "background_sensitivity":
-            return "src/jaguar/experiments/run_background_sensitivity.py"
-        raise ValueError(f"Unknown eval_type: {eval_type}")
-
-    if mode == "explain":
-        explain_type = experiment_meta.get("explain_type")
-        if explain_type == "pair_similarity":
-            return "src/jaguar/experiments/run_xai_similarity.py"
-        raise ValueError(f"Unknown explain_type: {explain_type}")
-
-    if mode == "explain_eval":
-        explain_eval_type = experiment_meta.get("explain_eval_type")
-        if explain_eval_type == "pair_similarity_metrics":
-            return "src/jaguar/experiments/run_xai_metrics.py"
-        raise ValueError(f"Unknown explain_eval_type: {explain_eval_type}")
-
-    raise ValueError(f"Unknown mode: {mode}")
-
-
 def run_experiments():
     args = parse_args()
     experiment_config = load_toml_config(args.experiment_config)
@@ -84,10 +49,9 @@ def run_experiments():
     generated_dir = PATHS.configs / "_generated" / experiment_name
     ensure_dir(generated_dir)
 
-    mode = experiment_meta.get("mode", "train")
+    mode = experiment_meta.get("mode", "scientific")
 
     print(f"Found {len(runs)} runs.")
-    print(f"mode = {mode}")
 
     all_cmds = []
 
@@ -114,11 +78,14 @@ def run_experiments():
         override_path.write_text(override_text, encoding="utf-8")
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
 
-        target_script = resolve_target_script(
-            mode=mode,
-            experiment_meta=experiment_meta,
-            main_script=args.main_script,
-        )
+        if mode == "xai":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/run_xai_experiment.py"
+        elif mode == "ensemble":
+            # !TODO change according to file_path and function_name
+            target_script = "src/jaguar/experiments/run_ensemble.py"
+        else:
+            target_script = args.main_script
 
         cmd = [
             "python",
@@ -129,7 +96,7 @@ def run_experiments():
             str(rel_path),
         ]
 
-        if mode in {"train", "eval", "ensemble"}:
+        if mode not in {"xai"}:
             cmd.extend([
                 "--experiment_name",
                 experiment_name,

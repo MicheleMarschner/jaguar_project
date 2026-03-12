@@ -1,5 +1,8 @@
 
 import os
+
+from jaguar.experiments.experiment_runner import load_toml_config
+from jaguar.experiments.experiment_xai import deep_update
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 import argparse
@@ -88,6 +91,7 @@ def main():
         run_dir=run_dir,
         exp_name=exp_name,
         experiment_group=experiment_group,
+        job_type="train",
     )
     
     print("\n[RUN]")

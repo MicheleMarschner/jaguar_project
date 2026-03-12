@@ -1,9 +1,15 @@
-from jaguar.config import DATA_STORE, PATHS
-from jaguar.utils.utils import resolve_path, save_npy
+from pathlib import Path
+
+from jaguar.config import DATA_STORE, DEVICE, PATHS
+from jaguar.models.jaguarid_models import JaguarIDModel
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
+from jaguar.utils.utils_datasets import PreprocessedDataset
 import torch
 import numpy as np
 import timm
 import functools
+from tqdm import tqdm
+from torch.utils.data import DataLoader
 from transformers import AutoModel
 from torchvision.models import (
     convnext_large, ConvNeXt_Large_Weights,
@@ -310,3 +316,17 @@ def load_or_extract_jaguarid_embeddings(
     save_npy(path, emb)
     print(f"[Info] Saved embeddings to {path}")
     return emb
+
+
+def load_checkpoint_into_model(model: JaguarIDModel, checkpoint_path: Path) -> None:
+    """Load checkpoint weights into a JaguarIDModel."""
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=DEVICE,
+        weights_only=False,
+    )
+    state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
+    model.load_state_dict(state_dict)
+    model.to(DEVICE)
+    model.eval()
+

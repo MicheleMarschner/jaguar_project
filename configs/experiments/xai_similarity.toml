@@ -2,7 +2,8 @@
 name = "xai_similarity"
 description = "Generate pair similarity explanations."
 base_config = "base/xai_base"
-mode = "xai"
+mode = "explain"
+explain_type = "pair_similarity"
 setup_name = "xai_similarity"
 output_profile = "xai"
 
@@ -11,3 +12,26 @@ experiment_name = "miewid_easy_hard"
 model_name = "MiewID"
 n_samples = 10
 pair_types = ["easy_pos", "hard_neg"]
+
+
+
+[experiment]
+name = "xai_similarity"
+mode = "explain"
+explain_type = "pair_similarity"
+setup_name = "scientific_base"
+
+[[experiment.runs]]
+experiment_name = "xai_dinov2_base"
+backbone_name = "DINOv2-Base"
+head_type = "ArcFace"
+checkpoint_dir = "..."
+model_name = "DINOv2-Base"
+dataset_name = "jaguar_xai"
+split_name = "val"
+n_samples = 10
+pair_types = ["easy_pos", "hard_neg"]
+explainer_names = ["IG", "GradCAM"]
+ig_steps = 10
+ig_internal_bs = 32
+ig_batch_size = 32

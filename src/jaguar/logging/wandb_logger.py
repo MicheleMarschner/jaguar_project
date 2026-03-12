@@ -37,6 +37,7 @@ def init_wandb_run(
     run_dir: Path,
     exp_name: str,
     experiment_group: str | None = None,
+    job_type: str | None = "train",
 ) -> Run | None:
     """Initialize a W&B run for one training experiment."""
     if not is_wandb_enabled(config):
@@ -51,7 +52,7 @@ def init_wandb_run(
         entity="michele-marschner-university-of-potsdam",
         project=project,
         group=experiment_group,
-        job_type="train",
+        job_type=job_type,
         tags=tags,
         name=exp_name,
         config=config,

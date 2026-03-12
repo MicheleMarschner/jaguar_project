@@ -1,5 +1,8 @@
 import json
-from jaguar.utils.utils_xai import manual_gradcam_class
+from jaguar.evaluation.run_background_reliance_eval import build_original_gallery_base, extract_query_variant_embeddings
+from jaguar.utils.utils_evaluation import map_emb_rows_to_local_indices
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
+from jaguar.utils.utils_xai import get_val_query_indices, manual_gradcam_class
 import torch
 import numpy as np
 import pandas as pd
@@ -14,178 +17,10 @@ from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE, SEED
-from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export, load_or_extract_jaguarid_embeddings
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
-
-
-
-def extract_query_variant_embeddings(model, dataloader, device):
-    """Extract orig / jaguar-only / bg-only embeddings for query images."""
-    model.eval()
-
-    emb_orig_all = []
-    emb_jag_all = []
-    emb_bg_all = []
-
-    query_ids = []
-    query_files = []
-
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Extract query embeddings"):
-            if batch is None:
-                continue
-
-            x_orig = batch["t_orig"].to(device)
-            x_jag  = batch["t_bg_masked"].to(device)   # jaguar-only
-            x_bg   = batch["t_fg_masked"].to(device)   # bg-only
-
-            emb_orig = model.get_embeddings(x_orig).detach().cpu().numpy()
-            emb_jag  = model.get_embeddings(x_jag).detach().cpu().numpy()
-            emb_bg   = model.get_embeddings(x_bg).detach().cpu().numpy()
-
-            emb_orig_all.append(emb_orig)
-            emb_jag_all.append(emb_jag)
-            emb_bg_all.append(emb_bg)
-
-            query_ids.extend(batch["id"])
-            query_files.extend([Path(p).name for p in batch["filepath"]])
-
-    return (
-        np.vstack(emb_orig_all),
-        np.vstack(emb_jag_all),
-        np.vstack(emb_bg_all),
-        list(query_ids),
-        list(query_files),
-    )
-
-
-
-def compute_retrieval_metrics_per_query(
-    query_emb: np.ndarray,
-    query_ids: list[str],
-    query_files: list[str],
-    gallery_emb: np.ndarray,
-    gallery_ids: list[str],
-    gallery_files: list[str],
-) -> pd.DataFrame:
-    """
-    Retrieval metrics per query against gallery.
-    Excludes exact self-match via filename.
-    Assumes embeddings are normalized.
-    """
-    sim = query_emb @ gallery_emb.T
-
-    gallery_ids = np.asarray(gallery_ids)
-    gallery_files = np.asarray(gallery_files)
-
-    rows = []
-
-    for i in range(len(query_ids)):
-        gold_id = query_ids[i]
-        qfile = query_files[i]
-
-        scores = sim[i].copy()
-
-        # exclude exact same file from gallery
-        self_mask = (gallery_files == qfile)
-        scores[self_mask] = -np.inf
-
-        ranked_idx = np.argsort(-scores)
-
-        gold_mask = (gallery_ids == gold_id) & (~self_mask)
-        non_gold_mask = (gallery_ids != gold_id) & (~self_mask)
-
-        if not gold_mask.any():
-            rows.append({
-                "id": gold_id,
-                "filepath": qfile,
-                "gold_rank": np.nan,
-                "is_rank1": False,
-                "is_rank5": False,
-                "best_gold_similarity": np.nan,
-                "best_impostor_similarity": np.nan,
-                "margin_gold_minus_impostor": np.nan,
-            })
-            continue
-
-        best_gold_similarity = float(scores[gold_mask].max())
-        best_impostor_similarity = float(scores[non_gold_mask].max()) if non_gold_mask.any() else np.nan
-
-        ranked_gallery_ids = gallery_ids[ranked_idx]
-        first_gold_pos = int(np.where(ranked_gallery_ids == gold_id)[0][0]) + 1
-
-        rows.append({
-            "id": gold_id,
-            "filepath": qfile,
-            "gold_rank": first_gold_pos,
-            "is_rank1": first_gold_pos <= 1,
-            "is_rank5": first_gold_pos <= 5,
-            "best_gold_similarity": best_gold_similarity,
-            "best_impostor_similarity": best_impostor_similarity,
-            "margin_gold_minus_impostor": (
-                best_gold_similarity - best_impostor_similarity
-                if not np.isnan(best_impostor_similarity) else np.nan
-            ),
-        })
-
-    return pd.DataFrame(rows)
-
-
-def compute_retrieval_bg_vs_jaguar(
-    query_emb_orig: np.ndarray,
-    query_emb_jaguar_only: np.ndarray,
-    query_emb_bg_only: np.ndarray,
-    query_ids: list[str],
-    query_files: list[str],
-    gallery_emb: np.ndarray,
-    gallery_ids: list[str],
-    gallery_files: list[str],
-) -> pd.DataFrame:
-    """Compare orig vs jaguar-only vs bg-only retrieval behaviour."""
-    df_orig = compute_retrieval_metrics_per_query(
-        query_emb_orig, query_ids, query_files,
-        gallery_emb, gallery_ids, gallery_files
-    ).add_suffix("_orig")
-
-    df_jag = compute_retrieval_metrics_per_query(
-        query_emb_jaguar_only, query_ids, query_files,
-        gallery_emb, gallery_ids, gallery_files
-    ).add_suffix("_jaguar_only")
-
-    df_bg = compute_retrieval_metrics_per_query(
-        query_emb_bg_only, query_ids, query_files,
-        gallery_emb, gallery_ids, gallery_files
-    ).add_suffix("_bg_only")
-
-    df = pd.concat([df_orig, df_jag, df_bg], axis=1)
-
-    # restore clean identifiers
-    df["id"] = df["id_orig"]
-    df["filepath"] = df["filepath_orig"]
-
-    df["bg_better_than_jag_rank"] = df["gold_rank_bg_only"] < df["gold_rank_jaguar_only"]
-    df["bg_better_than_jag_rank1"] = (
-        df["is_rank1_bg_only"].astype(int) > df["is_rank1_jaguar_only"].astype(int)
-    )
-    df["bg_better_than_jag_rank5"] = (
-        df["is_rank5_bg_only"].astype(int) > df["is_rank5_jaguar_only"].astype(int)
-    )
-    df["bg_better_than_jag_margin"] = (
-        df["margin_gold_minus_impostor_bg_only"] >
-        df["margin_gold_minus_impostor_jaguar_only"]
-    )
-
-    df["gold_rank_delta_bg_minus_jag"] = (
-        df["gold_rank_bg_only"] - df["gold_rank_jaguar_only"]
-    )
-    df["margin_delta_bg_minus_jag"] = (
-        df["margin_gold_minus_impostor_bg_only"] -
-        df["margin_gold_minus_impostor_jaguar_only"]
-    )
-
-    return df
 
 
 def compute_logit_sensitivity(model, dataloader, device):
@@ -297,51 +132,6 @@ def compute_embedding_stability(model, dataloader, device):
     return pd.DataFrame(results)
 
 
-def select_random_datasubset_balanced(
-    torch_ds,
-    n: int,
-    seed: int = 51,
-    k_per_id: int = 5,
-) -> np.ndarray:
-    """
-    Deterministically sample up to k_per_id per identity until reaching n.
-    Requires torch_ds.labels.
-    """
-    labels = np.asarray(torch_ds.labels)
-    rng = np.random.default_rng(seed)
-
-    id_to_indices = defaultdict(list)
-    for idx, y in enumerate(labels):
-        id_to_indices[str(y)].append(idx)
-
-    # deterministic shuffle within each identity
-    for y in id_to_indices:
-        rng.shuffle(id_to_indices[y])
-
-    # deterministic identity order
-    ids = sorted(id_to_indices.keys())
-    rng.shuffle(ids)
-
-    selected = []
-    # round-robin to keep it balanced
-    round_i = 0
-    while len(selected) < min(n, len(labels)):
-        made_progress = False
-        for y in ids:
-            src = id_to_indices[y]
-            take_pos = round_i
-            if take_pos < min(k_per_id, len(src)):
-                selected.append(src[take_pos])
-                made_progress = True
-                if len(selected) >= n:
-                    break
-        if not made_progress:
-            break
-        round_i += 1
-
-    return np.asarray(selected, dtype=np.int64)
-
-
 def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
     """"
     Generates GradCam overlays for spurious cases
@@ -447,37 +237,50 @@ def summarize_embedding_stability(df: pd.DataFrame) -> dict:
 
 
 
+def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> list[dict]:
+    """
+    Resolve global val emb_row ids to the corresponding val dataset samples.
+    """
+    val_local_idx = map_emb_rows_to_local_indices(
+        query_emb_rows,
+        ctx_orig.val_local_to_emb_row,
+    )
+    return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]
+
 if __name__ == "__main__":
-    BATCH_SIZE = 16
-    backbone_name = "MiewID"
-    head_type = "arcface"
     n_samples = 10
     dataset_name = "jaguar_init"
     manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
-    checkpoint_path = PATHS.checkpoints / "jaguar_reid_v1_epoch_16.pth"
-    BACKGROUND = "original"
     run_name = f"{backbone_name}__{head_type}__bg-{BACKGROUND}"
+    config = ""
 
     save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
     ensure_dir(save_path)
     results_path = resolve_path("xai/background_sensitivity", RESULTS_STORE)
     ensure_dir(results_path)
-    
-    # Load Sample List
-    _, gallery_ds = load_full_jaguar_from_FO_export(manifest_dir, dataset_name=dataset_name)         ## ! TODO spli dtaeien als source of truth: train +val aber query bilder ausschließen UND bursts/duplicates aus query in gallery rausschmeißen!! 
-    torch_idx = select_random_datasubset_balanced(gallery_ds, n=n_samples, seed=SEED, k_per_id=5)
-    samples_list = [gallery_ds.samples[i] for i in torch_idx]               ## !TODO sicher gehen dass val split, der nicht im training gesehen wurde!!
 
-    num_classes = int(len(np.unique(np.asarray(gallery_ds.labels))))
-
-    # Load Model (Pre-trained/Fine-tuned)
-    model = JaguarIDModel(
-        backbone_name=backbone_name, 
-        num_classes=num_classes,
-        head_type=head_type,
-        device=str(DEVICE)
+    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
+    base = build_original_gallery_base(
+        config=config,
+        checkpoint_dir=checkpoint_dir,
     )
+    ctx_orig = base["ctx_orig"]
+        
+    # Load Sample List
+    query_emb_rows = get_val_query_indices(
+        split_df=ctx_orig.split_df,
+        out_root=save_path,
+        n_samples=n_samples,
+        seed=config["xai"]["seed"],
+    )
+
+    samples_list = select_val_samples_from_emb_rows(
+        ctx_orig=ctx_orig,
+        query_emb_rows=query_emb_rows,
+    )
+
     
+    """
     # load model weights
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     tmp_state = ckpt["model_state_dict"]
@@ -485,34 +288,28 @@ if __name__ == "__main__":
     missing, unexpected = model.load_state_dict(state, strict=False)
     print("full model missing:", len(missing), "unexpected:", len(unexpected))
     model = model.to(DEVICE).eval()
-
+    """
 
     # Create DataLoaders
-    gallery_ds.transform = model.backbone_wrapper.transform
+    gallery_ds.transform = ctx_orig.model.backbone_wrapper.transform
 
     # 2) build query dataset/loader
     query_ds = MaskAwareJaguarDataset(
-        jaguar_model=model,
+        jaguar_model=ctx_orig.model,
         base_root=PATHS.data_train,
         data_root=PATHS.data.parent,
         samples_list=samples_list,
     )
-    query_loader = torch.utils.data.DataLoader(query_ds, batch_size=BATCH_SIZE, shuffle=False)
+    query_loader = torch.utils.data.DataLoader(
+        query_ds,
+        batch_size=config["inference"]["batch_size"],
+        shuffle=False,
+    )
+    
     
     # 3) embeddings
-    gallery_emb = load_or_extract_jaguarid_embeddings(
-        model=model,
-        torch_ds=gallery_ds,
-        split="training",
-        batch_size=BATCH_SIZE,
-        num_workers=0,
-    )
-    gallery_ids = [str(x) for x in gallery_ds.labels]
-    gallery_files = [Path(s["filepath"]).name for s in gallery_ds.samples]
+    
 
-    query_emb_orig, query_emb_jag, query_emb_bg, query_ids, query_files = extract_query_variant_embeddings(
-        model, query_loader, DEVICE
-    )
 
     # 4) retrieval dataframe
     retrieval_df = compute_retrieval_bg_vs_jaguar(

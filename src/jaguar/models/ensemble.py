@@ -8,27 +8,18 @@ after each model is trained, extract embeddings for the relevant images, normali
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
 import os
-from pathlib import Path
-from typing import Sequence
-
-from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.utils.utils_datasets import build_processing_fn, load_or_extract_embeddings, load_or_extract_jaguarid_embeddings, load_split_jaguar_from_FO_export
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-import pandas as pd
-from jaguar.utils.utils import ensure_dir, read_toml_from_path, resolve_path, save_parquet
+from pathlib import Path
 import torch
 import numpy as np
 from tqdm import tqdm
-from torch.utils.data import DataLoader
 
+from jaguar.utils.utils_datasets import build_processing_fn, load_split_jaguar_from_FO_export
+from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
-
-
-
-from pathlib import Path
-import numpy as np
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 
 
 def get_embedding_cache_path(

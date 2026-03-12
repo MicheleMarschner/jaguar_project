@@ -95,6 +95,7 @@ def main():
         run_dir=run_dir,
         exp_name=exp_name,
         experiment_group=experiment_group,
+        job_type="train",
     )
     
     print("\n[RUN]")

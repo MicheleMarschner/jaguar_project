@@ -7,10 +7,13 @@ Similarity CAM (query→positive ref and query→hard negative)
 '''
 
 from pathlib import Path
+from typing import Sequence
+from jaguar.utils.utils import ensure_dir, save_npy
 import torch
 from PIL import Image
 import torch.nn.functional as F
 import numpy as np
+import pandas as pd
 
 from pytorch_grad_cam import GradCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
@@ -221,3 +224,51 @@ def save_vec(save_dir: Path, prefix: str, expl: str, pt: str, vec: np.ndarray) -
     p = Path(save_dir) / fname
     np.save(p, np.asarray(vec, dtype=np.float32))
     return fname
+
+
+
+# ============================================================
+# Deterministic query selection (curated val subset)
+# ============================================================
+
+def get_curated_indices(split_df: pd.DataFrame, splits: Sequence[str]) -> np.ndarray:
+    """Return global emb_row ids for curated samples in the requested splits."""
+    df = split_df[
+        split_df["split_final"].isin(list(splits))
+        & split_df["keep_curated"].fillna(False).astype(bool)
+    ]
+    return df["emb_row"].astype(np.int64).to_numpy()
+
+
+def sample_indices(indices: np.ndarray, n_samples: int, seed: int) -> np.ndarray:
+    """Deterministically sample up to n_samples indices without replacement."""
+    indices = np.asarray(indices, dtype=np.int64).reshape(-1)
+
+    if len(indices) == 0:
+        return indices
+
+    rng = np.random.default_rng(seed)
+    chosen = rng.choice(indices, size=min(n_samples, len(indices)), replace=False)
+    return np.sort(chosen)
+
+
+def get_val_query_indices(
+    split_df: pd.DataFrame,
+    out_root: Path,
+    n_samples: int,
+    seed: int,
+) -> np.ndarray:
+    """
+    Cache the exact global emb_row query subset so runs can be compared on the
+    same validation images across repeated runs.
+    """
+    idx_path = out_root / f"xai_val_idx_n{n_samples}.npy"
+    if idx_path.exists():
+        return np.load(idx_path)
+
+    val_pool = get_curated_indices(split_df, splits=["val"])
+    val_chosen = sample_indices(val_pool, n_samples=n_samples, seed=seed)
+
+    ensure_dir(idx_path.parent)
+    save_npy(idx_path, val_chosen)
+    return val_chosen

@@ -24,7 +24,6 @@ Important project assumptions:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
-from jaguar.retrieval_core import get_ranked_candidates_for_query, get_val_query_indices, prepare_query_gallery_retrieval
 import numpy as np
 import pandas as pd
 import torch
@@ -34,13 +33,13 @@ from pytorch_grad_cam import GradCAM
 
 from typing import Dict, Any, Sequence, Tuple, List
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, DEVICE, SEED 
-from jaguar.utils.utils import ensure_dir, resolve_path, save_npy, save_parquet
-from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export, load_or_extract_embeddings 
+from jaguar.config import PATHS, SEED 
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
+from jaguar.utils.utils import ensure_dir, save_npy, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
-from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name  
+from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices  
 from jaguar.utils.utils_xai import ig_saliency_batched_similarity 
-
+from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
 
 # ============================================================
 # Config: defines one reproducible XAI run
@@ -68,115 +67,145 @@ class XAIConfig:
 
 
 
+
 # ============================================================
 # Step 2: mine references for pair types 
 # ============================================================
-
-def mine_references_from_gallery(
-    torch_ds,
-    query_indices: np.ndarray,
-    gallery_indices: np.ndarray,
-    split_df,
-    model_wrapper: FoundationModelWrapper,
+def mine_reference_pairs_from_retrieval(
+    retrieval: RetrievalState,
     out_root: Path,
-    split: str,
     pair_types: Sequence[str],
 ) -> pd.DataFrame:
     """
-    Mines reference pairs by searching for Queries within the Gallery.
-    
-    This stage defines the *cases we want to explain* (pair taxonomy):
-    - easy_pos: “model should clearly match” (sanity case)
-    - hard_neg: “model is likely to confuse” (failure-analysis case)
-    - hard_pos: 
+    Mines XAI reference pairs directly from a prepared query-gallery retrieval state.
+
+    This keeps XAI pair selection consistent with the shared evaluation logic:
+    ranking, self-exclusion, and same-burst exclusion are all inherited from
+    get_ranked_candidates_for_query(...).
+
+    Pair taxonomy:
+    - easy_pos: first valid same-id match in the ranked gallery
+    - hard_neg: first valid different-id match in the ranked gallery
+    - hard_pos: last valid same-id match in the ranked gallery
     """
-    n_queries = len(query_indices)
+    n_queries = len(retrieval.q_global)
     out_path = out_root / f"refs_n{n_queries}.parquet"
 
     if out_path.exists():
         print(f"[Info] Loading existing refs from {out_path}")
         return pd.read_parquet(out_path)
-    
-    print(f"[Mining] Queries: {n_queries} vs Gallery: {len(gallery_indices)}")
-
-    retrieval = prepare_query_gallery_retrieval(
-        torch_ds=torch_ds,
-        query_indices=query_indices,
-        gallery_indices=gallery_indices,
-        split_df=split_df,
-        model_wrapper=model_wrapper,
-    )
 
     rows = []
 
-    for i in tqdm(range(n_queries), desc="Mining Refs"):
+    for i in tqdm(range(n_queries), desc="Mining refs from retrieval"):
         q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
 
         found_pairs = {pt: False for pt in pair_types}
         hard_pos_candidate = None
-        need_tail_scan = ("hard_pos" in pair_types)
+        need_tail_scan = "hard_pos" in pair_types
 
         for cand in ranked_candidates:
-            if (not need_tail_scan) and all(found_pairs.values()):
-                break
+            g_idx_global = int(cand["gallery_global_idx"])
+            g_label = cand["gallery_label"]
+            is_same_id = bool(cand["is_same_id"])
+            pair_sim = float(cand["sim"])
+            rank_in_gallery = int(cand["rank_in_gallery"])
 
-            current_sim = cand["sim"]
-            g_idx_global = cand["gallery_global_idx"]
-            is_same_id = cand["is_same_id"]
+            if is_same_id and "easy_pos" in pair_types and not found_pairs["easy_pos"]:
+                rows.append({
+                    "pair_type": "easy_pos",
+                    "query_idx": q_idx_global,
+                    "query_label": q_label,
+                    "ref_idx": g_idx_global,
+                    "ref_label": g_label,
+                    "pair_sim": pair_sim,
+                    "rank_in_gallery": rank_in_gallery,
+                    "is_same_id": True,
+                })
+                found_pairs["easy_pos"] = True
 
-            if "easy_pos" in pair_types and not found_pairs.get("easy_pos", False):
-                if is_same_id:
-                    rows.append({
-                        "pair_type": "easy_pos",
-                        "query_idx": q_idx_global,
-                        "ref_idx": g_idx_global,
-                        "pair_sim": current_sim,
-                        "rank_in_gallery": cand["rank_in_gallery"]
-                    })
-                    found_pairs["easy_pos"] = True
+            if (not is_same_id) and "hard_neg" in pair_types and not found_pairs["hard_neg"]:
+                rows.append({
+                    "pair_type": "hard_neg",
+                    "query_idx": q_idx_global,
+                    "query_label": q_label,
+                    "ref_idx": g_idx_global,
+                    "ref_label": g_label,
+                    "pair_sim": pair_sim,
+                    "rank_in_gallery": rank_in_gallery,
+                    "is_same_id": False,
+                })
+                found_pairs["hard_neg"] = True
 
-            if "hard_neg" in pair_types and not found_pairs.get("hard_neg", False):
-                if not is_same_id:
-                    rows.append({
-                        "pair_type": "hard_neg",
-                        "query_idx": q_idx_global,
-                        "ref_idx": g_idx_global,
-                        "pair_sim": current_sim,
-                        "rank_in_gallery": cand["rank_in_gallery"]
-                    })
-                    found_pairs["hard_neg"] = True
-
-            if "hard_pos" in pair_types and is_same_id:
+            if is_same_id and "hard_pos" in pair_types:
                 hard_pos_candidate = {
                     "pair_type": "hard_pos",
                     "query_idx": q_idx_global,
+                    "query_label": q_label,
                     "ref_idx": g_idx_global,
-                    "pair_sim": current_sim,
-                    "rank_in_gallery": cand["rank_in_gallery"]
+                    "ref_label": g_label,
+                    "pair_sim": pair_sim,
+                    "rank_in_gallery": rank_in_gallery,
+                    "is_same_id": True,
                 }
-                found_pairs["hard_pos"] = True
+
+            if not need_tail_scan:
+                done = all(found_pairs[pt] for pt in pair_types)
+                if done:
+                    break
 
         if "hard_pos" in pair_types and hard_pos_candidate is not None:
             rows.append(hard_pos_candidate)
 
     ref_df = pd.DataFrame(rows)
 
-    expected_count = n_queries * len(pair_types)
-    if len(ref_df) < expected_count:
-        print(f"[Warning] Mined {len(ref_df)} pairs, expected {expected_count}. Some queries lack positives.")
-        
+    expected_max = n_queries * len(pair_types)
+    if len(ref_df) < expected_max:
+        print(
+            f"[Warning] Mined {len(ref_df)} pairs, expected up to {expected_max}. "
+            "Some queries likely have no valid positive after exclusions."
+        )
+
     ensure_dir(out_path.parent)
     save_parquet(out_path, ref_df)
     return ref_df
 
 
-
 # ============================================================
 # Step 3: compute saliency maps for a given pair_type + explainer
 # ============================================================
+def build_emb_row_sample_resolver(ctx):
+    """
+    Builds a resolver from global emb_row ids to the correct dataset sample
+    (train or val) and its local index.
+    """
+    train_map = {
+        int(emb_row): int(local_idx)
+        for local_idx, emb_row in enumerate(ctx.train_local_to_emb_row)
+    }
+    val_map = {
+        int(emb_row): int(local_idx)
+        for local_idx, emb_row in enumerate(ctx.val_local_to_emb_row)
+    }
+
+    def resolve_sample(emb_row: int):
+        emb_row = int(emb_row)
+
+        if emb_row in train_map:
+            local_idx = train_map[emb_row]
+            return ctx.train_ds, local_idx, "train"
+
+        if emb_row in val_map:
+            local_idx = val_map[emb_row]
+            return ctx.val_ds, local_idx, "val"
+
+        raise KeyError(f"emb_row {emb_row} not found in train or val resolver.")
+
+    return resolve_sample
+
 
 def compute_saliency_ig_for_pair_type(
-    torch_ds,
+    resolve_sample,
     model_wrapper: FoundationModelWrapper,
     ref_df_pair: pd.DataFrame,
     cfg: XAIConfig,
@@ -204,7 +233,8 @@ def compute_saliency_ig_for_pair_type(
     # iterate over all references
     for ref_idx, positions in tqdm(groups.items(), desc="IG refs", total=len(groups)):
         # get reference embedding
-        ref_sample = torch_ds[int(ref_idx)]
+        ref_ds, ref_local_idx, _ = resolve_sample(int(ref_idx))
+        ref_sample = ref_ds[ref_local_idx]
         ref_tensor = ref_sample["img"].unsqueeze(0).to(model_wrapper.device)
         with torch.no_grad():
             ref_emb = model_wrapper.get_embeddings_tensor(ref_tensor).squeeze(0)  # [D]
@@ -217,7 +247,8 @@ def compute_saliency_ig_for_pair_type(
         idx_of_queries_matching_ref = query[np.asarray(positions, dtype=np.int64)]
         x_batch = []
         for idx in idx_of_queries_matching_ref:
-            sample = torch_ds[int(idx)]
+            query_ds, query_local_idx, _ = resolve_sample(int(idx))
+            sample = query_ds[query_local_idx]
             x = sample["img"]
             x_batch.append(x)
         X_batch = torch.stack(x_batch, dim=0)  # [B,3,H,W] CPU
@@ -261,7 +292,7 @@ def compute_saliency_ig_for_pair_type(
 
 
 def compute_saliency_gradcam_for_pair_type(
-    torch_ds,
+    resolve_sample,
     model_wrapper: FoundationModelWrapper,
     ref_df_pair: pd.DataFrame,
     cfg: XAIConfig,
@@ -298,8 +329,11 @@ def compute_saliency_gradcam_for_pair_type(
         qi = int(query[k])
         ri = int(ref[k])
 
-        q_sample = torch_ds[qi]
-        r_sample = torch_ds[ri]
+        q_ds, q_local_idx, _ = resolve_sample(qi)
+        r_ds, r_local_idx, _ = resolve_sample(ri)
+
+        q_sample = q_ds[q_local_idx]
+        r_sample = r_ds[r_local_idx]
 
         q_x = q_sample["img"].unsqueeze(0).to(device)  # [1,3,H,W]
         r_x = r_sample["img"].unsqueeze(0).to(device)  # [1,3,H,W]
@@ -353,7 +387,7 @@ def compute_saliency_gradcam_for_pair_type(
 # ============================================================
 
 def load_or_create_saliency_maps(
-    torch_ds,
+    resolve_sample,
     run_root: Path,
     model_wrapper: FoundationModelWrapper,
     ref_df: pd.DataFrame,
@@ -378,9 +412,9 @@ def load_or_create_saliency_maps(
                 if len(ref_df_pair) == 0:
                     raise RuntimeError(f"No rows for pair_type={pair_type}")
                 if explainer_name == "IG":
-                    artifact = compute_saliency_ig_for_pair_type(torch_ds, model_wrapper, ref_df_pair, cfg)
+                    artifact = compute_saliency_ig_for_pair_type(resolve_sample, model_wrapper, ref_df_pair, cfg)
                 elif explainer_name == "GradCAM":
-                    artifact = compute_saliency_gradcam_for_pair_type(torch_ds, model_wrapper, ref_df_pair, cfg)
+                    artifact = compute_saliency_gradcam_for_pair_type(resolve_sample, model_wrapper, ref_df_pair, cfg)
                 else:
                     raise NotImplementedError(
                         f"Explainer '{explainer_name}' not implemented here yet."
@@ -393,66 +427,140 @@ def load_or_create_saliency_maps(
 
 
 
-def run_xai(cfg: XAIConfig, model_name: str, explainer_names: Sequence[str]) -> Dict[Tuple[str, str], Path]:
-    
-    run_root = cfg.out_root / f"{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
+def build_curated_train_val_gallery(
+    split_df: pd.DataFrame,
+    ctx,
+    train_embeddings: np.ndarray,
+    val_embeddings: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Builds one curated train+val gallery and returns:
+    - gallery_embeddings
+    - gallery_labels
+    - gallery_global_indices
+    """
+    gallery_df = split_df[
+        split_df["split_final"].isin(["train", "val"])
+        & split_df["keep_curated"].fillna(False).astype(bool)
+    ].copy()
+
+    train_gallery_emb_rows = gallery_df.loc[
+        gallery_df["split_final"] == "train", "emb_row"
+    ].astype(np.int64).to_numpy()
+
+    val_gallery_emb_rows = gallery_df.loc[
+        gallery_df["split_final"] == "val", "emb_row"
+    ].astype(np.int64).to_numpy()
+
+    train_gallery_local_idx = map_emb_rows_to_local_indices(
+        train_gallery_emb_rows,
+        ctx.train_local_to_emb_row,
+    )
+    val_gallery_local_idx = map_emb_rows_to_local_indices(
+        val_gallery_emb_rows,
+        ctx.val_local_to_emb_row,
+    )
+
+    gallery_embeddings = np.concatenate(
+        [
+            train_embeddings[train_gallery_local_idx],
+            val_embeddings[val_gallery_local_idx],
+        ],
+        axis=0,
+    )
+
+    gallery_labels = np.concatenate(
+        [
+            np.asarray(ctx.train_ds.labels)[train_gallery_local_idx],
+            np.asarray(ctx.val_ds.labels)[val_gallery_local_idx],
+        ],
+        axis=0,
+    )
+
+    gallery_global_indices = np.concatenate(
+        [train_gallery_emb_rows, val_gallery_emb_rows],
+        axis=0,
+    )
+
+    return gallery_embeddings, gallery_labels, gallery_global_indices
+
+
+def run_xai(config, cfg: XAIConfig, explainer_names: Sequence[str]) -> Dict[Tuple[str, str], Path]:
+
+    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
+    ctx = build_eval_context(config, checkpoint_dir, eval_val_setting="original")
+
+    run_root = cfg.out_root / f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
     ensure_dir(run_root)
+    split_df = ctx.split_df
 
-    # Load curated split artifacts (defines what counts as “kept” + provides burst IDs)
-    artifacts_dir = resolve_path(
-        "splits/jaguar_burst__str_closed_set__pol_drop_duplicates__k1",
-        EXPERIMENTS_STORE,
+    train_embeddings = load_or_extract_jaguarid_embeddings(
+        model=ctx.model,
+        torch_ds=ctx.train_ds,
+        split="train",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix=f"xai_{ctx.model.backbone_wrapper.name}_train"
     )
-    split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
 
-    # Load the dataset manifest used for indexing (emb_row is the common join key)
-    _, torch_ds = load_full_jaguar_from_FO_export(
-        resolve_path("fiftyone/splits_curated", DATA_STORE),
-        dataset_name=cfg.dataset_name,
-        processing_fn=None,
-        overwrite_db=False, 
+    val_embeddings = load_or_extract_jaguarid_embeddings(
+        model=ctx.model,
+        torch_ds=ctx.val_ds,
+        split="val",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix=f"xai_{ctx.model.backbone_wrapper.name}_val"
     )
-    
-    model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
-    torch_ds.transform = model_wrapper.preprocess 
-    model_wrapper.eval()
 
     # Choose deterministic validation queries (small subset N for explainability runs)
-    val_query_indices = get_val_query_indices(
+    val_query_emb_rows = get_val_query_indices(
         split_df=split_df,
-        out_root=cfg.out_root,
+        out_root=run_root,
         n_samples=cfg.n_samples,
         seed=cfg.seed,
     )
+    val_query_local_idx = map_emb_rows_to_local_indices(val_query_emb_rows, ctx.val_local_to_emb_row)
+
+    query_embeddings = val_embeddings[val_query_local_idx]
+    query_labels = np.asarray(ctx.val_ds.labels)[val_query_local_idx]
+    query_global_indices = val_query_emb_rows
     
     # Define a curated gallery pool (bigger pool => more meaningful negatives)
-    gallery_df = split_df[
-        split_df["split_final"].isin(["train", "val"]) &
-        split_df["keep_curated"].fillna(False).astype(bool)
-    ]
-    gallery_indices = gallery_df["emb_row"].astype(np.int64).to_numpy()
-
-    # Mine References (Query Subset vs. Full Val Gallery)
-    ref_df = mine_references_from_gallery(
-        torch_ds=torch_ds,
-        query_indices=val_query_indices,     # N=100
-        gallery_indices=gallery_indices,    # M=300+
+    gallery_embeddings, gallery_labels, gallery_global_indices = build_curated_train_val_gallery(
         split_df=split_df,
-        model_wrapper=model_wrapper,
+        ctx=ctx,
+        train_embeddings=train_embeddings,
+        val_embeddings=val_embeddings,
+    )
+
+    retrieval = build_query_gallery_retrieval_state(
+        query_embeddings=query_embeddings,
+        gallery_embeddings=gallery_embeddings,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        query_labels=query_labels,
+        gallery_labels=gallery_labels,
+        split_df=split_df,
+    )
+
+    # Mine references from the curated train+val gallery
+    ref_df = mine_reference_pairs_from_retrieval(
+        retrieval=retrieval,
         out_root=run_root,
-        split=cfg.split_name,
         pair_types=cfg.pair_types,
     )
 
     print(f"[Result] Mined {len(ref_df)} pairs.")
     print(ref_df.groupby("pair_type")["pair_sim"].describe())
 
-    
-    # Compute Saliency Maps
+    resolve_sample = build_emb_row_sample_resolver(ctx)
+
     paths = load_or_create_saliency_maps(
-        torch_ds=torch_ds,
+        resolve_sample=resolve_sample,
         run_root=run_root,
-        model_wrapper=model_wrapper,
+        model_wrapper=ctx.model.backbone_wrapper,
         ref_df=ref_df,
         cfg=cfg,
         explainer_names=explainer_names,
@@ -473,9 +581,9 @@ if __name__ == "__main__":
         out_root=PATHS.runs / "xai/similarity",         ### TODO ISt das verhalten nur write oder auch read?
     )
 
-    model_name = "MiewID"      # MiewID, ConvNeXt-V2
-    explainer_names = ["IG", "GradCAM"]        
+    explainer_names = ["IG", "GradCAM"]    
+    config = ""    
 
-    artifact_paths = run_xai(cfg, model_name=model_name, explainer_names=explainer_names)
+    artifact_paths = run_xai(config, cfg, explainer_names=explainer_names)
     for (expl, pair_type), p in artifact_paths.items():
         print(f"[Saved] {expl}/{pair_type}: {p}")

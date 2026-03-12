@@ -1,22 +1,14 @@
 
-from dataclasses import dataclass
 from pathlib import Path
-from collections import defaultdict
 import numpy as np
 import pandas as pd
-import torch
 from tqdm import tqdm
-from captum.attr import IntegratedGradients
-from pytorch_grad_cam import GradCAM
 
-from typing import Dict, Any, Sequence, Tuple, List
+from typing import Sequence
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, DEVICE, SEED 
-from jaguar.utils.utils import ensure_dir, resolve_path, save_npy, save_parquet
-from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export, load_or_extract_embeddings 
+from jaguar.utils.utils import ensure_dir, save_npy
+from jaguar.utils.utils_models import load_or_extract_embeddings 
 from jaguar.models.foundation_models import FoundationModelWrapper  
-from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name  
-from jaguar.utils.utils_xai import ig_saliency_batched_similarity 
 
 # ============================================================
 # Deterministic query selection (curated val subset)
@@ -226,6 +218,78 @@ def get_ranked_candidates_for_query(retrieval: dict, i: int):
         })
 
     return q_idx_global, q_label, rows
+
+
+
+def compute_retrieval_metrics_per_query(
+    query_emb: np.ndarray,
+    query_ids: list[str],
+    query_files: list[str],
+    gallery_emb: np.ndarray,
+    gallery_ids: list[str],
+    gallery_files: list[str],
+) -> pd.DataFrame:
+    """
+    Retrieval metrics per query against gallery.
+    Excludes exact self-match via filename.
+    Assumes embeddings are normalized.
+    """
+    sim = query_emb @ gallery_emb.T
+
+    gallery_ids = np.asarray(gallery_ids)
+    gallery_files = np.asarray(gallery_files)
+
+    rows = []
+
+    for i in range(len(query_ids)):
+        gold_id = query_ids[i]
+        qfile = query_files[i]
+
+        scores = sim[i].copy()
+
+        # exclude exact same file from gallery
+        self_mask = (gallery_files == qfile)
+        scores[self_mask] = -np.inf
+
+        ranked_idx = np.argsort(-scores)
+
+        gold_mask = (gallery_ids == gold_id) & (~self_mask)
+        non_gold_mask = (gallery_ids != gold_id) & (~self_mask)
+
+        if not gold_mask.any():
+            rows.append({
+                "id": gold_id,
+                "filepath": qfile,
+                "gold_rank": np.nan,
+                "is_rank1": False,
+                "is_rank5": False,
+                "best_gold_similarity": np.nan,
+                "best_impostor_similarity": np.nan,
+                "margin_gold_minus_impostor": np.nan,
+            })
+            continue
+
+        best_gold_similarity = float(scores[gold_mask].max())
+        best_impostor_similarity = float(scores[non_gold_mask].max()) if non_gold_mask.any() else np.nan
+
+        ranked_gallery_ids = gallery_ids[ranked_idx]
+        first_gold_pos = int(np.where(ranked_gallery_ids == gold_id)[0][0]) + 1
+
+        rows.append({
+            "id": gold_id,
+            "filepath": qfile,
+            "gold_rank": first_gold_pos,
+            "is_rank1": first_gold_pos <= 1,
+            "is_rank5": first_gold_pos <= 5,
+            "best_gold_similarity": best_gold_similarity,
+            "best_impostor_similarity": best_impostor_similarity,
+            "margin_gold_minus_impostor": (
+                best_gold_similarity - best_impostor_similarity
+                if not np.isnan(best_impostor_similarity) else np.nan
+            ),
+        })
+
+    return pd.DataFrame(rows)
 
 
 

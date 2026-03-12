@@ -19,13 +19,15 @@ use_fiftyone = false
 
 [[members]]
 name = "EVA-02"
-checkpoint_path = "kaggle_backbones/backbone_eva02"
-config_path = "kaggle_backbones/backbone_eva02/config_leaderboard_exp.toml"
+checkpoint_path = "kaggle_backbone/backbone_eva02"
+config_path = "kaggle_backbone/backbone_eva02/config_leaderboard_exp.toml"
+cache_prefix = "backbone_eva02"
 
 [[members]]
 name = "MiewID"
-checkpoint_path = "kaggle_backbones/backbone_miew_id"
-config_path = "kaggle_backbones/backbone_miew_id/config_leaderboard_exp.toml"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"
 
 [inference]
 batch_size = 64

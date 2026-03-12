@@ -1,5 +1,9 @@
-from jaguar.config import DATA_STORE, PATHS
-from jaguar.utils.utils import resolve_path, save_npy
+from pathlib import Path
+
+from jaguar.config import DATA_STORE, DEVICE, PATHS
+from jaguar.models.jaguarid_models import JaguarIDModel
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
+from jaguar.utils.utils_datasets import PreprocessedDataset
 import torch
 import numpy as np
 import timm
@@ -207,13 +211,9 @@ def swin_reshape_transform(tensor):
     return tensor
 
 
-def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
-    """
-    Returns embeddings as np.ndarray [N,D].
-    Loads from disk if available; otherwise extracts and saves.
-    """
+def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_size=32, num_workers=4):
     folder = resolve_path("embeddings", DATA_STORE)
-    folder.mkdir(parents=True, exist_ok=True)
+    ensure_dir(folder)
 
     filename = f"embeddings_{model_wrapper.name}_{split}.npy"
     path = folder / filename
@@ -224,10 +224,33 @@ def load_or_extract_embeddings(model_wrapper, torch_ds, split="training"):
         return emb
 
     print(f"[Info] Embeddings not found at {path}. Extracting...")
-    imgs_all = [torch_ds[k]["img"] for k in range(len(torch_ds))]  # PIL images
-    emb = model_wrapper.extract_embeddings(imgs_all)               # np.ndarray [N,D]
+
+    # Wrap the dataset so preprocessing happens on the fly
+    wrapped_ds = PreprocessedDataset(torch_ds, model_wrapper.preprocess)
+
+    # Create DataLoader from the wrapped dataset
+    dataloader = DataLoader(
+        wrapped_ds, 
+        batch_size=batch_size, 
+        num_workers=num_workers, 
+        pin_memory=True, 
+        shuffle=False
+    )
+
+    all_embeddings = []
+    # Process batches
+    for batch in tqdm(dataloader, desc="Extracting embeddings"):
+        imgs = batch["img"]
+        # Extract embeddings (usually moves data to GPU internally)
+        batch_emb = model_wrapper.extract_embeddings(imgs)  
+        # Ensure it's a numpy array before storing to save RAM
+        if torch.is_tensor(batch_emb):
+            batch_emb = batch_emb.cpu().numpy()
+        all_embeddings.append(batch_emb)
+
+    emb = np.concatenate(all_embeddings, axis=0)
     save_npy(path, emb)
-    print(f"[Info] Saved embeddings to {path}")
+    print(f"[Info] Saved embeddings to {path}, shape={emb.shape}")
     return emb
 
 
@@ -293,3 +316,17 @@ def load_or_extract_jaguarid_embeddings(
     save_npy(path, emb)
     print(f"[Info] Saved embeddings to {path}")
     return emb
+
+
+def load_checkpoint_into_model(model: JaguarIDModel, checkpoint_path: Path) -> None:
+    """Load checkpoint weights into a JaguarIDModel."""
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=DEVICE,
+        weights_only=False,
+    )
+    state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
+    model.load_state_dict(state_dict)
+    model.to(DEVICE)
+    model.eval()
+

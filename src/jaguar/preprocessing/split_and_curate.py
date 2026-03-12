@@ -42,6 +42,7 @@ Notes / assumptions:
 import json
 import os
 
+from jaguar.utils.utils_models import load_or_extract_embeddings
 from jaguar.utils.utils_setup import get_split_paths
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -65,7 +66,7 @@ except ImportError:
 
 from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, USE_FIFTYONE
 from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_full_jaguar_from_FO_export, load_or_extract_embeddings
+from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_full_jaguar_from_FO_export
 from jaguar.utils.utils_split_and_curate import (
     build_split_table_from_torch_dataset,
     print_keep_drop_summary,

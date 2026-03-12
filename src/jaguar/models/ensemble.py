@@ -8,8 +8,11 @@ after each model is trained, extract embeddings for the relevant images, normali
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
 import os
+from pathlib import Path
 
+from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_evaluation import build_local_to_emb_row
+from jaguar.utils.utils_models import load_or_extract_embeddings
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import pandas as pd
@@ -61,9 +64,6 @@ def load_or_extract_embeddings_cached(
     np.save(cache_path, emb)
     print(f"[Cache] Saved embeddings to {cache_path}")
     return emb
-
-
-
 
 
 def evaluate_query_gallery_retrieval(

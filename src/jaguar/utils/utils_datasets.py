@@ -144,6 +144,32 @@ def build_processing_fn(config, split: str):
 
     return partial(processor, **kwargs)
 
+def build_eval_processing_fn(
+    processor_name: str,
+    config: dict,
+):
+    """
+    Build a processing function exactly like build_processing_fn(...),
+    except that the processor name is passed explicitly instead of being
+    read from config['preprocessing'].
+    """
+    if processor_name == "original":
+        return None
+
+    processor = PROCESSORS[processor_name]
+    pre_cfg = config.get("preprocessing", {})
+
+    kwargs = {
+        "base_root": PATHS.data_export / "init",
+        "bg_dir": pre_cfg.get("bg_dir"),
+        "edge_softness": pre_cfg.get("edge_softness", 0),
+        "blur_radius": pre_cfg.get("blur_radius", 10),
+        "p_original": pre_cfg.get("p_original", 0.5),
+        "key_for_seed": pre_cfg.get("key_for_seed", "filename"),
+    }
+
+    return partial(processor, **kwargs)
+
 class BalancedBatchSampler(Sampler):
     """
     Returns batches of size (P * K) where:
@@ -441,152 +467,5 @@ def load_split_jaguar_from_FO_export(
 
     return aux_ds, torch_ds_train, torch_ds_val
 
-"""
-def load_jaguar_from_FO_export(
-    manifest_dir,
-    dataset_name="jaguar_init",
-    transform=None,
-    processing_fn=None,
-    train_processing_fn=None,
-    val_processing_fn=None,
-    overwrite_db=False,
-    include_duplicates=False,
-    parquet_path: str = None,
-):
-    '''
-    - If dataset exists in FiftyOne DB: load it
-    - Else: import from manifest_dir/samples.json into DB via load_manifest()
-    Returns:
-        - if full_ds=True:  (fo_ds, torch_ds)
-        - if full_ds=False: (fo_ds, torch_ds_train, torch_ds_val)
-    '''
-    manifest_dir = Path(manifest_dir)
-
-    if dataset_name in fo.list_datasets() and not overwrite_db:
-        fo_ds = FODataset(dataset_name, overwrite=False)
-    else:
-        fo_ds = FODataset.load_manifest(
-            export_dir=manifest_dir,
-            dataset_name=dataset_name,
-            overwrite_db=overwrite_db,
-        )
-
-    # Pre-split train dataset
-    torch_ds_train = JaguarDataset(
-        base_root=manifest_dir,
-        data_root=DATA_ROOT,
-        mode="train",
-        split_parquet=parquet_path,
-        transform=transform,
-        processing_fn=train_processing_fn,
-        include_duplicates=include_duplicates,
-    )
-
-    # Pre-split validation dataset
-    torch_ds_val = JaguarDataset(
-        base_root=manifest_dir,
-        data_root=DATA_ROOT,
-        mode="val",
-        split_parquet=parquet_path,
-        transform=transform,
-        processing_fn=val_processing_fn,
-        include_duplicates=include_duplicates,
-    )
-
-    return fo_ds, torch_ds_train, torch_ds_val
-"""
 
 
-def load_or_extract_embeddings(model_wrapper, torch_ds, split="training", batch_size=32, num_workers=4):
-    folder = resolve_path("embeddings", DATA_STORE)
-    ensure_dir(folder)
-
-    filename = f"embeddings_{model_wrapper.name}_{split}.npy"
-    path = folder / filename
-
-    if path.exists():
-        emb = np.load(path)
-        print(f"[Info] Loaded embeddings from {path}, shape={emb.shape}")
-        return emb
-
-    print(f"[Info] Embeddings not found at {path}. Extracting...")
-
-    # Wrap the dataset so preprocessing happens on the fly
-    wrapped_ds = PreprocessedDataset(torch_ds, model_wrapper.preprocess)
-
-    # Create DataLoader from the wrapped dataset
-    dataloader = DataLoader(
-        wrapped_ds, 
-        batch_size=batch_size, 
-        num_workers=num_workers, 
-        pin_memory=True, 
-        shuffle=False
-    )
-
-    all_embeddings = []
-    # Process batches
-    for batch in tqdm(dataloader, desc="Extracting embeddings"):
-        imgs = batch["img"]
-        # Extract embeddings (usually moves data to GPU internally)
-        batch_emb = model_wrapper.extract_embeddings(imgs)  
-        # Ensure it's a numpy array before storing to save RAM
-        if torch.is_tensor(batch_emb):
-            batch_emb = batch_emb.cpu().numpy()
-        all_embeddings.append(batch_emb)
-
-    emb = np.concatenate(all_embeddings, axis=0)
-    save_npy(path, emb)
-    print(f"[Info] Saved embeddings to {path}, shape={emb.shape}")
-    return emb
-
-
-def load_or_extract_jaguarid_embeddings(
-    model,
-    torch_ds,
-    split="training",
-    batch_size=32,
-    num_workers=4,
-    folder=None,
-):
-    if folder is None:
-        folder = resolve_path("embeddings", DATA_STORE)
-    ensure_dir(folder)
-
-    filename = f"embeddings_{model.backbone_wrapper.name}_{model.head_type}_{split}.npy"
-    path = folder / filename
-
-    if path.exists():
-        emb = np.load(path)
-        print(f"[Info] Loaded JaguarID embeddings from {path}, shape={emb.shape}")
-        return emb
-
-    print(f"[Info] JaguarID embeddings not found at {path}. Extracting...")
-
-    # make sure gallery/original dataset uses the correct preprocessing
-    torch_ds.transform = model.backbone_wrapper.transform
-
-    dataloader = DataLoader(
-        torch_ds,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        pin_memory=True,
-        shuffle=False,
-    )
-
-    all_embeddings = []
-
-    model.eval()
-    with torch.no_grad():
-        for batch in tqdm(dataloader, desc="Extracting JaguarID embeddings"):
-            imgs = batch["img"].to(model.device)
-            batch_emb = model.get_embeddings(imgs)
-
-            if torch.is_tensor(batch_emb):
-                batch_emb = batch_emb.cpu().numpy()
-
-            all_embeddings.append(batch_emb)
-
-    emb = np.concatenate(all_embeddings, axis=0)
-    np.save(path, emb)
-    print(f"[Info] Saved JaguarID embeddings to {path}, shape={emb.shape}")
-    return emb

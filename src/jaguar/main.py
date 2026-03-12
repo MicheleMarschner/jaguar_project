@@ -1,18 +1,15 @@
 
 import os
-
-from jaguar.experiments.experiment_runner import load_toml_config
-from jaguar.experiments.experiment_xai import deep_update
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 import argparse
-import tomllib
 from pathlib import Path
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 import time
 
-from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds, load_toml_config
+from jaguar.utils.utils import ensure_dir, resolve_path, set_seeds
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE, PROJECT_ROOT
+from jaguar.utils.utils_experiments import deep_update, load_toml_config
 from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.utils.utils_output import build_output_artifacts
 from jaguar.models.jaguarid_models import JaguarIDModel
@@ -22,7 +19,6 @@ from jaguar.utils.utils_datasets import (
     load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
-    get_stratified_train_val_split,
 )
 from jaguar.train import JaguarTrainer
 from jaguar.logging.wandb_logger import (

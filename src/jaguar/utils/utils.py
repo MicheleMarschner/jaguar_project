@@ -14,16 +14,6 @@ from typing import Any, Literal, Optional, Sequence
 from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
 
 
-def load_toml_config(config_name: str) -> dict:
-    with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
-        return tomllib.load(f)
-    
-
-def read_toml_from_path(path: Path) -> dict:
-        with open(path, "rb") as f:
-            return tomllib.load(f)
-    
-
 def read_json_if_exists(path: Path) -> Optional[dict[str, Any]]:
     if not path.exists():
         return None

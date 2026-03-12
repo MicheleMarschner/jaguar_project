@@ -14,6 +14,8 @@ This script evaluates *explanations*, not retrieval performance.
 
 import gc
 from pathlib import Path
+from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
+from jaguar.utils.utils_evaluation import build_eval_context
 import numpy as np
 import torch
 from collections import defaultdict
@@ -24,11 +26,11 @@ import pandas as pd
 
 from typing import Any, Dict
 
-from jaguar.XAI.run_xai_similarity import XAIConfig, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
-from jaguar.config import DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, SEED
-from jaguar.models.foundation_models import FoundationModelWrapper
+from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
+from jaguar.config import EXPERIMENTS_STORE
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
+from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
-from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 from jaguar.utils.utils_xai import SimilarityForward, save_vec
 
 
@@ -41,12 +43,11 @@ def _auc_trapz(y: np.ndarray, x: np.ndarray) -> float:
 @torch.no_grad()
 def faithfulness_deletion_auc(
     artifact: dict,
-    torch_ds,
+    resolve_sample,
     model_wrapper,
-    *,
     steps: int = 20,
-    baseline: str = "zeros",         
-    use_abs: bool = True,            
+    baseline: str = "zeros",
+    use_abs: bool = True,
 ) -> dict:
     """
     Faithfulness (Deletion AUC) for pair-similarity explanations.
@@ -77,8 +78,9 @@ def faithfulness_deletion_auc(
     # Curve is measured in similarity-to-reference, because our task is retrieval similarity.
     for ref_idx, positions in tqdm(groups.items(), desc="Faithfulness (deletion) refs"):
         # reference embedding once
-        ref_sample = torch_ds[int(ref_idx)]
-        ref_x = ref_sample["img"].unsqueeze(0).to(device)  # [1,3,H,W]
+        ref_ds, ref_local_idx, _ = resolve_sample(int(ref_idx))
+        ref_sample = ref_ds[ref_local_idx]
+        ref_x = ref_sample["img"].unsqueeze(0).to(device)
         ref_emb = model_wrapper.get_embeddings_tensor(ref_x).squeeze(0)  # [D]
 
         # scoring function f_ref(x) -> similarity
@@ -87,7 +89,8 @@ def faithfulness_deletion_auc(
         # process each pair in this ref group
         for pos in positions:
             qi = int(q[pos])
-            x0 = torch_ds[qi]["img"].to(device)  # [3,H,W]
+            query_ds, query_local_idx, _ = resolve_sample(int(qi))
+            x0 = query_ds[query_local_idx]["img"].to(device)
 
             # baseline image
             if baseline == "zeros":
@@ -133,8 +136,8 @@ def faithfulness_deletion_auc(
     }
 
 
-def run_faithfulness_metric(artifact, torch_ds, model_wrapper):
-    res_faith = faithfulness_deletion_auc(artifact, torch_ds, model_wrapper, steps=20, use_abs=True)
+def run_faithfulness_metric(artifact, resolve_sample, model_wrapper):
+    res_faith = faithfulness_deletion_auc(artifact, resolve_sample, model_wrapper, steps=20, use_abs=True)
     gc.collect(); torch.cuda.empty_cache()
 
     return res_faith
@@ -169,7 +172,7 @@ def _randomize_model_params_(model: torch.nn.Module) -> None:
 
 def sanity_parameter_randomization(
     artifact: dict,
-    torch_ds,
+    resolve_sample,
     model_wrapper,
     compute_saliency_fn,
     ref_df_pair: "pd.DataFrame",
@@ -190,7 +193,7 @@ def sanity_parameter_randomization(
     mw_rand.eval()
 
     # recompute saliency with randomized model
-    art_rand = compute_saliency_fn(torch_ds, mw_rand, ref_df_pair, cfg)
+    art_rand = compute_saliency_fn(resolve_sample, mw_rand, ref_df_pair, cfg)
     sal1 = art_rand["saliency"].cpu().numpy()  # [N,H,W]
 
     # correlations
@@ -208,12 +211,12 @@ def sanity_parameter_randomization(
 
 
 def run_sanity_metric(
-    explainer_name: str, 
-    artifact: Dict[str, Any], 
-    torch_ds, 
-    model_wrapper, 
-    ref_df_pair, 
-    cfg
+    explainer_name: str,
+    artifact: Dict[str, Any],
+    resolve_sample,
+    model_wrapper,
+    ref_df_pair,
+    cfg,
 ):
     if explainer_name == "IG":
         compute_saliency_fn = compute_saliency_ig_for_pair_type
@@ -224,8 +227,8 @@ def run_sanity_metric(
 
     if compute_saliency_fn is not None:
         res_sanity = sanity_parameter_randomization(
-            artifact=artifact, 
-            torch_ds=torch_ds, 
+            artifact=artifact,
+            resolve_sample=resolve_sample,
             model_wrapper=model_wrapper, 
             compute_saliency_fn=compute_saliency_fn, 
             ref_df_pair=ref_df_pair, 
@@ -290,35 +293,36 @@ def run_complexity_metric(artifact, model_wrapper):
 # Orchestration
 # ============================================================
 
-def run_xai_metrics(cfg) -> pd.DataFrame:
-    model_name = "MiewID"      # MiewID, ConvNeXt-V2
-    explainer_names = ["GradCAM", "IG"]
+def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
+    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
+    ctx = build_eval_context(config, checkpoint_dir, eval_val_setting="original")
 
-    run_root = resolve_path(
-        f"xai/similarity/{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}",
-        EXPERIMENTS_STORE,
-    )
-    # locate an existing XAI run folder (metrics assume saliency artifacts already exist)
+    explainer_names = list(cfg.explainer_names)
+    run_id = f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
+    rel_run_path = f"xai/similarity/{run_id}"
+
+    run_root = resolve_path(rel_run_path, EXPERIMENTS_STORE)
     if not run_root.exists():
         print(f"[Skip] Missing run_root: {run_root} (run XAI first)")
         raise SystemExit(0)
-    run_root_write = Path(EXPERIMENTS_STORE.write_root) / f"xai/similarity/{model_name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
-    
+
+    run_root_write = Path(EXPERIMENTS_STORE.write_root) / rel_run_path
     metrics_path = run_root_write / "metrics"
     ensure_dir(metrics_path)
 
+    run = init_wandb_run(
+        config=config,
+        run_dir=run_root_write,
+        exp_name=config["evaluation"]["experiment_name"],
+        experiment_group=config.get("output", {}).get("experiment_group"),
+        job_type="explain_eval",
+    )
+
     # Load the same dataset + model backbone used for scoring similarity 
     # (needed for faithfulness and sanity recomputation).
-    _, torch_ds = load_full_jaguar_from_FO_export(
-        resolve_path("fiftyone/splits_curated", DATA_STORE),
-        dataset_name=cfg.dataset_name,
-        processing_fn=None,
-        overwrite_db=False, 
-    )
-    
-    model_wrapper = FoundationModelWrapper(model_name, device=DEVICE)
-    torch_ds.transform = model_wrapper.preprocess 
+    model_wrapper = ctx.model.backbone_wrapper
     model_wrapper.eval()
+    resolve_sample = build_emb_row_sample_resolver(ctx)
 
     # Load the mined reference pairs so metrics are aligned to the exact evaluated pairs.
     out_path = run_root / f"refs_n{cfg.n_samples}.parquet"
@@ -335,8 +339,8 @@ def run_xai_metrics(cfg) -> pd.DataFrame:
             sal_path = run_root / "explanations" / f"{explainer_name}" / f"sal__{pair_type}.pt"
             artifact = torch.load(sal_path, map_location="cpu")
 
-            sanity = run_sanity_metric(explainer_name, artifact, torch_ds, model_wrapper, ref_df_pair, cfg)
-            faith = run_faithfulness_metric(artifact, torch_ds, model_wrapper)
+            sanity = run_sanity_metric(explainer_name, artifact, resolve_sample, model_wrapper, ref_df_pair, cfg)
+            faith = run_faithfulness_metric(artifact, resolve_sample, model_wrapper)
             complexity = run_complexity_metric(artifact, model_wrapper)
 
             rows.append({
@@ -362,24 +366,11 @@ def run_xai_metrics(cfg) -> pd.DataFrame:
                 "complexity_vec_path": save_vec(metrics_path, "complexity", explainer_name, pair_type, complexity["complexity_vec"])
             })
     # write a compact CSV summary for comparisons across explainers/pair types.
-    return pd.DataFrame(rows).to_csv(metrics_path / f"xai_summary_metrics.csv", index=False)
+    summary_df = pd.DataFrame(rows)
+    summary_df.to_csv(metrics_path / "xai_summary_metrics.csv", index=False)
 
-
-
-if __name__ == "__main__":
-
-    cfg = XAIConfig(
-        dataset_name="jaguar_xai",   
-        split_name="val",             
-        n_samples=10,
-        pair_types=("easy_pos", "hard_neg"),
-        seed=SEED,
-        ig_steps=10,
-        ig_internal_bs=32,
-        ig_batch_size=32,
-        out_root=PATHS.runs / "xai/similarity",
-    )
-
-    summary_df = run_xai_metrics(cfg)
-
-    
+    log_wandb_xai_metrics_results(run, summary_df)
+    if run is not None:
+        run.finish()
+        
+    return summary_df

@@ -1,9 +1,10 @@
 [experiment]
-name = "scientific_deduplication"
+name = "kaggle_deduplication"
 description = "Deduplication / curation ablation with burst and split artifacts as prerequisites."
-base_config = "base/scientific_base"
-mode = "scientific"
-setup_name = "scientific_deduplication"
+base_config = "base/kaggle_base"
+mode = "train"
+train_type = "kaggle"
+setup_name = "kaggle_deduplication"
 output_profile = "deduplication"
 
 [[experiment.runs]]

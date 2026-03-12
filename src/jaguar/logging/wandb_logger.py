@@ -19,6 +19,17 @@ def _build_wandb_tags(
     backbone_name = config.get("model", {}).get("backbone_name")
     split_strategy = config.get("split", {}).get("strategy")
 
+    eval_type = config.get("experiment", {}).get("eval_type")
+    explain_type = config.get("experiment", {}).get("explain_type")
+    explain_eval_type = config.get("experiment", {}).get("explain_eval_type")
+
+    if eval_type:
+        tags.append(str(eval_type))
+    if explain_type:
+        tags.append(str(explain_type))
+    if explain_eval_type:
+        tags.append(str(explain_eval_type))
+
     if experiment_group:
         tags.append(str(experiment_group))
     if output_profile:
@@ -86,28 +97,6 @@ def init_wandb_run(
     run.define_metric("meta/*", step_metric="epoch")
 
     return run
-
-
-def log_wandb_ensemble_config(
-    run: Run | None,
-    config: dict[str, Any],
-) -> None:
-    """Log ensemble-specific config fields once per ensemble run."""
-    if run is None:
-        return
-
-    run.config.update(
-        {
-            "fusion_method": config.get("fusion", {}).get("method", "score"),
-            "fusion_weights": config.get("fusion", {}).get("weights"),
-            "normalize_mode": config.get("fusion", {}).get("normalize_mode"),
-            "square_before_fusion": config.get("fusion", {}).get("square_before_fusion"),
-            "n_members": len(config.get("members", [])),
-            "member_names": [m.get("name") for m in config.get("members", [])],
-        },
-        allow_val_change=True,
-    )
-
 
 
 def log_wandb_dataset_info(
@@ -182,6 +171,28 @@ def log_wandb_epoch_metrics(
             "meta/input_size": input_size,
         }
     )
+
+
+def log_wandb_ensemble_config(
+    run: Run | None,
+    config: dict[str, Any],
+) -> None:
+    """Log ensemble-specific config fields once per ensemble run."""
+    if run is None:
+        return
+
+    run.config.update(
+        {
+            "fusion_method": config.get("fusion", {}).get("method", "score"),
+            "fusion_weights": config.get("fusion", {}).get("weights"),
+            "normalize_mode": config.get("fusion", {}).get("normalize_mode"),
+            "square_before_fusion": config.get("fusion", {}).get("square_before_fusion"),
+            "n_members": len(config.get("members", [])),
+            "member_names": [m.get("name") for m in config.get("members", [])],
+        },
+        allow_val_change=True,
+    )
+
 
 def log_wandb_ensemble_results(
     run: Run | None,
@@ -300,6 +311,92 @@ def log_wandb_checkpoint_artifact(
     )
     artifact.add_file(local_path=str(checkpoint_path), name=checkpoint_path.name)
     run.log_artifact(artifact, aliases=aliases or ["best"])
+
+
+def log_wandb_background_reliance_results(
+    run: Run | None,
+    result: dict,
+) -> None:
+    if run is None:
+        return
+
+    summary_all = result["summary_all"]
+
+    run.log({
+        "background/original_mAP": float(summary_all.loc[summary_all["setting"] == "original", "mAP"].iloc[0]),
+        "background/original_rank1": float(summary_all.loc[summary_all["setting"] == "original", "rank1"].iloc[0]),
+    })
+
+    for _, row in summary_all.iterrows():
+        setting = str(row["setting"])
+        run.log(
+            {
+                f"background/{setting}/mAP": float(row["mAP"]),
+                f"background/{setting}/rank1": float(row["rank1"]),
+                f"background/{setting}/delta_mAP_vs_original": float(row["delta_mAP_vs_original"]),
+                f"background/{setting}/delta_rank1_vs_original": float(row["delta_rank1_vs_original"]),
+            }
+        )
+
+    log_wandb_table(run, "background/summary_all", summary_all)
+    log_wandb_table(run, "background/per_query_delta", result["per_query_delta"])
+
+
+def log_wandb_background_sensitivity_results(
+    run: Run | None,
+    retrieval_summary: dict,
+    similarity_summary: dict,
+    analysis_df: pd.DataFrame,
+) -> None:
+    if run is None:
+        return
+
+    run.log({
+        "bg_sensitivity/share_bg_better_rank": float(retrieval_summary["all"]["share_bg_better_rank"]),
+        "bg_sensitivity/share_bg_better_rank1": float(retrieval_summary["all"]["share_bg_better_rank1"]),
+        "bg_sensitivity/share_bg_more_stable": float(similarity_summary["all"]["share_bg_more_stable"]),
+    })
+
+    log_wandb_table(run, "bg_sensitivity/analysis_df", analysis_df)
+
+
+def log_wandb_xai_similarity_results(
+    run: Run | None,
+    ref_df: pd.DataFrame,
+    explainer_names: list[str],
+    pair_types: tuple[str, ...],
+) -> None:
+    if run is None:
+        return
+
+    counts = ref_df["pair_type"].value_counts().to_dict()
+    payload = {f"xai_refs/{k}": int(v) for k, v in counts.items()}
+    run.log(payload)
+
+    run.summary["explainer_names"] = list(explainer_names)
+    run.summary["pair_types"] = list(pair_types)
+
+    log_wandb_table(run, "xai/reference_pairs", ref_df)
+
+
+def log_wandb_xai_metrics_results(
+    run: Run | None,
+    summary_df: pd.DataFrame,
+) -> None:
+    if run is None:
+        return
+
+    log_wandb_table(run, "xai_metrics/summary", summary_df)
+
+    for _, row in summary_df.iterrows():
+        expl = row["explainer"]
+        pair = row["pair_type"]
+        run.log({
+            f"xai_metrics/{expl}/{pair}/sanity_mean": float(row["sanity_mean"]),
+            f"xai_metrics/{expl}/{pair}/faith_mean": float(row["faith_mean"]),
+            f"xai_metrics/{expl}/{pair}/complexity_mean": float(row["complexity_mean"]),
+        })
+
 
 
 def log_wandb_table(

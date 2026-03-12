@@ -35,7 +35,7 @@ import matplotlib.pyplot as plt
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir, save_parquet
-from jaguar.xai.run_xai_classification import (
+from jaguar.xai.xai_classification import (
     summarize_bg_vs_jaguar,
     summarize_embedding_stability,
     summarize_retrieval_variant,

@@ -1,2 +1,12 @@
-[training]
+[experiment]
 experiment_name = "scientific_baseline"
+description = "Train one single model on the data"
+base_config = "base/scientific_base"
+mode = "train"
+train_type = "scientific"
+setup_name = "scientific_base"
+
+[[experiment.runs]]
+experiment_name = "backbone_eva02"
+backbone_name = "EVA-02"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain4__kVal4__p4/full_split.parquet"

@@ -4,11 +4,6 @@ from jaguar.config import PATHS
 from jaguar.experiments.experiment_setup import build_split_relpath
 
 
-def load_toml_config(config_name: str) -> dict:
-    with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
-        return tomllib.load(f)
-
-
 def deep_update(base: dict, override: dict) -> dict:
     result = dict(base)
     for key, value in override.items():
@@ -94,7 +89,7 @@ def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: d
     return override
     
 
-def build_training_override(
+def build_standard_override(
     run_cfg: dict, 
     experiment_meta: dict,
     base_config: dict

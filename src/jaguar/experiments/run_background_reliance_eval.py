@@ -1,9 +1,15 @@
 import os
+
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_reliance_results
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
 import pandas as pd
+import argparse
 
+from jaguar.config import PATHS
+from jaguar.experiments.run_background_reliance_eval import run_background_reliance_eval
+from jaguar.utils.utils_experiments import load_toml_config, deep_update
 from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, evaluate_query_gallery_retrieval
 
@@ -168,8 +174,49 @@ def run_background_reliance_eval(config, save_dir):
     return result
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run background reliance evaluation")
+    parser.add_argument("--base_config", type=str, required=True)
+    parser.add_argument("--experiment_config", type=str, required=True)
+    parser.add_argument("--experiment_name", type=str, required=True)
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+
+    base_config = load_toml_config(args.base_config)
+    experiment_config = load_toml_config(args.experiment_config)
+    config = deep_update(base_config, experiment_config)
+
+    config.setdefault("evaluation", {})
+    config["evaluation"]["experiment_name"] = args.experiment_name
+
+    experiment_group = config.get("output", {}).get("experiment_group")
+    if experiment_group:
+        save_dir = PATHS.runs / experiment_group / args.experiment_name
+    else:
+        save_dir = PATHS.runs / args.experiment_name
+    ensure_dir(save_dir)
+
+    run = init_wandb_run(
+        config=config,
+        run_dir=save_dir,
+        exp_name=args.experiment_name,
+        experiment_group=experiment_group,
+        job_type="eval",
+    )
+
+    result = run_background_reliance_eval(config=config, save_dir=save_dir)
+    log_wandb_background_reliance_results(run, result)
+    if run is not None:
+        run.finish()
+
+    print(f"[Done] background reliance eval: {args.experiment_name}")
+    print(f"[Saved] {save_dir}")
+    print(f"[Summary] {result['summary_path']}")
+
+
+
 if __name__ == "__main__":
-    config = ""
-    save_dir = ""
-    main_result = run_background_reliance_eval(config, save_dir)
-    stress_result = run_bg_vs_jaguar_stress_test(config, save_dir)
+    main()  

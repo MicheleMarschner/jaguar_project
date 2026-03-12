@@ -24,6 +24,7 @@ Important project assumptions:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results
 import numpy as np
 import pandas as pd
 import torch
@@ -53,6 +54,8 @@ class XAIConfig:
     split_name: str = "val"
     n_samples: int = 100
     seed: int = 51
+
+    explainer_names: Tuple[str, ...] = ("GradCAM", "IG")
 
     # IG hyperparameters (tradeoff: speed vs smoother attributions)
     ig_steps: int = 10
@@ -485,7 +488,7 @@ def build_curated_train_val_gallery(
     return gallery_embeddings, gallery_labels, gallery_global_indices
 
 
-def run_xai(config, cfg: XAIConfig, explainer_names: Sequence[str]) -> Dict[Tuple[str, str], Path]:
+def run_xai(config, cfg: XAIConfig) -> Dict[Tuple[str, str], Path]:
 
     checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
     ctx = build_eval_context(config, checkpoint_dir, eval_val_setting="original")
@@ -493,6 +496,16 @@ def run_xai(config, cfg: XAIConfig, explainer_names: Sequence[str]) -> Dict[Tupl
     run_root = cfg.out_root / f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
     ensure_dir(run_root)
     split_df = ctx.split_df
+    explainer_names = cfg.explainer_names
+    exp_name = config["training"]["experiment_name"]
+
+    run = init_wandb_run(
+        config=config,
+        run_dir=cfg.out_root,
+        exp_name=config["evaluation"]["experiment_name"],
+        experiment_group=config.get("output", {}).get("experiment_group"),
+        job_type="explain",
+    )
 
     train_embeddings = load_or_extract_jaguarid_embeddings(
         model=ctx.model,
@@ -566,24 +579,8 @@ def run_xai(config, cfg: XAIConfig, explainer_names: Sequence[str]) -> Dict[Tupl
         explainer_names=explainer_names,
     )
 
+    log_wandb_xai_similarity_results(run, ref_df, explainer_names, cfg.pair_types)
+    if run is not None:
+        run.finish()
+
     return paths
-
-
-if __name__ == "__main__":
-    cfg = XAIConfig(
-        dataset_name="jaguar_xai",   
-        split_name="val",             
-        n_samples=10,
-        seed=SEED,
-        ig_steps=10,
-        ig_internal_bs=32,
-        ig_batch_size=32,
-        out_root=PATHS.runs / "xai/similarity",         ### TODO ISt das verhalten nur write oder auch read?
-    )
-
-    explainer_names = ["IG", "GradCAM"]    
-    config = ""    
-
-    artifact_paths = run_xai(config, cfg, explainer_names=explainer_names)
-    for (expl, pair_type), p in artifact_paths.items():
-        print(f"[Saved] {expl}/{pair_type}: {p}")

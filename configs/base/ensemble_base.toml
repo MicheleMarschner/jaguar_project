@@ -1,5 +1,5 @@
 [ensemble]
-name = "eva02_miew"
+name = "eva02_miew_con"
 
 [fusion]
 type = "score_average"         # score_average, score_average_minmax, score_average_minmax_squared
@@ -26,6 +26,12 @@ config_path = "kaggle_backbones/backbone_eva02/config_leaderboard_exp.toml"
 name = "MiewID"
 checkpoint_path = "kaggle_backbones/backbone_miew_id"
 config_path = "kaggle_backbones/backbone_miew_id/config_leaderboard_exp.toml"
+
+[[members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"
 
 [inference]
 batch_size = 64

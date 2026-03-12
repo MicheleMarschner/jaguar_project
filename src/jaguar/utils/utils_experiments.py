@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 from pathlib import Path
-=======
->>>>>>> Background_exp
 import tomllib
 
 from jaguar.config import PATHS
@@ -223,3 +220,21 @@ def build_standard_override(
             override["data"]["split_data_path"] = split_relpath
 
     return override
+
+
+def build_split_relpath(
+    split_strategy: str,
+    include_duplicates: bool,
+    train_k_per_dedup: int,
+    val_k_per_dedup: int,
+    phash_thresh_dedup: int,
+) -> str:
+    stem = build_split_stem(
+        split_strategy=split_strategy,
+        include_duplicates=include_duplicates,
+        train_k_per_dedup=train_k_per_dedup,
+        val_k_per_dedup=val_k_per_dedup,
+        phash_thresh_dedup=phash_thresh_dedup,
+    )
+    return f"splits/{stem}/full_split.parquet"
+

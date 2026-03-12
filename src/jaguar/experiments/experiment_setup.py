@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any
 
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, ROUND, USE_FIFTYONE
-from jaguar.main import deep_update, load_toml_config
-from jaguar.utils.utils_setup import build_habitat_backgrounds, build_split_stem, get_burst_paths, get_split_paths
+from jaguar.utils.utils_experiments import deep_update, load_toml_config
+from jaguar.utils.utils_setup import build_habitat_backgrounds, build_split_stem, get_burst_paths
 from jaguar.utils.utils import ensure_dir, ensure_dirs, read_json_if_exists, resolve_path
 from jaguar.utils.utils_setup import init_fiftyone_dataset
 
@@ -235,24 +235,6 @@ def ensure_burst_artifacts(
 # ============================================================
 # Run setup: deduplication
 # ============================================================
-
-def build_split_relpath(
-    *,
-    split_strategy: str,
-    include_duplicates: bool,
-    train_k_per_dedup: int,
-    val_k_per_dedup: int,
-    phash_thresh_dedup: int,
-) -> str:
-    stem = build_split_stem(
-        split_strategy=split_strategy,
-        include_duplicates=include_duplicates,
-        train_k_per_dedup=train_k_per_dedup,
-        val_k_per_dedup=val_k_per_dedup,
-        phash_thresh_dedup=phash_thresh_dedup,
-    )
-    return f"splits/{stem}/full_split.parquet"
-
 
 def ensure_split_artifacts(
     split_strategy: str,

@@ -1,0 +1,33 @@
+[experiment]
+name = "background_reliance_eval"
+description = "Scientific background ablation with fixed blur_bg validation."
+base_config = "base/scientific_base"
+mode = "eval"
+eval_type = "background_reliance"
+setup_name = "scientific_base"
+output_profile = "background"
+
+[[experiment.runs]]
+experiment_name = "bg_train_original"
+train_background = "original"
+val_background = "blur_bg"
+
+[[experiment.runs]]
+experiment_name = "bg_train_random_bg"
+train_background = "random_bg"
+val_background = "blur_bg"
+
+[[experiment.runs]]
+experiment_name = "bg_train_mixed_original_random_bg"
+train_background = "mixed_original_random_bg"
+val_background = "blur_bg"
+
+[[experiment.runs]]
+experiment_name = "bg_train_blur_bg"
+train_background = "blur_bg"
+val_background = "blur_bg"
+
+[[experiment.runs]]
+experiment_name = "bg_train_gray_bg"
+train_background = "gray_bg"
+val_background = "blur_bg"

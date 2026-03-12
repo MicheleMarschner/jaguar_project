@@ -2,7 +2,7 @@ import argparse
 import pandas as pd
 
 from jaguar.config import PATHS
-from jaguar.experiments.experiment_xai import deep_update, load_toml_config
+from jaguar.utils.utils_experiments import deep_update, load_toml_config
 from jaguar.logging.wandb_logger import finish_wandb_run, init_wandb_run, log_wandb_ensemble_config, log_wandb_ensemble_results
 from jaguar.models.ensemble import create_simple_ensemble
 from jaguar.utils.utils import ensure_dir

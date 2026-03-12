@@ -20,6 +20,11 @@ SETUP_STEPS = {
        #"ensure_split_manifest",
         "ensure_fiftyone_init_dataset",
     ],
+    "scientific_base": [
+        "ensure_output_dirs",
+       #"ensure_split_manifest",
+        "ensure_fiftyone_init_dataset",
+    ],
     "scientific_background": [
         "ensure_output_dirs",
         #"ensure_split_manifest",

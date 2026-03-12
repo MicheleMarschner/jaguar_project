@@ -1,10 +1,11 @@
 import argparse
 from pathlib import Path
+import torch
 
 from jaguar.config import DATA_STORE, PATHS, EXPERIMENTS_STORE, RESULTS_STORE
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_sensitivity_results
 from jaguar.utils.utils import ensure_dir, resolve_path
-from jaguar.utils.utils_experiments import load_toml_config, deep_update
+from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.xai.xai_classification import (
     run_xai_classification_analysis,
     run_bg_vs_jaguar_stress_analysis,
@@ -17,7 +18,6 @@ from jaguar.utils.utils_evaluation import (
     select_val_samples_from_emb_rows,
 )
 from jaguar.utils.utils_xai import get_val_query_indices
-import torch
 
 
 def parse_args():
@@ -36,12 +36,13 @@ def main():
     experiment_config = load_toml_config(args.experiment_config)
     config = deep_update(base_config, experiment_config)
 
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
+
     config.setdefault("evaluation", {})
     config["evaluation"]["experiment_name"] = args.experiment_name
 
-    n_samples = config["xai"]["n_samples"]
-    dataset_name = "jaguar_init"
-    manifest_dir = resolve_path("fiftyone/init", DATA_STORE)
+    manifest_dir = resolve_path("fiftyone/splits_curated", DATA_STORE)
     run_name = args.experiment_name
 
     save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
@@ -57,10 +58,9 @@ def main():
         job_type="eval",
     )
 
-    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
-
     base = build_original_gallery_base(
         config=config,
+        train_config = train_config,
         checkpoint_dir=checkpoint_dir,
     )
 
@@ -72,7 +72,7 @@ def main():
     query_emb_rows = get_val_query_indices(
         split_df=ctx_orig.split_df,
         out_root=save_path,
-        n_samples=n_samples,
+        n_samples=config["xai"]["n_samples"],
         seed=config["xai"]["seed"],
     )
 
@@ -134,8 +134,9 @@ def main():
         save_path=save_path,
         results_path=results_path,
         config=config,
-        n_samples=n_samples,
-        dataset_name=dataset_name,
+        train_config=train_config,
+        n_samples=config["xai"]["n_samples"],
+        dataset_name=config["xai"]["dataset_name"],
         manifest_dir=manifest_dir,
         ctx_orig=ctx_orig,
         query_ds=query_ds,

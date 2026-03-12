@@ -16,6 +16,7 @@ import gc
 from pathlib import Path
 from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
 from jaguar.utils.utils_evaluation import build_eval_context
+from jaguar.utils.utils_experiments import load_toml_from_path
 import numpy as np
 import torch
 from collections import defaultdict
@@ -27,7 +28,7 @@ import pandas as pd
 from typing import Any, Dict
 
 from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
-from jaguar.config import EXPERIMENTS_STORE
+from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
 from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
@@ -294,8 +295,10 @@ def run_complexity_metric(artifact, model_wrapper):
 # ============================================================
 
 def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
-    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
-    ctx = build_eval_context(config, checkpoint_dir, eval_val_setting="original")
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
+
+    ctx = build_eval_context(config, train_config, checkpoint_dir, eval_val_setting="original")
 
     explainer_names = list(cfg.explainer_names)
     run_id = f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"

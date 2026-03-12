@@ -1,6 +1,4 @@
 import os
-
-from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_reliance_results
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
@@ -8,11 +6,10 @@ import pandas as pd
 import argparse
 
 from jaguar.config import PATHS
-from jaguar.experiments.run_background_reliance_eval import run_background_reliance_eval
-from jaguar.utils.utils_experiments import load_toml_config, deep_update
-from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
+from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, evaluate_query_gallery_retrieval
-
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_reliance_results
 
 def save_retrieval_results(
     save_dir: Path,
@@ -116,7 +113,8 @@ def run_background_reliance_eval(config, save_dir):
     Runs the full background-reliance evaluation by comparing several query background
     settings against the same original gallery.
     """
-    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
 
 
@@ -124,7 +122,7 @@ def run_background_reliance_eval(config, save_dir):
     exp_name = config["evaluation"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
 
-    base = build_original_gallery_base(config=config, checkpoint_dir=checkpoint_dir)
+    base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
 
     ctx_orig = base["ctx_orig"]
     gallery_embeddings_orig = base["gallery_embeddings_orig"]
@@ -146,7 +144,6 @@ def run_background_reliance_eval(config, save_dir):
             config=config,
             ctx_orig=ctx_orig,
             setting=setting,
-            #query_emb_rows=query_emb_rows,
         )
 
         retrieval = build_query_gallery_retrieval_state(

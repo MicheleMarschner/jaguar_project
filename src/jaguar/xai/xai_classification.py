@@ -9,11 +9,9 @@ import torch.nn.functional as F
 from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, IMGNET_MEAN, IMGNET_STD, PATHS, DEVICE, RESULTS_STORE
-from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
+from jaguar.config import IMGNET_MEAN, IMGNET_STD, DEVICE
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
-from jaguar.utils.utils_evaluation import build_original_gallery_base, select_val_samples_from_emb_rows
-from jaguar.utils.utils_xai import get_val_query_indices, manual_gradcam_class
+from jaguar.utils.utils_xai import manual_gradcam_class
 
 
 def extract_query_variant_embeddings(model, dataloader, device):
@@ -444,8 +442,7 @@ def save_bg_sensitivity_outputs(
     save_path: Path,
     results_path: Path,
     config: dict,
-    n_samples: int,
-    dataset_name: str,
+    train_config: dict,
     manifest_dir: Path,
     ctx_orig,
     query_ds,
@@ -457,8 +454,10 @@ def save_bg_sensitivity_outputs(
     retrieval_summary: dict,
     similarity_summary: dict,
 ) -> None:
-    backbone_name = config["model"]["backbone_name"]
-    head_type = config["model"]["head_type"]
+    backbone_name = train_config["model"]["backbone_name"]
+    head_type = train_config["model"]["head_type"]
+    n_samples = config["xai"]["n_samples"]
+    dataset_name = config["xai"]["dataset_name"]
 
     save_parquet(
         save_path / f"classification_sensitivity__{backbone_name}_{head_type}__n{n_samples}.parquet",

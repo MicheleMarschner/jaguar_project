@@ -24,7 +24,6 @@ Important project assumptions:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
-from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results
 import numpy as np
 import pandas as pd
 import torch
@@ -34,13 +33,14 @@ from pytorch_grad_cam import GradCAM
 
 from typing import Dict, Any, Sequence, Tuple, List
 
-from jaguar.config import PATHS, SEED 
+from jaguar.config import PATHS 
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
-from jaguar.utils.utils import ensure_dir, save_npy, save_parquet
+from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
-from jaguar.utils.utils_xai import CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices  
-from jaguar.utils.utils_xai import ig_saliency_batched_similarity 
+from jaguar.utils.utils_xai import ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices  
 from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results
+from jaguar.utils.utils_experiments import load_toml_from_path
 
 # ============================================================
 # Config: defines one reproducible XAI run
@@ -490,14 +490,16 @@ def build_curated_train_val_gallery(
 
 def run_xai(config, cfg: XAIConfig) -> Dict[Tuple[str, str], Path]:
 
-    checkpoint_dir = Path(config["evaluation"]["checkpoint_dir"])
-    ctx = build_eval_context(config, checkpoint_dir, eval_val_setting="original")
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
+
+    ctx = build_eval_context(config, train_config, checkpoint_dir, eval_val_setting="original")
 
     run_root = cfg.out_root / f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
     ensure_dir(run_root)
     split_df = ctx.split_df
     explainer_names = cfg.explainer_names
-    exp_name = config["training"]["experiment_name"]
+    #exp_name = config["training"]["experiment_name"]
 
     run = init_wandb_run(
         config=config,

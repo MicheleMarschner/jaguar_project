@@ -1,0 +1,9 @@
+[training]
+experiment_name = "eva02_faith_complex_"
+
+[output]
+profile = "xai"
+experiment_group = "xai_metrics"
+
+[data]
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"

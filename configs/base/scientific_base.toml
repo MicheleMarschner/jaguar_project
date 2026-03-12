@@ -85,3 +85,13 @@ stage_epochs = []       # [10, 10, 10]
 enabled = true
 project = "jaguar-reid-SpotItLikeItsHot"
 mode = "online"
+
+
+[evaluation]
+checkpoint_dir = "checkpoints/round_2/inference_model"
+
+[inference]
+batch_size = 64
+use_tta = true
+use_qe = false
+use_rerank = false

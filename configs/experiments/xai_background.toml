@@ -1,26 +1,11 @@
+
 [experiment]
 name = "background_sensitivity"
-mode = "eval"
-eval_type = "background_sensitivity"
-setup_name = "scientific_base"
+mode = "explain"
+explain_type = "background_sensitivity"
+base_config = "base/xai_base"
+# setup_name = "scientific_base"
+output_profile = "xai"
 
 [[experiment.runs]]
-experiment_name = "bgsens_dinov2_base"
-backbone_name = "DINOv2-Base"
-head_type = "arcface"
-checkpoint_dir = "..."
-n_samples = 10
-
-
-
-[experiment]
-name = "background_reliance_eval"
-mode = "eval"
-eval_type = "background_reliance"
-setup_name = "scientific_base"
-
-[[experiment.runs]]
-experiment_name = "bgrel_dinov2_base"
-backbone_name = "DINOv2-Base"
-head_type = "ArcFace"
-checkpoint_dir = "..."
+experiment_name = "xai_"

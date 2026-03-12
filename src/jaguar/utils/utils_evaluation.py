@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from pathlib import Path
-from jaguar.utils.utils_models import load_checkpoint_into_model, load_or_extract_jaguarid_embeddings
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import torch
 
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
@@ -105,6 +106,7 @@ def map_emb_rows_to_local_indices(
 
 def build_eval_context(
     config: dict,
+    train_config: dict, 
     checkpoint_dir: Path | str,
     eval_val_setting: str | None = None,
 ) -> EvalContext:
@@ -112,22 +114,21 @@ def build_eval_context(
     Prepares the shared evaluation setup for one Jaguar Re-ID experiment, including
     the trained model, curated splits, and metadata needed for later analysis.
     """
-    checkpoint_dir = Path(checkpoint_dir)
 
     parquet_root = resolve_path(config["data"]["split_data_path"], EXPERIMENTS_STORE)
     split_df = pd.read_parquet(parquet_root)
 
-    train_processing_fn = build_processing_fn(config, split="train")
+    train_processing_fn = build_processing_fn(train_config, split="train")
     if eval_val_setting is None:
-        val_processing_fn = build_processing_fn(config, split="val")
+        val_processing_fn = build_processing_fn(train_config, split="val")
     else:
-        val_processing_fn = build_eval_processing_fn(eval_val_setting, config)
+        val_processing_fn = build_eval_processing_fn(eval_val_setting, train_config)
 
     _, train_ds, val_ds = load_split_jaguar_from_FO_export(
         PATHS.data_export / "splits_curated",
         overwrite_db=False,
         parquet_path=parquet_root,
-        dataset_name="jaguar_splits_curated",
+        dataset_name=config["xai"]["dataset_name"],
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
@@ -136,20 +137,20 @@ def build_eval_context(
     num_classes = len(train_ds.label_to_idx)
 
     model = JaguarIDModel(
-        backbone_name=config["model"]["backbone_name"],
+        backbone_name=train_config["model"]["backbone_name"],
         num_classes=num_classes,
-        head_type=config["model"]["head_type"],
+        head_type=train_config["model"]["head_type"],
         device=DEVICE,
-        emb_dim=config["model"]["emb_dim"],
-        freeze_backbone=config["model"]["freeze_backbone"],
-        loss_s=config["model"].get("s", 30.0),
-        loss_m=config["model"].get("m", 0.5),
+        emb_dim=train_config["model"]["emb_dim"],
+        freeze_backbone=train_config["model"]["freeze_backbone"],
+        loss_s=train_config["model"].get("s", 30.0),
+        loss_m=train_config["model"].get("m", 0.5),
     )
 
     load_checkpoint_into_model(model, checkpoint_dir / "best_model.pth")
 
-    train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-    val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
+    train_ds.transform = get_transforms(train_config, model.backbone_wrapper, is_training=True)
+    val_ds.transform = get_transforms(train_config, model.backbone_wrapper, is_training=False)
 
     train_local_to_emb_row = build_local_to_emb_row(train_ds, split_df, split="train")
     val_local_to_emb_row = build_local_to_emb_row(val_ds, split_df, split="val")
@@ -363,13 +364,14 @@ def evaluate_query_gallery_retrieval(
     return query_df, summary
 
 
-def build_original_gallery_base(config: dict, checkpoint_dir: Path):
+def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir: Path):
     """
     Builds the shared original gallery used as the fixed reference for background-reliance
     comparisons across query settings.
     """
     ctx_orig = build_eval_context(
         config=config,
+        train_config=train_config,
         checkpoint_dir=checkpoint_dir,
         eval_val_setting="original",
     )
@@ -505,3 +507,18 @@ def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> li
         ctx_orig.val_local_to_emb_row,
     )
     return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]
+
+
+
+
+def load_checkpoint_into_model(model: JaguarIDModel, checkpoint_path: Path) -> None:
+    """Load checkpoint weights into a JaguarIDModel."""
+    checkpoint = torch.load(
+        checkpoint_path,
+        map_location=DEVICE,
+        weights_only=False,
+    )
+    state_dict = checkpoint["model_state_dict"] if "model_state_dict" in checkpoint else checkpoint
+    model.load_state_dict(state_dict)
+    model.to(DEVICE)
+    model.eval()

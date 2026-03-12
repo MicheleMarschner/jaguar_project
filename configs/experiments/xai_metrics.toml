@@ -1,26 +1,10 @@
 [experiment]
 name = "xai_metrics"
-mode = "explain_eval"
-explain_eval_type = "pair_similarity_metrics"
+mode = "explain"
+base_config = "base/xai_base"
+explain_type = "pair_similarity_metrics"
 setup_name = "scientific_base"
-
-
-
-[experiment]
-name = "xai_metrics"
-mode = "explain_eval"
-explain_eval_type = "pair_similarity_metrics"
-setup_name = "scientific_base"
+output_profile = "xai"
 
 [[experiment.runs]]
-experiment_name = "xai_metrics_dinov2_base"
-backbone_name = "DINOv2-Base"
-head_type = "ArcFace"
-checkpoint_dir = "..."
-dataset_name = "jaguar_xai"
-split_name = "val"
-n_samples = 10
-pair_types = ["easy_pos", "hard_neg"]
-ig_steps = 10
-ig_internal_bs = 32
-ig_batch_size = 32
+experiment_name = "eva02_faith_complex_"

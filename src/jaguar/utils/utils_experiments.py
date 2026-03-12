@@ -2,11 +2,16 @@ from pathlib import Path
 import tomllib
 
 from jaguar.config import PATHS
-from jaguar.experiments.experiment_setup import build_split_relpath
 
 
 def load_toml_config(config_name: str) -> dict:
     with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
+        return tomllib.load(f)
+    
+def load_toml_from_path(path: str | Path) -> dict:
+    """Load a TOML file from an arbitrary path."""
+    path = Path(path)
+    with open(path, "rb") as f:
         return tomllib.load(f)
     
 def read_toml_from_path(path: Path) -> dict:

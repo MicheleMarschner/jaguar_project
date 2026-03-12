@@ -1,4 +1,5 @@
 import argparse
+
 from jaguar.xai.xai_metrics import run_xai_metrics
 from jaguar.xai.xai_similarity import XAIConfig
 from jaguar.utils.utils_experiments import load_toml_config, deep_update
@@ -8,6 +9,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run XAI metric evaluation")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
+    parser.add_argument("--experiment_name", type=str, required=True)
     return parser.parse_args()
 
 
@@ -17,6 +19,7 @@ def main():
     base_config = load_toml_config(args.base_config)
     experiment_config = load_toml_config(args.experiment_config)
     config = deep_update(base_config, experiment_config)
+    
     config.setdefault("evaluation", {})
     config["evaluation"]["experiment_name"] = args.experiment_name
 

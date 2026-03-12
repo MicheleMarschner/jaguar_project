@@ -46,21 +46,17 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
         eval_type = experiment_meta.get("eval_type")
         if eval_type == "background_reliance":
             return "src/jaguar/experiments/run_background_reliance_eval.py"
-        if eval_type == "background_sensitivity":
-            return "src/jaguar/experiments/run_background_sensitivity.py"
         raise ValueError(f"Unknown eval_type: {eval_type}")
 
     if mode == "explain":
         explain_type = experiment_meta.get("explain_type")
         if explain_type == "pair_similarity":
             return "src/jaguar/experiments/run_xai_similarity.py"
-        raise ValueError(f"Unknown explain_type: {explain_type}")
-
-    if mode == "explain_eval":
-        explain_eval_type = experiment_meta.get("explain_eval_type")
-        if explain_eval_type == "pair_similarity_metrics":
+        if explain_type == "pair_similarity_metrics":
             return "src/jaguar/experiments/run_xai_metrics.py"
-        raise ValueError(f"Unknown explain_eval_type: {explain_eval_type}")
+        if explain_type == "background_sensitivity":
+            return "src/jaguar/experiments/run_background_sensitivity.py"
+        raise ValueError(f"Unknown explain_type: {explain_type}")
 
     raise ValueError(f"Unknown mode: {mode}")
 
@@ -125,7 +121,7 @@ def run_experiments():
             str(rel_path),
         ]
 
-        if mode in {"train", "eval", "ensemble"}:
+        if mode in {"train", "eval", "explain", "ensemble"}:
             cmd.extend([
                 "--experiment_name",
                 experiment_name,
@@ -154,10 +150,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        #result = subprocess.run(cmd)
+        result = subprocess.run(cmd)
 
-        #if result.returncode != 0:
-        #    raise RuntimeError(f"Run failed: {experiment_name}")
+        if result.returncode != 0:
+            raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

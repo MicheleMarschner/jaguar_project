@@ -1,5 +1,5 @@
 [ensemble]
-name = "eva02_miew"
+name = "eva02_miew_con"
 
 [fusion]
 weights = [0.5, 0.5]
@@ -21,6 +21,12 @@ name = "EVA-02"
 checkpoint_path = "kaggle_backbone/backbone_eva02"
 config_path = "kaggle_backbone/backbone_eva02/config_leaderboard_exp.toml"
 cache_prefix = "backbone_eva02"
+
+[[members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"
 
 [[members]]
 name = "MiewID"

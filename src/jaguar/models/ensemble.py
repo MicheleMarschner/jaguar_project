@@ -31,8 +31,7 @@ def get_embedding_cache_path(
     split_name: str,
     cache_prefix: str | None = None,
 ) -> Path:
-    ensemble_name = config["ensemble"]["name"]
-    cache_dir = PATHS.runs / "ensemble_cache" / ensemble_name / member_name
+    cache_dir = PATHS.data / "embeddings" / "ensemble" / member_name
     ensure_dir(cache_dir)
 
     tta_tag = "tta" if config["inference"]["use_tta"] else "no_tta"

@@ -57,19 +57,6 @@ def parse_args():
     return parser.parse_args()
 
 
-<<<<<<< HEAD
-def deep_update(base: dict, override: dict) -> dict:
-    result = dict(base)
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = deep_update(result[key], value)
-        else:
-            result[key] = value
-    return result
-
-=======
->>>>>>> 217fbb3 (adapted ensemble experiment to overall structure and combined with experiment runner)
-
 def main():
     # Parse CLI arguments
     args = parse_args()

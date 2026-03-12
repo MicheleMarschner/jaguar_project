@@ -3,11 +3,7 @@ import subprocess
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir
-<<<<<<< HEAD
-from jaguar.utils.utils_experiments import build_ensemble_override, build_training_override, dict_to_toml, load_toml_config
-=======
 from jaguar.utils.utils_experiments import build_ensemble_override, build_standard_override, dict_to_toml, load_toml_config
->>>>>>> Background_exp
 
 
 def parse_args():

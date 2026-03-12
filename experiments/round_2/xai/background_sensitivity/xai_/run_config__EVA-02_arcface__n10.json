@@ -1,0 +1,70 @@
+{
+  "n_samples": 10,
+  "query_emb_rows": [
+    555,
+    556,
+    700,
+    702,
+    703,
+    705,
+    1465,
+    1471,
+    1535,
+    1536
+  ],
+  "seed": 51,
+  "data": {
+    "dataset_name": "jaguar_splits_curated",
+    "manifest_dir": {
+      "root": "data",
+      "rel": "fiftyone/splits_curated"
+    },
+    "gallery_source": "original_train_plus_val_from_shared_base"
+  },
+  "model": {
+    "checkpoint_dir": {
+      "root": "data",
+      "rel": "inference_model"
+    },
+    "model_backbone": "EVA-02",
+    "head_type": "arcface"
+  },
+  "masking": {
+    "alpha_threshold": 128,
+    "mask_fill_color": [
+      128,
+      128,
+      128
+    ]
+  },
+  "outputs": {
+    "logits_parquet": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/classification_sensitivity__EVA-02_arcface__n10.parquet"
+    },
+    "similarity_parquet": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/similarity_stability__EVA-02_arcface__n10.parquet"
+    },
+    "retrieval_parquet": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/retrieval_bg_vs_jaguar__EVA-02_arcface__n10.parquet"
+    },
+    "retrieval_summary_json": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/retrieval_summary__EVA-02_arcface__n10.json"
+    },
+    "similarity_summary_json": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/similarity_summary__EVA-02_arcface__n10.json"
+    },
+    "heatmaps_dir": {
+      "root": "results",
+      "rel": "xai/background_sensitivity/xai_/heatmaps"
+    },
+    "analysis_merged_parquet": {
+      "root": "runs",
+      "rel": "xai/background_sensitivity/xai_/analysis_merged__EVA-02_arcface__n10.parquet"
+    }
+  }
+}

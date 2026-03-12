@@ -1,0 +1,49 @@
+{
+  "all": {
+    "share_bg_better_rank": 0.8,
+    "share_bg_better_rank1": 0.8,
+    "share_bg_better_rank5": 0.8,
+    "share_bg_better_margin": 0.9,
+    "median_rank_delta_bg_minus_jag": -165.0,
+    "mean_margin_delta_bg_minus_jag": 0.27416109964251517
+  },
+  "orig_rank1_correct": {
+    "share_bg_better_rank": 0.8,
+    "share_bg_better_rank1": 0.8,
+    "share_bg_better_rank5": 0.8,
+    "share_bg_better_margin": 0.9,
+    "median_rank_delta_bg_minus_jag": -165.0,
+    "mean_margin_delta_bg_minus_jag": 0.27416109964251517
+  },
+  "orig_rank1_wrong": {
+    "share_bg_better_rank": NaN,
+    "share_bg_better_rank1": NaN,
+    "share_bg_better_rank5": NaN,
+    "share_bg_better_margin": NaN,
+    "median_rank_delta_bg_minus_jag": NaN,
+    "mean_margin_delta_bg_minus_jag": NaN
+  },
+  "variant_summary": {
+    "orig": {
+      "rank1": 1.0,
+      "rank5": 1.0,
+      "median_gold_rank": 1.0,
+      "mean_gold_rank": 1.0,
+      "mean_margin": 0.4922860562801361
+    },
+    "jaguar_only": {
+      "rank1": 0.1,
+      "rank5": 0.2,
+      "median_gold_rank": 166.0,
+      "mean_gold_rank": 151.3,
+      "mean_margin": -0.13178887143731116
+    },
+    "bg_only": {
+      "rank1": 0.8,
+      "rank5": 0.9,
+      "median_gold_rank": 1.0,
+      "mean_gold_rank": 4.3,
+      "mean_margin": 0.142372228205204
+    }
+  }
+}

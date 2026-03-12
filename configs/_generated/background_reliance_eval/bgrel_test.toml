@@ -1,9 +1,0 @@
-[training]
-experiment_name = "bgrel_test"
-
-[model]
-backbone_name = "EVA-02"
-head_type = "ArcFace"
-
-[data]
-split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"

@@ -341,7 +341,13 @@ def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
                 e_vis = show_cam_on_image(img, e_map, use_rgb=True)
 
                 # ---- Manual GradCAM heatmap ----
-                g_map = manual_gradcam_class(model, target_layer, tensor, cls)  # [h,w]
+                g_map = manual_gradcam_class(
+                    model,
+                    target_layer,
+                    tensor,
+                    cls,
+                    reshape_transform=reshape_transform,
+                )
                 g_map = cv2.resize(g_map, (W, H), interpolation=cv2.INTER_LINEAR)
                 g_vis = show_cam_on_image(img, g_map, use_rgb=True)
 

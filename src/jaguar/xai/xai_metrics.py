@@ -39,7 +39,9 @@ from jaguar.utils.utils_xai import SimilarityForward, save_vec
 # Faithfulness
 # ============================================================
 def _auc_trapz(y: np.ndarray, x: np.ndarray) -> float:
-    return float(np.trapezoid(y, x))
+    if hasattr(np, "trapezoid"):
+        return float(np.trapezoid(y, x))
+    return float(np.trapz(y, x))
 
 @torch.no_grad()
 def faithfulness_deletion_auc(

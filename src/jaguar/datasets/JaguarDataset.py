@@ -38,8 +38,6 @@ class JaguarDataset(Dataset):
         self.filename_key = filename_key
         self.epoch = 0
         self.mode = mode
-
-        print(f"[DEBUG] {self.base_root}")
         
         if self.data_root is None:
             raise ValueError("data_root must be provided")

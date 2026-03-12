@@ -8,8 +8,6 @@ after each model is trained, extract embeddings for the relevant images, normali
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
 import os
-
-from jaguar.utils.utils_evaluation import build_local_to_emb_row
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
@@ -18,13 +16,13 @@ import numpy as np
 from tqdm import tqdm
 import pandas as pd
 
-from jaguar.utils.utils_datasets import build_processing_fn, load_split_jaguar_from_FO_export
-from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
-
-
+from jaguar.utils.utils_experiments import read_toml_from_path
+from jaguar.utils.utils_evaluation import build_local_to_emb_row
+from jaguar.utils.utils_datasets import build_processing_fn, load_split_jaguar_from_FO_export
+from jaguar.utils.utils import ensure_dir, resolve_path
 
 
 def get_embedding_cache_path(

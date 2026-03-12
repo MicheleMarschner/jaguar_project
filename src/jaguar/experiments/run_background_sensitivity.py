@@ -135,8 +135,6 @@ def main():
         results_path=results_path,
         config=config,
         train_config=train_config,
-        n_samples=config["xai"]["n_samples"],
-        dataset_name=config["xai"]["dataset_name"],
         manifest_dir=manifest_dir,
         ctx_orig=ctx_orig,
         query_ds=query_ds,

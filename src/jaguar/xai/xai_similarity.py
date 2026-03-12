@@ -341,10 +341,16 @@ def compute_saliency_gradcam_for_pair_type(
         q_x = q_sample["img"].unsqueeze(0).to(device)  # [1,3,H,W]
         r_x = r_sample["img"].unsqueeze(0).to(device)  # [1,3,H,W]
 
+        q_x.requires_grad_(True)
+
         with torch.no_grad():
             ref_emb = model_wrapper.get_embeddings_tensor(r_x)  # [1,D]
 
         targets = [CosineSimilarityTarget(ref_emb, maximize=True)]
+
+        # enable gradient
+        with torch.enable_grad():
+            grayscale_cam = cam(input_tensor=q_x, targets=targets)
 
         grayscale_cam = cam(input_tensor=q_x, targets=targets)  # np array [1,h,w]
         cam_t = torch.as_tensor(grayscale_cam[0], dtype=torch.float32)  # [h,w] CPU

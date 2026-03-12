@@ -234,6 +234,31 @@ def build_query_gallery_retrieval_state(
     )
 
 
+
+def build_query_gallery_retrieval_state_from_sim(
+    sim_matrix: np.ndarray,
+    query_global_indices: np.ndarray,
+    gallery_global_indices: np.ndarray,
+    query_labels: np.ndarray,
+    gallery_labels: np.ndarray,
+    split_df: pd.DataFrame,
+) -> RetrievalState:
+    q_global = np.asarray(query_global_indices, dtype=np.int64)
+    g_global = np.asarray(gallery_global_indices, dtype=np.int64)
+
+    bg = split_df.set_index("emb_row")["burst_group_id"]
+    burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
+    burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
+
+    return RetrievalState(
+        q_global=q_global,
+        g_global=g_global,
+        sim_matrix=np.asarray(sim_matrix, dtype=np.float64),
+        labels_q=np.asarray(query_labels),
+        labels_g=np.asarray(gallery_labels),
+        burst_q=burst_q,
+        burst_g=burst_g,
+    )
 # ============================================================
 # Ranking / evaluation
 # ============================================================

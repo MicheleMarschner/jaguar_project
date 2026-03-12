@@ -8,18 +8,23 @@ after each model is trained, extract embeddings for the relevant images, normali
 -> currently the gallery is only val_ds (if noisy change to train+val)
 """
 import os
+
+from jaguar.utils.utils_evaluation import build_local_to_emb_row
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
 import torch
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 
 from jaguar.utils.utils_datasets import build_processing_fn, load_split_jaguar_from_FO_export
 from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
+
+
 
 
 def get_embedding_cache_path(
@@ -207,23 +212,59 @@ def minmax_norm(mat, eps=1e-12):
     return (mat - mat.min()) / (mat.max() - mat.min() + eps)
 
 
-def fuse_similarity_matrices(sim_mats, weights, use_minmax=True, square=True):
-    # Source: https://www.kaggle.com/competitions/shopee-product-matching/writeups/watercooled-4th-place-solution
+def normalize_none(sim: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    return sim
+
+# Source: https://www.kaggle.com/competitions/shopee-product-matching/writeups/watercooled-4th-place-solution
+# normalizing individual sim_matrices to [0,1]
+ # helps more than ((cos + 1) / 2) when models have very different score distributions.
+def normalize_global_minmax(sim: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    sim_min = sim.min()
+    sim_max = sim.max()
+    return (sim - sim_min) / (sim_max - sim_min + eps)
+
+
+def normalize_row_minmax(sim: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    row_min = sim.min(axis=1, keepdims=True)
+    row_max = sim.max(axis=1, keepdims=True)
+    return (sim - row_min) / (row_max - row_min + eps)
+
+
+def normalize_row_zscore(sim: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    row_mean = sim.mean(axis=1, keepdims=True)
+    row_std = sim.std(axis=1, keepdims=True)
+    return (sim - row_mean) / (row_std + eps)
+
+
+NORMALIZERS = {
+    "none": normalize_none,
+    "global_minmax": normalize_global_minmax,
+    "row_minmax": normalize_row_minmax,
+    "row_zscore": normalize_row_zscore,
+}
+
+
+def fuse_similarity_matrices(
+    sim_mats: list[np.ndarray],
+    weights: list[float],
+    normalize_mode: str = "global_minmax",
+    square_before_fusion: bool = True,
+) -> np.ndarray:
     weights = np.asarray(weights, dtype=np.float64)
     weights = weights / weights.sum()
 
-    fused_sim_matrix = np.zeros_like(sim_mats[0], dtype=np.float64)
+    normalize_fn = NORMALIZERS[normalize_mode]
+
+    fused = np.zeros_like(sim_mats[0], dtype=np.float64)
 
     for w, sim in zip(weights, sim_mats):
-        # normalizing individual sim_matrices to [0,1]
-        # helps more than ((cos + 1) / 2) when models have very different score distributions.
-        if use_minmax:
-            sim = minmax_norm(sim)
-            if square:
-                sim = sim ** 2
-        fused_sim_matrix += w * sim
+        sim = normalize_fn(np.asarray(sim, dtype=np.float64))
+        if square_before_fusion:
+            sim = sim ** 2
+        fused += w * sim
 
-    return np.clip(fused_sim_matrix, 0.0, 1.0)
+    return fused        # np.clip(fused_sim_matrix, 0.0, 1.0)
+
     
 
 def fuse_embeddings_concat(embeddings_list, weights=None):
@@ -270,7 +311,6 @@ def fuse_embeddings_concat(embeddings_list, weights=None):
 
 
 
-
 def create_simple_ensemble(config, save_dir):
 
     # either branch in main due to base_name or directly enter here
@@ -279,13 +319,13 @@ def create_simple_ensemble(config, save_dir):
 
     parquet_root = resolve_path(config["data"]["split_data_path"], EXPERIMENTS_STORE)
     data_path = PATHS.data_export / "splits_curated"
+    split_df = pd.read_parquet(parquet_root)
 
     members = config["members"]
     weights = config["fusion"]["weights"]
 
-    # Shopee-style fusion
-    USE_MINMAX = True
-    SQUARE_BEFORE_FUSION = True
+    normalize_mode = config["fusion"].get("normalize_mode", "global_minmax")
+    square_before_fusion = config["fusion"].get("square_before_fusion", True)
 
     train_processing_fn = build_processing_fn(config, split="train")
     val_processing_fn = build_processing_fn(config, split="val")
@@ -302,6 +342,9 @@ def create_simple_ensemble(config, save_dir):
 
     # Calculate Identities
     num_classes = len(train_ds.label_to_idx)
+
+    train_local_to_emb_row = build_local_to_emb_row(train_ds, split_df, split="train")
+    val_local_to_emb_row = build_local_to_emb_row(val_ds, split_df, split="val")
 
     # --------------------------------------------------
     # 4. EXTRACT PER-MODEL EMBEDDINGS / SIM MATRICES
@@ -342,6 +385,12 @@ def create_simple_ensemble(config, save_dir):
         gallery_embeddings = np.concatenate([train_embeddings, query_embeddings], axis=0)
         query_labels = np.asarray(val_ds.labels)
         gallery_labels = np.concatenate([np.asarray(train_ds.labels), np.asarray(val_ds.labels)], axis=0)
+
+        query_global_indices = val_local_to_emb_row
+        gallery_global_indices = np.concatenate(
+            [train_local_to_emb_row, val_local_to_emb_row],
+            axis=0,
+        )
 
         #sim_matrix_square = cosine_similarity_matrix_square(
         #    embeddings,
@@ -392,7 +441,12 @@ def create_simple_ensemble(config, save_dir):
 
     print("\nFusing similarity matrices...")
     
-    fused_sim_matrix = fuse_similarity_matrices(sim_mats, weights, USE_MINMAX, SQUARE_BEFORE_FUSION)
+    fused_sim_matrix = fuse_similarity_matrices(
+        sim_mats=sim_mats,
+        weights=weights,
+        normalize_mode=normalize_mode,
+        square_before_fusion=square_before_fusion,
+    )
 
 
     print("\nFused similarity statistics:")
@@ -446,5 +500,7 @@ def create_simple_ensemble(config, save_dir):
         "fused_embedding_sim_matrix": fused_embedding_sim_matrix,
         "query_labels": query_labels,
         "gallery_labels": gallery_labels,
-        "self_in_gallery_offset": len(train_ds),
+        "query_global_indices": query_global_indices,
+        "gallery_global_indices": gallery_global_indices,
+        "split_df": split_df,
     }

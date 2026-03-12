@@ -8,7 +8,7 @@ from PIL import Image
 import torchvision.transforms.v2 as transforms
 from torchvision.transforms import InterpolationMode
 
-from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD, PATHS
+from jaguar.config import DATA_STORE, IMGNET_MEAN, IMGNET_STD
 from jaguar.utils.utils_models import (
     load_megadescriptor_model,
     load_dino_model,  # For DINO/DINOv2

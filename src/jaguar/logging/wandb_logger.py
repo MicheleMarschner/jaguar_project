@@ -7,9 +7,13 @@ import wandb
 from wandb.sdk.wandb_run import Run
 
 
-def _build_wandb_tags(config: dict[str, Any], experiment_group: str | None) -> list[str]:
+def _build_wandb_tags(
+    config: dict[str, Any],
+    experiment_group: str | None,
+    job_type: str | None = None,
+) -> list[str]:
     """Build a small set of tags for filtering runs in W&B."""
-    tags: list[str] = ["train"]
+    tags: list[str] = [str(job_type or "run")]
 
     output_profile = config.get("output", {}).get("profile")
     backbone_name = config.get("model", {}).get("backbone_name")
@@ -46,7 +50,7 @@ def init_wandb_run(
     logging_cfg = config.get("logging", {})
     project = logging_cfg.get("project", "jaguar-reid")
 
-    tags = _build_wandb_tags(config, experiment_group)
+    tags = _build_wandb_tags(config, experiment_group, job_type=job_type)
 
     run = wandb.init(
         entity="michele-marschner-university-of-potsdam",
@@ -82,6 +86,28 @@ def init_wandb_run(
     run.define_metric("meta/*", step_metric="epoch")
 
     return run
+
+
+def log_wandb_ensemble_config(
+    run: Run | None,
+    config: dict[str, Any],
+) -> None:
+    """Log ensemble-specific config fields once per ensemble run."""
+    if run is None:
+        return
+
+    run.config.update(
+        {
+            "fusion_method": config.get("fusion", {}).get("method", "score"),
+            "fusion_weights": config.get("fusion", {}).get("weights"),
+            "normalize_mode": config.get("fusion", {}).get("normalize_mode"),
+            "square_before_fusion": config.get("fusion", {}).get("square_before_fusion"),
+            "n_members": len(config.get("members", [])),
+            "member_names": [m.get("name") for m in config.get("members", [])],
+        },
+        allow_val_change=True,
+    )
+
 
 
 def log_wandb_dataset_info(
@@ -156,6 +182,53 @@ def log_wandb_epoch_metrics(
             "meta/input_size": input_size,
         }
     )
+
+def log_wandb_ensemble_results(
+    run: Run | None,
+    config: dict[str, Any],
+    exp_name: str,
+    score_metrics: dict[str, Any],
+    emb_metrics: dict[str, Any],
+    oracle_summary: dict[str, Any],
+    oracle_df: pd.DataFrame,
+    score_query_df: pd.DataFrame,
+    emb_query_df: pd.DataFrame,
+    per_model_query_dfs: dict[str, pd.DataFrame],
+) -> None:
+    """Log ensemble metrics, summaries, and per-query tables."""
+    if run is None:
+        return
+
+    run.log(
+        {
+            "ensemble/score_mAP": float(score_metrics["mAP"]),
+            "ensemble/score_rank1": float(score_metrics["rank1"]),
+            "ensemble/emb_mAP": float(emb_metrics["mAP"]),
+            "ensemble/emb_rank1": float(emb_metrics["rank1"]),
+            "ensemble/oracle_mAP": float(oracle_summary["oracle_mAP"]),
+            "ensemble/oracle_rank1": float(oracle_summary["oracle_rank1"]),
+        }
+    )
+
+    run.summary["experiment_name"] = exp_name
+    run.summary["n_members"] = len(config.get("members", []))
+    run.summary["member_names"] = [m.get("name") for m in config.get("members", [])]
+    run.summary["weights"] = config.get("fusion", {}).get("weights")
+    run.summary["normalize_mode"] = config.get("fusion", {}).get("normalize_mode", "global_minmax")
+    run.summary["square_before_fusion"] = config.get("fusion", {}).get("square_before_fusion", True)
+    run.summary["score_mAP"] = float(score_metrics["mAP"])
+    run.summary["score_rank1"] = float(score_metrics["rank1"])
+    run.summary["emb_mAP"] = float(emb_metrics["mAP"])
+    run.summary["emb_rank1"] = float(emb_metrics["rank1"])
+    run.summary["oracle_mAP"] = float(oracle_summary["oracle_mAP"])
+    run.summary["oracle_rank1"] = float(oracle_summary["oracle_rank1"])
+
+    log_wandb_table(run, "oracle/per_query", oracle_df)
+    log_wandb_table(run, "score_fusion/per_query", score_query_df)
+    log_wandb_table(run, "embedding_fusion/per_query", emb_query_df)
+
+    for name, query_df in per_model_query_dfs.items():
+        log_wandb_table(run, f"{name}/per_query", query_df)
 
 
 def finish_wandb_run(

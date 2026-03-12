@@ -2,9 +2,8 @@
 name = "eva02_miew_con"
 
 [fusion]
-type = "score_average"         # score_average, score_average_minmax, score_average_minmax_squared
 weights = [0.5, 0.5]
-normalize_per_model = true
+normalize_mode = "global_minmax"           #  "none", "global_minmax", "row_minmax", "row_zscore"
 square_before_fusion = true
 
 [split]

@@ -8,7 +8,6 @@ import torch.nn.functional as F
 import numpy as np
 
 from jaguar.models.foundation_models import FoundationModelWrapper
-from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.utils.utils_losses import (
     ArcFaceLoss,
     CosFaceLoss,

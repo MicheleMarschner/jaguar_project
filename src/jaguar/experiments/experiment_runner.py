@@ -288,7 +288,7 @@ def run_experiments():
             target_script = "src/jaguar/run_xai_experiment.py"
         elif mode == "ensemble":
             # !TODO change according to file_path and function_name
-            target_script = "src/jaguar/run_ensemble.py"
+            target_script = "src/jaguar/experiments/run_ensemble.py"
         else:
             target_script = args.main_script
 

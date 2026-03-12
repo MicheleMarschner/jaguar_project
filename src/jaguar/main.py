@@ -1,5 +1,8 @@
 
 import os
+
+from jaguar.experiments.experiment_runner import load_toml_config
+from jaguar.experiments.experiment_xai import deep_update
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 import argparse
@@ -54,6 +57,7 @@ def parse_args():
     return parser.parse_args()
 
 
+<<<<<<< HEAD
 def deep_update(base: dict, override: dict) -> dict:
     result = dict(base)
     for key, value in override.items():
@@ -63,6 +67,8 @@ def deep_update(base: dict, override: dict) -> dict:
             result[key] = value
     return result
 
+=======
+>>>>>>> 217fbb3 (adapted ensemble experiment to overall structure and combined with experiment runner)
 
 def main():
     # Parse CLI arguments

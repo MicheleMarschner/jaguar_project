@@ -1,5 +1,0 @@
-[ensemble]
-name = "eva04_miewid04_conv02"
-
-[fusion]
-weights = [0.4, 0.4, 0.2]

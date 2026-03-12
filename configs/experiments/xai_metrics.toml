@@ -7,4 +7,4 @@ setup_name = "scientific_base"
 output_profile = "xai"
 
 [[experiment.runs]]
-experiment_name = "eva02_faith_complex_"
+experiment_name = "eva02_faith_sanity_complex"

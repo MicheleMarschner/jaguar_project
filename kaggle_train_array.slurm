@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
-#SBATCH --array=0-5%5
+#SBATCH --array=0-7%4
 #SBATCH --output=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.out
 #SBATCH --error=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.err
 
@@ -32,7 +32,7 @@ echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 nvidia-smi || true
 python -c "import torch; print('cuda available:', torch.cuda.is_available()); print('device count:', torch.cuda.device_count())"
 
-PYTHONPATH=src python src/jaguar/main.py \
-  --base_config base/kaggle_base \
+PYTHONPATH=src python src/jaguar/experiments/run_ensemble.py \
+  --base_config base/ensemble_base \
   --experiment_config "$REL_PATH" \
   --experiment_name "$NAME"

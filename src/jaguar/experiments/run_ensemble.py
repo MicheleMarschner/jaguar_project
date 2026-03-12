@@ -100,12 +100,15 @@ def main():
     experiment_config = load_toml_config(args.experiment_config)
     config = deep_update(base_config, experiment_config)
 
-    # Optionally override experiment name inside config
+    # Optionally override run name inside config
     if args.experiment_name is not None:
-        config.setdefault("experiment", {})
-        config["experiment"]["name"] = args.experiment_name
+        config.setdefault("ensemble", {})
+        config["ensemble"]["name"] = args.experiment_name
 
-    exp_name = args.experiment_name or config["experiment"]["name"]
+    exp_name = config.get("ensemble", {}).get("name")
+    if not exp_name:
+        raise ValueError("Missing ensemble.name in config.")
+
     experiment_group = config.get("output", {}).get("experiment_group")
 
     print(exp_name)

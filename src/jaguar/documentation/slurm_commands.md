@@ -9,14 +9,14 @@ tar -xzf raw.tar.gz
 
 ## Monitoring
 - squeue --me
-- tail -n 100 -f /sc/home/michele.marschner/project/jaguar_project/logs/array_1759790_1.out
+- tail -n 100 -f /sc/home/michele.marschner/project/jaguar_project/logs/array_1762775_1.out
 
 ## Logs
 less /sc/home/michele.marschner/project/jaguar_project/logs/array_<JOBID>_<TASKID>.out
 
 ## Launching
 
-find configs/_generated/scientific_background -name "*.toml" | sort > generated_runs.txt
+find configs/_generated/kaggle_ensemble -name "*.toml" | sort > generated_runs.txt
 wc -l generated_runs.txt
 sbatch slurm/your_array_script.slurm
 

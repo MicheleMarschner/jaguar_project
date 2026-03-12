@@ -1,8 +1,6 @@
 [ensemble]
 name = "eva02_miew_con"
 
-[output]
-experiment_group = "kaggle_ensemble"
 
 [fusion]
 weights = [0.5, 0.5]

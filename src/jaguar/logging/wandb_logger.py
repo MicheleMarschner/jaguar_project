@@ -15,7 +15,10 @@ def _build_wandb_tags(
     """Build a small set of tags for filtering runs in W&B."""
     tags: list[str] = [str(job_type or "run")]
 
-    output_profile = config.get("output", {}).get("profile")
+    output_profile = (
+        config.get("output", {}).get("profile")
+        or config.get("experiment", {}).get("output_profile")
+    )
     backbone_name = config.get("model", {}).get("backbone_name")
     split_strategy = config.get("split", {}).get("strategy")
 

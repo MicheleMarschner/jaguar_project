@@ -24,6 +24,7 @@ from tqdm import tqdm
 import quantus
 import copy
 import pandas as pd
+import torch.nn.functional as F
 
 from typing import Any, Dict
 
@@ -32,7 +33,23 @@ from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
 from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
-from jaguar.utils.utils_xai import SimilarityForward, save_vec
+from jaguar.utils.utils_xai import SimilarityForward, format_n_samples_tag, save_vec
+
+
+
+
+def _get_faithfulness_config(config: dict) -> dict:
+    """
+    Read faithfulness metric settings from config with safe defaults.
+    """
+    faith_cfg = config.get("xai_metrics", {}).get("faithfulness", {})
+    return {
+        "steps": int(faith_cfg.get("steps", 20)),
+        "baseline": str(faith_cfg.get("baseline", "zeros")),
+        "use_abs": bool(faith_cfg.get("use_abs", True)),
+    }
+
+
 
 
 # ============================================================
@@ -42,6 +59,27 @@ def _auc_trapz(y: np.ndarray, x: np.ndarray) -> float:
     if hasattr(np, "trapezoid"):
         return float(np.trapezoid(y, x))
     return float(np.trapz(y, x))
+
+def _build_deletion_baseline(x: torch.Tensor, baseline: str) -> torch.Tensor:
+    """
+    Build replacement image for deletion-based faithfulness.
+    Returns a tensor with the same shape as x: [C, H, W].
+    """
+    if baseline == "zeros":
+        return torch.zeros_like(x)
+
+    if baseline == "blur":
+        # x: [C, H, W] -> [1, C, H, W] for pooling
+        xb = x.unsqueeze(0)
+
+        # simple blur via average pooling
+        # kernel/stride chosen to preserve size and keep implementation minimal
+        xb = F.avg_pool2d(xb, kernel_size=21, stride=1, padding=10)
+
+        return xb.squeeze(0)
+
+    raise ValueError(f"Unknown baseline: {baseline}")
+
 
 @torch.no_grad()
 def faithfulness_deletion_auc(
@@ -96,10 +134,7 @@ def faithfulness_deletion_auc(
             x0 = query_ds[query_local_idx]["img"].to(device)
 
             # baseline image
-            if baseline == "zeros":
-                x_base = torch.zeros_like(x0)
-            else:
-                raise ValueError(f"Unknown baseline: {baseline}")
+            x_base = _build_deletion_baseline(x0, baseline)
 
             # flatten saliency and get deletion order
             a = sal[pos].reshape(-1)  # [H*W]
@@ -139,8 +174,22 @@ def faithfulness_deletion_auc(
     }
 
 
-def run_faithfulness_metric(artifact, resolve_sample, model_wrapper):
-    res_faith = faithfulness_deletion_auc(artifact, resolve_sample, model_wrapper, steps=20, use_abs=True)
+def run_faithfulness_metric(
+    artifact,
+    resolve_sample,
+    model_wrapper,
+    config: dict,
+):
+    faith_cfg = _get_faithfulness_config(config)
+
+    res_faith = faithfulness_deletion_auc(
+        artifact=artifact,
+        resolve_sample=resolve_sample,
+        model_wrapper=model_wrapper,
+        steps=faith_cfg["steps"],
+        baseline=faith_cfg["baseline"],
+        use_abs=faith_cfg["use_abs"],
+    )
     gc.collect(); torch.cuda.empty_cache()
 
     return res_faith
@@ -303,7 +352,8 @@ def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
     ctx = build_eval_context(config, train_config, checkpoint_dir, eval_val_setting="original")
 
     explainer_names = list(cfg.explainer_names)
-    run_id = f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
+    n_tag = format_n_samples_tag(cfg.n_samples)
+    run_id = f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{n_tag}__seed{cfg.seed}"
     rel_run_path = f"xai/similarity/{run_id}"
 
     run_root = resolve_path(rel_run_path, EXPERIMENTS_STORE)
@@ -330,7 +380,7 @@ def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
     resolve_sample = build_emb_row_sample_resolver(ctx)
 
     # Load the mined reference pairs so metrics are aligned to the exact evaluated pairs.
-    out_path = run_root / f"refs_n{cfg.n_samples}.parquet"
+    out_path = run_root / f"refs_n{n_tag}.parquet"
     ref_df = load_parquet(out_path)
 
     rows = []
@@ -345,7 +395,7 @@ def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
             artifact = torch.load(sal_path, map_location="cpu")
 
             sanity = run_sanity_metric(explainer_name, artifact, resolve_sample, model_wrapper, ref_df_pair, cfg)
-            faith = run_faithfulness_metric(artifact, resolve_sample, model_wrapper)
+            faith = run_faithfulness_metric(artifact, resolve_sample, model_wrapper, config)
             complexity = run_complexity_metric(artifact, model_wrapper)
 
             rows.append({
@@ -362,6 +412,9 @@ def run_xai_metrics(config: dict, cfg) -> pd.DataFrame:
                 "faith_median": faith["faith_median"],
                 "faith_std": faith["faith_std"],
                 "faith_metric": faith["meta"]["metric"],
+                "faith_steps": faith["meta"]["steps"],
+                "faith_baseline": faith["meta"]["baseline"],
+                "faith_use_abs": faith["meta"]["use_abs"],
                 "faith_vec_path": save_vec(metrics_path, "faith", explainer_name, pair_type, faith["faith_vec"]),
 
                 "complexity_mean": complexity["complexity_mean"],

@@ -68,8 +68,7 @@ def main():
         config.setdefault("training", {})
         config["training"]["experiment_name"] = args.experiment_name
 
-
-    checkpoints_dir = Path(config["training"]["save_dir"])
+    checkpoints_dir = PATHS.checkpoints / config["training"]["save_dir"]
     exp_name = config["training"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
     print(checkpoints_dir, experiment_group)

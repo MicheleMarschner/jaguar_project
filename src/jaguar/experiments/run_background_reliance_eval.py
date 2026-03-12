@@ -117,11 +117,6 @@ def run_background_reliance_eval(config, save_dir):
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
 
-
-    #! TODO ight go into evaluation runner
-    exp_name = config["evaluation"]["experiment_name"]
-    experiment_group = config.get("output", {}).get("experiment_group")
-
     base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
 
     ctx_orig = base["ctx_orig"]
@@ -191,26 +186,26 @@ def main():
 
     experiment_group = config.get("output", {}).get("experiment_group")
     if experiment_group:
-        save_dir = PATHS.runs / experiment_group / args.experiment_name
+        run_dir = PATHS.runs / experiment_group / args.experiment_name
     else:
-        save_dir = PATHS.runs / args.experiment_name
-    ensure_dir(save_dir)
+        run_dir = PATHS.runs / args.experiment_name
+    ensure_dir(run_dir)
 
     run = init_wandb_run(
         config=config,
-        run_dir=save_dir,
+        run_dir=run_dir,
         exp_name=args.experiment_name,
         experiment_group=experiment_group,
         job_type="eval",
     )
 
-    result = run_background_reliance_eval(config=config, save_dir=save_dir)
+    result = run_background_reliance_eval(config=config, save_dir=run_dir)
     log_wandb_background_reliance_results(run, result)
     if run is not None:
         run.finish()
 
     print(f"[Done] background reliance eval: {args.experiment_name}")
-    print(f"[Saved] {save_dir}")
+    print(f"[Saved] {run_dir}")
     print(f"[Summary] {result['summary_path']}")
 
 

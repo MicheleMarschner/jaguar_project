@@ -9,7 +9,7 @@ output_profile = "xai"
 experiment_group = "xai"
 
 [inference]
-batch_size = 32
+batch_size = 64
 use_tta = false
 use_qe = false
 use_rerank = false
@@ -27,14 +27,26 @@ include_duplicates = false
 [xai]
 dataset_name = "jaguar_splits_curated"
 split_name = "val"
-n_samples = 50
+n_samples = 50      # "full"
 seed = 51
 explainer_names = ["IG", "GradCAM"]
 pair_types = ["easy_pos", "hard_neg"]
 
-ig_steps = 15
-ig_internal_bs = 32
-ig_batch_size = 32
+ig_steps = 50
+ig_internal_bs = 64
+ig_batch_size = 64
+
+
+[xai_metrics.faithfulness]
+steps = 30
+baseline = "blur"          # "blur", "zeros"
+use_abs = true
+
+[xai_metrics.complexity]
+abs = true
+normalise = true
+display_progressbar = true
+
 
 [logging]
 enabled = true

@@ -37,7 +37,7 @@ from jaguar.config import PATHS
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
-from jaguar.utils.utils_xai import ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices  
+from jaguar.utils.utils_xai import format_n_samples_tag, ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices, resolve_n_samples  
 from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results
 from jaguar.utils.utils_experiments import load_toml_from_path
@@ -52,7 +52,7 @@ class XAIConfig:
     """
     dataset_name: str = "jaguar_init"
     split_name: str = "val"
-    n_samples: int = 100
+    n_samples: int | str | None = 100
     seed: int = 51
 
     explainer_names: Tuple[str, ...] = ("GradCAM", "IG")
@@ -67,8 +67,6 @@ class XAIConfig:
 
     # Output root; each run creates its own subfolder under here
     out_root: Path = Path()
-
-
 
 
 # ============================================================
@@ -501,7 +499,8 @@ def run_xai(config, cfg: XAIConfig) -> Dict[Tuple[str, str], Path]:
 
     ctx = build_eval_context(config, train_config, checkpoint_dir, eval_val_setting="original")
 
-    run_root = cfg.out_root / f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{cfg.n_samples}__seed{cfg.seed}"
+    n_tag = format_n_samples_tag(cfg.n_samples)
+    run_root = cfg.out_root / f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{n_tag}__seed{cfg.seed}"
     ensure_dir(run_root)
     split_df = ctx.split_df
     explainer_names = cfg.explainer_names
@@ -536,10 +535,11 @@ def run_xai(config, cfg: XAIConfig) -> Dict[Tuple[str, str], Path]:
     )
 
     # Choose deterministic validation queries (small subset N for explainability runs)
+    resolved_n_samples = resolve_n_samples(cfg.n_samples)
     val_query_emb_rows = get_val_query_indices(
         split_df=split_df,
         out_root=run_root,
-        n_samples=cfg.n_samples,
+        n_samples=resolved_n_samples,
         seed=cfg.seed,
     )
     val_query_local_idx = map_emb_rows_to_local_indices(val_query_emb_rows, ctx.val_local_to_emb_row)

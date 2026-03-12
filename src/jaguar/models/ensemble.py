@@ -16,7 +16,7 @@ import numpy as np
 from tqdm import tqdm
 import pandas as pd
 
-from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
+from jaguar.config import DATA_ROOT, EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 from jaguar.utils.utils_experiments import read_toml_from_path
@@ -31,7 +31,7 @@ def get_embedding_cache_path(
     split_name: str,
     cache_prefix: str | None = None,
 ) -> Path:
-    cache_dir = PATHS.data / "embeddings" / "ensemble" / member_name
+    cache_dir = DATA_ROOT / "embeddings" / "ensemble" / member_name
     ensure_dir(cache_dir)
 
     tta_tag = "tta" if config["inference"]["use_tta"] else "no_tta"

@@ -277,14 +277,16 @@ def sample_indices(indices: np.ndarray, n_samples: int, seed: int) -> np.ndarray
 def get_val_query_indices(
     split_df: pd.DataFrame,
     out_root: Path,
-    n_samples: int,
+    n_samples: int | None,
     seed: int,
 ) -> np.ndarray:
     """
     Cache the exact global emb_row query subset so runs can be compared on the
     same validation images across repeated runs.
     """
-    idx_path = out_root / f"xai_val_idx_n{n_samples}.npy"
+    n_tag = "full" if n_samples is None else str(n_samples)
+    idx_path = out_root / f"xai_val_idx_n{n_tag}.npy"
+
     if idx_path.exists():
         return np.load(idx_path)
 
@@ -294,3 +296,29 @@ def get_val_query_indices(
     ensure_dir(idx_path.parent)
     save_npy(idx_path, val_chosen)
     return val_chosen
+
+
+
+def resolve_n_samples(n_samples: int | str | None) -> int | None:
+    """
+    Resolve configured sample count.
+    Returns None for full-split usage.
+    """
+    if n_samples is None:
+        return None
+
+    if isinstance(n_samples, str):
+        value = n_samples.strip().lower()
+        if value in {"full", "all"}:
+            return None
+        return int(value)
+
+    return int(n_samples)
+
+
+def format_n_samples_tag(n_samples: int | str | None) -> str:
+    """
+    Stable tag for run/file names.
+    """
+    resolved = resolve_n_samples(n_samples)
+    return "full" if resolved is None else str(resolved)

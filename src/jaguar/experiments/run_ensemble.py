@@ -106,7 +106,10 @@ def main():
         config["experiment"]["name"] = args.experiment_name
 
     exp_name = args.experiment_name or config["experiment"]["name"]
-    experiment_group = config.get("experiment", {}).get("name")
+    experiment_group = config.get("output", {}).get("experiment_group")
+
+    print(exp_name)
+    print(experiment_group)
 
     if experiment_group:
         run_dir = PATHS.runs / experiment_group / exp_name

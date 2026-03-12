@@ -35,6 +35,8 @@ def main():
     base_config = load_toml_config(args.base_config)
     experiment_config = load_toml_config(args.experiment_config)
     config = deep_update(base_config, experiment_config)
+    exp_name = config["training"]["experiment_name"]
+    experiment_group = config.get("output", {}).get("experiment_group")
 
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
@@ -45,14 +47,26 @@ def main():
     manifest_dir = resolve_path("fiftyone/splits_curated", DATA_STORE)
     run_name = args.experiment_name
 
-    save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
-    results_path = resolve_path(f"xai/background_sensitivity/{run_name}", RESULTS_STORE)
-    ensure_dir(save_path)
-    ensure_dir(results_path)
+    # run artifact directory
+    if experiment_group:
+        suffix = experiment_group / exp_name
+        
+    else:
+        suffix =  exp_name
+    
+    run_dir = PATHS.runs / suffix
+    config["training"]["save_dir"] = str(checkpoint_dir / suffix)
+    results_path = PATHS.results / suffix
+    
+
+    #save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
+    #results_path = resolve_path(f"xai/background_sensitivity/{run_name}", RESULTS_STORE)
+    #ensure_dir(save_path)
+    #ensure_dir(results_path)
 
     run = init_wandb_run(
         config=config,
-        run_dir=save_path,
+        run_dir=run_dir,
         exp_name=config["evaluation"]["experiment_name"],
         experiment_group=config.get("output", {}).get("experiment_group"),
         job_type="eval",
@@ -71,7 +85,7 @@ def main():
 
     query_emb_rows = get_val_query_indices(
         split_df=ctx_orig.split_df,
-        out_root=save_path,
+        out_root=run_dir,
         n_samples=config["xai"]["n_samples"],
         seed=config["xai"]["seed"],
     )
@@ -131,7 +145,7 @@ def main():
     similarity_summary = summary_result["similarity_summary"]
 
     save_bg_sensitivity_outputs(
-        save_path=save_path,
+        save_path=run_dir,
         results_path=results_path,
         config=config,
         train_config=train_config,
@@ -152,7 +166,7 @@ def main():
         run.finish()
 
     print(f"[Done] background sensitivity: {run_name}")
-    print(f"[Saved] {save_path}")
+    print(f"[Saved] {run_dir}")
 
 
 if __name__ == "__main__":

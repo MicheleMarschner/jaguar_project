@@ -2,12 +2,8 @@
 name = "kaggle_deduplication"
 description = "Deduplication / curation ablation with burst and split artifacts as prerequisites."
 base_config = "base/kaggle_base"
-<<<<<<< HEAD
-mode = "kaggle"
-=======
 mode = "train"
 train_type = "kaggle"
->>>>>>> Background_exp
 setup_name = "kaggle_deduplication"
 output_profile = "deduplication"
 
@@ -25,7 +21,6 @@ val_k = 50
 phash_threshold = 4
 
 [[experiment.runs]]
-<<<<<<< HEAD
 experiment_name = "closed_curated_traink_3_valk_1_p4"
 split_strategy = "closed_set"
 include_duplicates = false
@@ -65,11 +60,3 @@ include_duplicates = false
 train_k = 8
 val_k = 1
 phash_threshold = 4
-=======
-experiment_name = "closed_curated_traink_3_valk_5_p4"
-split_strategy = "closed_set"
-include_duplicates = false
-train_k = 3
-val_k = 5
-phash_threshold = 4
->>>>>>> Background_exp

@@ -7,7 +7,7 @@
 #SBATCH --gres=gpu:b200:1
 #SBATCH --cpus-per-task=8
 #SBATCH --nodes=1
-#SBATCH --mem=32G
+#SBATCH --mem=64G
 #SBATCH --time=4:00:00
 #SBATCH --output=/sc/home/michele.marschner/project/jaguar_project/logs/xai_%j.out
 #SBATCH --error=/sc/home/michele.marschner/project/jaguar_project/logs/xai_%j.err

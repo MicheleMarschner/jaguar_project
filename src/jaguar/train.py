@@ -6,7 +6,7 @@ import tomli_w
 import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
-from muon import MuData
+from muon import SingleDeviceMuonWithAuxAdam
 from torch.cuda.amp import autocast, GradScaler
 from timm.utils import ModelEmaV3
 
@@ -85,17 +85,53 @@ class JaguarTrainer:
                 params_groups, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
             )
         elif opt_cfg['type'] == "Muon":
-            self.optimizer = MuData(
-                params_groups, lr=opt_cfg["lr"], weight_decay=opt_cfg.get("weight_decay", 0), betas=tuple(opt_cfg.get("betas", [0.9,0.999]))
-            )
-        else:
-            raise ValueError(f"Unknown optimizer type: {opt_cfg['type']}")
+            betas = tuple(opt_cfg.get("betas", [0.9, 0.95]))
+            weight_decay = opt_cfg.get("weight_decay", 0.01)
+
+            # Backbone parameters (only those requiring grad)
+            backbone_params = [p for p in self.model.backbone.parameters() if p.requires_grad]
+            hidden_weights = [p for p in backbone_params if p.ndim >= 2]
+            hidden_gains_biases = [p for p in backbone_params if p.ndim < 2]
+
+            # Non-backbone parameters
+            nonhidden_params = []
+            if hasattr(self.model, "neck"):
+                nonhidden_params += [p for p in self.model.neck.parameters() if p.requires_grad]
+            if hasattr(self.model, "head"):
+                nonhidden_params += [p for p in self.model.head.parameters() if p.requires_grad]
+
+            param_groups = []
+            # Muon group (only if backbone has trainable weights)
+            if len(hidden_weights) > 0:
+                param_groups.append(
+                    dict(
+                        params=hidden_weights,
+                        use_muon=True,
+                        lr=opt_cfg["lr_muon"],
+                        weight_decay=weight_decay,
+                    )
+                )
+            # Adam group
+            adam_params = hidden_gains_biases + nonhidden_params
+            if len(adam_params) > 0:
+                param_groups.append(
+                    dict(
+                        params=adam_params,
+                        use_muon=False,
+                        lr=opt_cfg["lr"],
+                        betas=betas,
+                        weight_decay=weight_decay,
+                    )
+                )
+
+            self.optimizer = SingleDeviceMuonWithAuxAdam(param_groups)
         
         print(f"[Trainer] Optimizer built. Head LR: {opt_cfg['lr']} | Backbone LR: {backbone_lr}")
 
     def _setup_scheduler(self):
         """Logic to create the scheduler."""
         sched_cfg = self.config['scheduler']
+        opt_cfg = self.config['optimizer']
         sched_type = sched_cfg.get("type", "CosineAnnealingLR")
 
         if sched_type == "CosineAnnealingLR":
@@ -105,17 +141,18 @@ class JaguarTrainer:
         elif sched_type == "OneCycleLR":
             self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer,
-                max_lr=sched_cfg['lr_max'],
-                total_steps=sched_cfg.get('total_steps', None),
-                epochs=sched_cfg.get('epochs', self.config["training"]["epochs"]),
+                max_lr=[g["lr"] for g in self.optimizer.param_groups], # differential LR groups are preserved
+                epochs=self.config["training"]["epochs"], 
                 steps_per_epoch=len(self.train_loader),
+                pct_start=0.3,
+                cycle_momentum=False if opt_cfg['type'] == "Muon" else True,  # Only use momentum cycling for Adam/W, not Muon
             )
         elif sched_type == "ReduceLROnPlateau":
             self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                 self.optimizer,
                 mode='max',
-                factor=sched_cfg.get('factor', 0.1),
-                patience=sched_cfg.get('patience', 2),
+                factor=opt_cfg.get('factor', 0.1),
+                patience=opt_cfg.get('patience', 2),
                 min_lr=sched_cfg.get('lr_min', 1e-7)
             )
         elif sched_type == "JaguardIdScheduler":
@@ -194,14 +231,16 @@ class JaguarTrainer:
     def train_epoch(self, epoch):
         # Check if it's time to unfreeze part of the backbone
         unfreeze_ep = self.config['training'].get('unfreeze_epoch', 0)
-        if (unfreeze_ep > 0 and epoch == unfreeze_ep and self.model.head_type != "triplet"): # or self.model.head_type == "triplet":  # For triplet loss, we want the backbone to be trainable from the start
+        if (unfreeze_ep > 0 and epoch == unfreeze_ep): # and self.model.head_type != "triplet"): 
             num_blocks = self.config['training'].get('unfreeze_blocks', 2)
             print(f"\n[Trainer] Triggering Backbone Fine-tuning at epoch {epoch}")
             self.model.unfreeze_backbone_layers(num_blocks)
+            
             # Re-build optimizer to include the now-active backbone parameters
             self._setup_optimizer()
             # Re-build scheduler to align with new optimizer
-            self._setup_scheduler()
+            if self.config["scheduler"]["type"] != "OneCycleLR":
+                self._setup_scheduler()
 
         self.model.train()
         running_loss = 0.0
@@ -226,11 +265,11 @@ class JaguarTrainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
             
+            if self.config["scheduler"]["type"] == "OneCycleLR": #gets optimized per batch
+                self.scheduler.step()
+            
             if self.use_ema and self.ema_model is not None:
                 self.ema_model.update(self.model)
-
-            # if self.config["scheduler"]["type"] == "OneCycleLR":            ## !TODO check in with Vanessa if ok!
-            #     self.scheduler.step()
             
             running_loss += loss.item()
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
@@ -238,7 +277,7 @@ class JaguarTrainer:
         return running_loss / len(self.train_loader)
 
     @torch.no_grad()
-    def validate(self):
+    def validate(self, epoch=None):
         # self.model.eval()
         eval_model = self.ema_model.module if self.use_ema and hasattr(self.ema_model, "module") else self.model
         eval_model.eval()
@@ -257,6 +296,12 @@ class JaguarTrainer:
 
         full_embeddings = torch.cat(all_embeddings, dim=0)
         full_labels = torch.cat(all_labels, dim=0)
+        
+        analysis_cfg = self.config.get("mining_analysis", {})
+        freq = analysis_cfg.get("silhouette_freq", 5)
+        
+        is_mining_exp = (self.model.head_type == "triplet") or analysis_cfg.get("force_silhouette", False)
+        do_heavy_metrics = is_mining_exp and (epoch is not None and epoch % freq == 0)
 
         bundle = ReIDEvalBundle(
             model=None, 
@@ -264,7 +309,9 @@ class JaguarTrainer:
             labels=full_labels,
             device="cpu"
         )
-        return bundle.compute_all()
+        metrics = bundle.compute_all(include_silhouette=do_heavy_metrics)
+        return metrics, full_embeddings, full_labels, do_heavy_metrics
+        # return bundle.compute_all()
 
     def save_checkpoint(self, epoch, metrics) -> Path:
         path = self.save_dir

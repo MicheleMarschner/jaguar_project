@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import average_precision_score
+from sklearn.metrics import silhouette_score
 
 ###############################################################
 # Example usage (after validation loop):
@@ -133,6 +134,16 @@ class ReIDEvalBundle:
         self._finetuned_embeddings = None
         self._sim_matrix = None
         self._ranked_indices = None
+        
+    # -------------------------------------------------------
+    # Silhouette score for clustering quality of embeddings
+    # -------------------------------------------------------
+    def compute_silhouette(self):
+        """Computes O(N^2) Silhouette Score on CPU."""
+        emb_np = self.finetuned_embeddings()
+        lbl_np = self.labels
+        # Note: If validation set grows, consider sampling 1000 points here
+        return float(silhouette_score(emb_np, lbl_np, metric='cosine'))
 
     # -------------------------------------------------
     # Core cached computations
@@ -343,7 +354,7 @@ class ReIDEvalBundle:
     # -------------------------------------------------
     # Convenience: all metrics at once
     # -------------------------------------------------
-    def compute_all(self, k_ndcg=10, k_recall=5):
+    def compute_all(self, k_ndcg=10, k_recall=5, include_silhouette=False):
         """
         One-call evaluation using shared cached computations.
 
@@ -353,6 +364,7 @@ class ReIDEvalBundle:
         - Ranking quality (nDCG)
         - Retrieval framing (Recall@K)
         - Embedding diagnostics (similarity + distance structure)
+        - include_silhouette: Set to True only for periodic analysis or specific experiments.
         """
 
         # Core ranking metrics
@@ -373,8 +385,11 @@ class ReIDEvalBundle:
 
         # Distance diagnostics (geometry of embedding space)
         dist_stats = self.intra_inter_distance()
+        
+        # Silouhette score for embeddings 
+        sil = self.compute_silhouette()
 
-        return {
+        results = {
             # --- Competition / primary ---
             "id_balanced_mAP": id_map,
             "mAP": map_score,
@@ -399,7 +414,13 @@ class ReIDEvalBundle:
             "intra_dist": dist_stats["intra_dist"],
             "inter_dist": dist_stats["inter_dist"],
             "dist_gap": dist_stats["dist_gap"],
+            
         }
+        
+        if include_silhouette:
+            results["silhouette"] = self.compute_silhouette()
+            
+        return results 
 
 if __name__ == "__main__":
     import torch

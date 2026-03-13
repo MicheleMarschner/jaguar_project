@@ -7,6 +7,7 @@ s = 30.0
 m = 0.50
 use_projection = true
 use_forward_features = false
+mining_type = "hard"
 
 [split]
 strategy = "closed_set"
@@ -43,6 +44,7 @@ save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/
 experiment_name = "kaggle_base"
 epochs = 30
 batch_size = 32  # 16
+samples_per_class = 4
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
@@ -56,16 +58,19 @@ ema_decay = 0.995
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
 lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
+lr_muon = 0.005        # Muon branch; backbone weights
 weight_decay = 1e-3
 momentum = 0.9          # Only used for SGD
 betas = [0.9, 0.999]    # Only used for Adam/AdamW
 backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
+factor = 0.1             # ReduceLROnPlateau
+patience = 2             # ReduceLROnPlateau
 
 [scheduler]
 type = "JaguardIdScheduler"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"
 T_max = 30                  # CosineAnnealingLR
 lr_start = 1e-5             # custom 
-lr_min = 9e-6               # Cosine or custom
+lr_min = 9e-6               # Cosine or custom or ReduceLROnPlateau
 lr_max = 1e-3               # Custom or OneCycle
 lr_ramp_ep = 15             # Custom
 lr_sus_ep = 0               # Custom
@@ -82,6 +87,10 @@ affine_scale = [0.85, 1.15]
 color_jitter_brightness = 0.2
 color_jitter_contrast = 0.2
 random_erasing_p = 0.25
+
+[mining_analysis]
+silhouette_freq = 0         # Compute Silhouette and refresh viz data every x epochs
+force_silhouette = false    # Set to true for the mining RQ study
 
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]

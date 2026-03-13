@@ -7,6 +7,7 @@ s = 30.0
 m = 0.50
 use_projection = true
 use_forward_features = false
+mining_type = "hard"
 
 [split]
 strategy = "closed_set"
@@ -82,6 +83,10 @@ affine_scale = [0.85, 1.15]
 color_jitter_brightness = 0.2
 color_jitter_contrast = 0.2
 random_erasing_p = 0.25
+
+[mining_analysis]
+silhouette_freq = 0         # Compute Silhouette and refresh viz data every x epochs
+force_silhouette = false    # Set to true for the mining RQ study
 
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]

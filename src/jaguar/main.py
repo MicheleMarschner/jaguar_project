@@ -1,6 +1,7 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
+import numpy as np
 import argparse
 import tomllib
 from pathlib import Path
@@ -158,7 +159,8 @@ def main():
         num_classes=num_classes,
         device=DEVICE,
     )
-
+    
+    print(config['model']["mining_type"])
     # Initialize Model
     model = JaguarIDModel(
         backbone_name=config['model']['backbone_name'],
@@ -171,6 +173,7 @@ def main():
         loss_m=config["model"].get("m", 0.5),
         use_projection=config['model']['use_projection'],
         use_forward_features=config['model']['use_forward_features'],
+        mining_type=config['model'].get("mining_type", "hard"),
     )
 
     log_wandb_model_info(
@@ -339,7 +342,10 @@ def main():
                 )
                 
         avg_loss = trainer.train_epoch(epoch)
-        metrics = trainer.validate()
+        # metrics = trainer.validate()
+        # Validate returns metrics, embeddings and a flag
+        metrics, current_embs, current_lbls, was_heavy = trainer.validate(epoch=epoch)
+        
         
         print(f"\nEpoch {epoch} Summary:")
         print(
@@ -358,19 +364,25 @@ def main():
             best_epoch = epoch
             patience_counter = 0
             best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
+            
+            viz_data = {
+                "embeddings": current_embs.numpy(),
+                "labels": current_lbls.numpy(),
+                "metrics": metrics,
+                "backbone": config['model']['backbone_name'],
+                "head": config['model']['head_type']
+            }
+            # Overwrites the previous best to save disk space
+            viz_path = Path(run_dir) / "best_val_viz_data.npz"
+            np.savez(viz_path, **viz_data)
+
         else:
             patience_counter += 1
             
-        if config['scheduler']['type'] == "ReduceLROnPlateau":
-            trainer.scheduler.step(metrics['mAP'])
-        else:  
+        if config["scheduler"]["type"] == "ReduceLROnPlateau":
+            trainer.scheduler.step(metrics["mAP"])
+        elif config["scheduler"]["type"] != "OneCycleLR":
             trainer.scheduler.step()
-
-        ##!TODO laut chatty sollte obere block hiermit ersetzt werden as OneCycleLR per batch
-        #if config["scheduler"]["type"] == "ReduceLROnPlateau":
-        #    trainer.scheduler.step(metrics["mAP"])
-        #elif config["scheduler"]["type"] != "OneCycleLR":
-        #    trainer.scheduler.step()
 
         current_lr = trainer.optimizer.param_groups[0]["lr"]
 

@@ -117,6 +117,7 @@ def build_experiment_override(
         "m": ("model", "m"),
         "use_projection": ("model", "use_projection"),
         "use_forward_features": ("model", "use_forward_features"),
+        "mining_type": ("model", "mining_type"),
         
         "ema": ("training", "ema"),
         "ema_decay": ("training", "ema_decay"),
@@ -124,13 +125,19 @@ def build_experiment_override(
         "epochs": ("training", "epochs"),
         "unfreeze_epoch": ("training", "unfreeze_epoch"),
         "unfreeze_blocks": ("training", "unfreeze_blocks"),
+        "early_stopping" : ("training", "early_stopping"),
+        "early_stopping_patience" : ("training", "early_stopping_patience"),
+        "samples_per_class" : ("training", "samples_per_class"),
 
         "optimizer_type": ("optimizer", "type"),
         "optimizer_lr": ("optimizer", "lr"),
+        "optimizer_lr_muon": ("optimizer", "lr_muon"),
         "optimizer_backbone_lr": ("optimizer", "backbone_lr"),
         "optimizer_weight_decay": ("optimizer", "weight_decay"),
         "optimizer_momentum": ("optimizer", "momentum"),
         "optimizer_betas": ("optimizer", "betas"),
+        "optimizer_factor": ("optimizer", "optimizer_factor"),
+        "optimizerr_patience": ("optimizer", "optimizer_patience"),
 
         "scheduler_type": ("scheduler", "type"),
         "scheduler_T_max": ("scheduler", "T_max"),
@@ -140,10 +147,6 @@ def build_experiment_override(
         "scheduler_lr_ramp_ep": ("scheduler", "lr_ramp_ep"),
         "scheduler_lr_sus_ep": ("scheduler", "lr_sus_ep"),
         "scheduler_lr_decay": ("scheduler", "lr_decay"),
-        "scheduler_factor": ("scheduler", "factor"),
-        "scheduler_patience": ("scheduler", "patience"),
-        "scheduler_epochs": ("scheduler", "epochs"),
-        "scheduler_total_steps": ("scheduler", "total_steps"),
 
         "apply_augmentations": ("augmentation", "apply_augmentations"),
         "horizontal_flip": ("augmentation", "horizontal_flip"),
@@ -155,7 +158,10 @@ def build_experiment_override(
         "color_jitter_brightness": ("augmentation", "color_jitter_brightness"),
         "color_jitter_contrast": ("augmentation", "color_jitter_contrast"),
         "random_erasing_p": ("augmentation", "random_erasing_p"),
-
+        
+        "silhouette_freq": ("mining_analysis", "silhouette_freq"),
+        "force_silhouette": ("mining_analysis", "force_silhouette"),
+        
         "pr_enabled": ("progressive_resizing", "enabled"),
         "pr_sizes": ("progressive_resizing", "sizes"),
         "pr_stage_epochs": ("progressive_resizing", "stage_epochs"),
@@ -342,8 +348,8 @@ def run_experiments():
         "#SBATCH --mem=200GB",
         "#SBATCH --account=kainmueller",
         f"#SBATCH --array=0-{len(config_paths)-1}",
-        "#SBATCH --nodelist=maxg[09,10,20]",
-        "#SBATCH --partition=h100",
+        "#SBATCH --nodelist=maxg[09]", #[09,10,20]",
+        # "#SBATCH --partition=h100",
         "#SBATCH --output=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.out",
         "#SBATCH --error=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.err",
         "#SBATCH -pkainmueller",

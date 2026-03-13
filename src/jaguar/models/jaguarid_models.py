@@ -85,11 +85,15 @@ class JaguarIDModel(nn.Module):
         gem_p: float = 3.0,    
         use_projection: bool = True,    
         use_forward_features: bool = False,  
+        mining_type: str = "hard",
+        label_smooth=0.0,
     ):
         super().__init__()
         self.device = device
         self.head_type = head_type.lower()
         self.use_forward_features = use_forward_features
+        
+        if self.head_type == "triplet": use_projection = True
         
         # Initialize GeM if needed
         self.use_gem = use_gem
@@ -108,7 +112,7 @@ class JaguarIDModel(nn.Module):
 
         # Dynamic feature_dim # --- DYNAMIC DIMENSION INFERENCE ---
         self.backbone.eval()
-        input_res = self.backbone_wrapper.input_size # Use the wrapper's config!
+        input_res = self.backbone_wrapper.input_size 
         
         with torch.no_grad():
             dummy = torch.randn(1, 3, input_res, input_res).to(device)
@@ -139,7 +143,7 @@ class JaguarIDModel(nn.Module):
             self.bn = nn.BatchNorm1d(self.feature_dim)
             head_input_dim = self.feature_dim
 
-        print(f"[JaguarID] Feature dim: {self.feature_dim}")
+        print(f"[JaguarID] Feature dim: {self.feature_dim}")     
 
         # Select head + loss
         if self.head_type == "arcface":
@@ -153,10 +157,12 @@ class JaguarIDModel(nn.Module):
             self.criterion = SphereFaceLoss(loss_s, loss_m)
         elif self.head_type == "softmax":
             self.head = LinearHead(head_input_dim, num_classes)
-            self.criterion = nn.CrossEntropyLoss()
+            self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smooth)
         elif self.head_type == "triplet":
-            self.head = nn.Identity() # Triplet just uses the neck
-            self.criterion = TripletLoss(loss_m)
+            self.bn = nn.BatchNorm1d(emb_dim)
+            self.classifier = nn.Linear(head_input_dim, num_classes, bias=False)
+            self.criterion_tri = TripletLoss(loss_m, mining_type)
+            self.criterion_ce = nn.CrossEntropyLoss(label_smoothing=label_smooth)
         else:
             raise ValueError(f"Unknown head type: {head_type}")
 
@@ -305,6 +311,7 @@ class JaguarIDModel(nn.Module):
                 features = self.gem(features).flatten(1)
             else:
                 features = features.mean(dim=(2, 3))
+               
         # Pass through the learned projection neck; otherwise through a batch normalization layer
         embeddings = self.neck(features)
         if not self.use_projection:
@@ -312,13 +319,15 @@ class JaguarIDModel(nn.Module):
 
         # Triplet case (returns embeddings)
         if self.head_type == "triplet":
-            # return F.normalize(embeddings, dim=1)
-            embeddings = F.normalize(embeddings, dim=1) # For ArcFace/CosFace/SphereFace, normalization is done inside the head; for Triplet we do it here
+            feat_after_bn = self.bn(embeddings)   # Used for CE and Final Embedding
             if labels is not None:
-                loss = self.criterion(embeddings, labels)
-                return loss, embeddings
-
-            return embeddings
+                logits = self.classifier(feat_after_bn)
+                loss_tri = self.criterion_tri(embeddings, labels)
+                loss_ce = self.criterion_ce(logits, labels)
+                # Combined Loss (1.0 * Triplet + 1.0 * CE)
+                return loss_tri + loss_ce, logits
+            # For inference, use normalized feat_after_bn
+            return F.normalize(feat_after_bn, p=2, dim=1) # for Triplet loss we normalize here
         
         # Classification heads
         logits = self.head(embeddings)

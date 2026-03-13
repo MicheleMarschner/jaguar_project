@@ -1,0 +1,12 @@
+[ensemble]
+name = "single_miew_id"
+
+[output]
+profile = "ensemble"
+experiment_group = "kaggle_ensemble"
+
+[[members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"

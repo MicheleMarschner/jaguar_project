@@ -1,6 +1,0 @@
-[ensemble]
-name = "ens3_equal_global"
-
-[fusion]
-weights = [0.3333, 0.3333, 0.3334]
-square_before_fusion = true

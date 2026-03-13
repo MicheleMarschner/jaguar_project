@@ -1,0 +1,5 @@
+experiment_name,experiment_group,gallery_protocol,method_name,method_type,member_set,n_members,mAP,rank1,best_single_mAP,gain_vs_best_single,oracle_mAP,oracle_rank1,oracle_gap_mAP
+single_megadescriptor_l,kaggle_ensemble,valonly_gallery,MegaDescriptor-L,single,MegaDescriptor-L,1,0.456369285343045,0.3582089552238806,0.456369285343045,0.0,0.456369285343045,0.3582089552238806,0.0
+single_megadescriptor_l,kaggle_ensemble,valonly_gallery,score_fusion,fusion,MegaDescriptor-L,1,0.456369285343045,0.3582089552238806,0.456369285343045,0.0,0.456369285343045,0.3582089552238806,0.0
+single_megadescriptor_l,kaggle_ensemble,valonly_gallery,embedding_concat,fusion,MegaDescriptor-L,1,0.456369285343045,0.3582089552238806,0.456369285343045,0.0,0.456369285343045,0.3582089552238806,0.0
+single_megadescriptor_l,kaggle_ensemble,valonly_gallery,oracle,oracle,MegaDescriptor-L,1,0.456369285343045,0.3582089552238806,0.456369285343045,0.0,0.456369285343045,0.3582089552238806,0.0

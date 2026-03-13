@@ -8,7 +8,7 @@ import torch
 
 from jaguar.config import EXPERIMENTS_STORE, PATHS, DEVICE
 from jaguar.models.jaguarid_models import JaguarIDModel
-from jaguar.utils.utils import resolve_path
+from jaguar.utils.utils import ensure_dir, resolve_path, write_json
 from jaguar.utils.utils_datasets import (
     build_eval_processing_fn,
     build_processing_fn,
@@ -369,6 +369,9 @@ def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir
     Builds the shared original gallery used as the fixed reference for background-reliance
     comparisons across query settings.
     """
+
+    print("[DEBUG] build_original_gallery_base", train_config)
+
     ctx_orig = build_eval_context(
         config=config,
         train_config=train_config,
@@ -495,6 +498,73 @@ def build_query_for_setting(
         "query_labels": query_labels,
         "query_global_indices": query_global_indices,
         "val_ds": val_ds,
+    }
+
+
+def build_val_gallery_base(
+    config: dict,
+    train_config: dict,
+    checkpoint_dir: Path,
+    eval_val_setting: str = "original",
+) -> dict:
+    """
+    Builds a pure val-vs-val retrieval base:
+    the same val split provides both query and gallery candidates.
+    """
+    ctx_val = build_eval_context(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting=eval_val_setting,
+    )
+
+    val_embeddings = load_or_extract_jaguarid_embeddings(
+        model=ctx_val.model,
+        torch_ds=ctx_val.val_ds,
+        split="val",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix=f"{eval_val_setting}_val",
+    )
+
+    val_labels = np.asarray(ctx_val.val_ds.labels)
+    val_global_indices = ctx_val.val_local_to_emb_row
+    val_files = [str(s["filename"]) for s in ctx_val.val_ds.samples]
+
+    return {
+        "ctx_val": ctx_val,
+        "val_embeddings": val_embeddings,
+        "val_labels": val_labels,
+        "val_global_indices": val_global_indices,
+        "val_files": val_files,
+    }
+
+
+def save_retrieval_results_per_id(
+    save_dir: Path,
+    setting: str,
+    query_df: pd.DataFrame,
+    summary: dict,
+    identity_df: pd.DataFrame | None = None,
+) -> dict:
+    """
+    Saves retrieval results for one evaluation setting.
+    """
+    out_dir = save_dir / setting
+    ensure_dir(out_dir)
+
+    query_df.to_csv(out_dir / "query_metrics.csv", index=False)
+
+    if identity_df is not None:
+        identity_df.to_csv(out_dir / "identity_metrics.csv", index=False)
+
+    write_json(summary, out_dir / "summary.json")
+
+    return {
+        "query_df": query_df.assign(setting=setting),
+        "summary": {"setting": setting, **summary},
+        "identity_df": None if identity_df is None else identity_df.assign(setting=setting),
     }
 
 

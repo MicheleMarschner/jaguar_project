@@ -1,0 +1,12 @@
+[ensemble]
+name = "single_megadescriptor_l"
+
+[output]
+profile = "ensemble"
+experiment_group = "kaggle_ensemble"
+
+[[members]]
+name = "MegaDescriptor-L"
+checkpoint_path = "kaggle_backbone/backbone_megadescriptor_l"
+config_path = "kaggle_backbone/backbone_megadescriptor_l/config_leaderboard_exp.toml"
+cache_prefix = "backbone_megadescriptor_l"

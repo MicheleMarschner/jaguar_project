@@ -13,9 +13,6 @@ wandb/
 notebooks/wandb
 logs/
 
-miewid/*.pth
-megadescriptor/*.pth
-
 wandb.md
 comments.md
 
@@ -23,3 +20,4 @@ comments.md
 /results/
 /data/round_1/
 /data/round_2/raw/
+/documentation/personal/

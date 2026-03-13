@@ -1,3 +1,22 @@
+"""
+Background-Reliance Evaluation for Jaguar Re-ID.
+
+Project role:
+- Evaluates retrieval performance under different query background manipulations.
+- Compares each manipulated query setting against the same original gallery.
+- Quantifies performance drops relative to the unmodified query condition.
+
+Procedure:
+- Build a fixed original gallery from the shared evaluation setup.
+- Construct query sets for multiple background settings (e.g., original, gray, blur, black).
+- Run retrieval for each setting against the same gallery.
+- Save per-query results and aggregate summaries for each setting.
+- Compute per-query and aggregate deltas relative to the original setting.
+
+Purpose:
+- Measure how sensitive retrieval performance is to background changes.
+- Test whether the model relies on background information rather than identity cues alone.
+"""
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
@@ -7,7 +26,7 @@ import argparse
 
 from jaguar.config import PATHS
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
-from jaguar.utils.utils import ensure_dir, resolve_path
+from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, evaluate_query_gallery_retrieval
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_reliance_results
 
@@ -116,6 +135,8 @@ def run_background_reliance_eval(config, save_dir):
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
+
+    print("[DEBUG] run_background_reliance_eval", train_config)
 
     base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
 

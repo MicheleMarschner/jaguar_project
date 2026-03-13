@@ -1,25 +1,21 @@
 """
-XAI pair-explanations for the Jaguar Re-ID project.
+XAI Pair Explanations for Jaguar Re-ID.
 
-Purpose in the project:
-- picks a small, reproducible subset of curated validation queries
-- mines “meaningful” reference pairs from a curated gallery (easy_pos, hard_neg, ...)
-- generates saliency maps explaining *why the model considers query ↔ reference similar*
-  (IG + GradCAM) and saves them as reusable artifacts
+Project role:
+- Selects a small, reproducible subset of curated validation queries.
+- Mines informative query-reference pairs from a curated gallery.
+- Generates pair-level saliency maps (IG, GradCAM) for qualitative analysis.
 
-This script defines *analysis artifacts* for qualitative debugging and reporting,
-not training or evaluation metrics.
+Procedure:
+- Use curated validation queries and a curated train+val gallery.
+- Mine reference pairs from retrieval rankings (e.g., easy_pos, hard_neg, hard_pos).
+- Exclude trivial burst matches during pair selection.
+- Compute saliency maps that explain query-reference similarity.
+- Save explanations as reusable analysis artifacts.
 
-Important project assumptions:
-1) emb_row alignment:
-   - split_df['emb_row'] indexes into torch_ds AND into the embeddings returned by load_or_extract_embeddings.
-   - i.e., embeddings[emb_row] corresponds to torch_ds[emb_row].
-2) Curation contract:
-   - downstream analysis uses keep_curated == True to avoid dropped/duplicate-heavy samples.
-3) Burst leakage avoidance:
-   - while mining references, we skip pairs from the same burst_group_id (trivial near-duplicates).
-4) Reference pool train + val: 
-   - we keep queries from val dataset, but expand the reference pool to avoid singleton positives and to mine stronger imposters. 
+Purpose:
+- Support qualitative debugging and reporting of retrieval behavior.
+- Analyze which image regions drive similarity decisions for different pair types.
 """
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,7 +31,7 @@ from typing import Dict, Any, Sequence, Tuple, List
 
 from jaguar.config import PATHS 
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
-from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet
+from jaguar.utils.utils import ensure_dir, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
 from jaguar.utils.utils_xai import format_n_samples_tag, ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices, resolve_n_samples  
 from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
@@ -70,7 +66,7 @@ class XAIConfig:
 
 
 # ============================================================
-# Step 2: mine references for pair types 
+# Mine references for pair types 
 # ============================================================
 def mine_reference_pairs_from_retrieval(
     retrieval: RetrievalState,
@@ -173,7 +169,7 @@ def mine_reference_pairs_from_retrieval(
 
 
 # ============================================================
-# Step 3: compute saliency maps for a given pair_type + explainer
+# Compute saliency maps for a given pair_type + explainer
 # ============================================================
 def build_emb_row_sample_resolver(ctx):
     """
@@ -390,7 +386,7 @@ def compute_saliency_gradcam_for_pair_type(
     return artifact
 
 # ============================================================
-# Step 4: load-or-create artifacts per (explainer, pair_type)
+# Load-or-create artifacts per (explainer, pair_type)
 # ============================================================
 
 def load_or_create_saliency_maps(

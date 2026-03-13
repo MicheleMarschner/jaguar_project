@@ -3,7 +3,7 @@ import subprocess
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir
-from jaguar.utils.utils_experiments import build_ensemble_override, build_standard_override, dict_to_toml, load_toml_config
+from jaguar.utils.utils_experiments import build_ensemble_override, build_standard_override, build_xai_override, dict_to_toml, load_toml_config
 
 
 def parse_args():
@@ -71,9 +71,9 @@ def run_experiments():
     if not runs:
         raise ValueError("No runs found under [[experiment.runs]]")
 
-    experiment_name = experiment_config.get("experiment", {}).get("name", "experiment")
+    experiment_group = experiment_config.get("experiment", {}).get("name", "experiment")
     setup_name = experiment_meta.get("setup_name")
-    generated_dir = PATHS.configs / "_generated" / experiment_name
+    generated_dir = PATHS.configs / "_generated" / experiment_group
     ensure_dir(generated_dir)
 
     mode = experiment_meta.get("mode", "train")
@@ -88,6 +88,12 @@ def run_experiments():
         
         if mode == "ensemble":
             override = build_ensemble_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
+        elif mode == "explain" or mode == "eval":
+            override = build_xai_override(
                 run_cfg=run_cfg,
                 experiment_meta=experiment_meta,
                 base_config=base_config,
@@ -150,10 +156,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        #result = subprocess.run(cmd)
+        result = subprocess.run(cmd)
 
-        #if result.returncode != 0:
-        #    raise RuntimeError(f"Run failed: {experiment_name}")
+        if result.returncode != 0:
+            raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

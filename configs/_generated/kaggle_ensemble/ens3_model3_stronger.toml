@@ -1,6 +1,0 @@
-[ensemble]
-name = "ens3_model3_stronger"
-
-[fusion]
-weights = [0.25, 0.25, 0.5]
-square_before_fusion = true

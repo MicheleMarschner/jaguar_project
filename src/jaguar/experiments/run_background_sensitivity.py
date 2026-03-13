@@ -1,10 +1,9 @@
 import argparse
-from pathlib import Path
 import torch
 
-from jaguar.config import DATA_STORE, PATHS, EXPERIMENTS_STORE, RESULTS_STORE
+from jaguar.config import DATA_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_sensitivity_results
-from jaguar.utils.utils import ensure_dir, resolve_path
+from jaguar.utils.utils import resolve_path
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.xai.xai_classification import (
     run_xai_classification_analysis,
@@ -57,8 +56,6 @@ def main():
     run_dir = PATHS.runs / suffix
     config["training"]["save_dir"] = str(checkpoint_dir / suffix)
     results_path = PATHS.results / suffix
-    
-
     #save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
     #results_path = resolve_path(f"xai/background_sensitivity/{run_name}", RESULTS_STORE)
     #ensure_dir(save_path)

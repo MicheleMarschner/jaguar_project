@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, USE_FIFTYONE
-from jaguar.utils.utils import ensure_dir, resolve_path, to_abs
+from jaguar.config import USE_FIFTYONE
+from jaguar.utils.utils import ensure_dir, to_abs
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
 

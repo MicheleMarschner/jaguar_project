@@ -3,8 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from jaguar.config import EXPERIMENTS_STORE, PATHS
-from jaguar.utils.utils import ensure_dir, resolve_path
+from jaguar.utils.utils import ensure_dir
 
 
 def get_largest_burst_group(artifacts_dir):

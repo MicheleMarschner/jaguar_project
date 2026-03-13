@@ -308,18 +308,20 @@ def fuse_embeddings_concat(embeddings_list, weights=None):
 
 
 
-def create_simple_ensemble(config, save_dir):
-
-    # either branch in main due to base_name or directly enter here
-    #base_config = load_toml_config(args.base_config)
-    #experiment_config = load_toml_config(args.experiment_config)
-
+def create_simple_ensemble(config, save_dir=None):
     parquet_root = resolve_path(config["data"]["split_data_path"], EXPERIMENTS_STORE)
     data_path = PATHS.data_export / "splits_curated"
     split_df = pd.read_parquet(parquet_root)
 
     members = config["members"]
     weights = config["fusion"]["weights"]
+
+    gallery_protocol = config["ensemble"]["gallery_protocol"]
+    if gallery_protocol not in {"trainval_gallery", "valonly_gallery"}:
+        raise ValueError(
+            "ensemble.gallery_protocol must be one of "
+            "{'trainval_gallery', 'valonly_gallery'}"
+        )
 
     normalize_mode = config["fusion"].get("normalize_mode", "global_minmax")
     square_before_fusion = config["fusion"].get("square_before_fusion", True)
@@ -334,41 +336,25 @@ def create_simple_ensemble(config, save_dir):
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
-        use_fiftyone=config["data"]["use_fiftyone"]
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
-    # Calculate Identities
     num_classes = len(train_ds.label_to_idx)
 
     train_local_to_emb_row = build_local_to_emb_row(train_ds, split_df, split="train")
     val_local_to_emb_row = build_local_to_emb_row(val_ds, split_df, split="val")
 
-    # --------------------------------------------------
-    # 4. EXTRACT PER-MODEL EMBEDDINGS / SIM MATRICES
-    # --------------------------------------------------
-    sim_mats = []
     member_outputs = {}
 
-    # for name in MODEL_CONFIGS():
     for i, member in enumerate(members):
         print(f"\n========== Model {i+1}/{len(members)}: {member['name']} ==========")
-        
+
         model = load_model(member, num_classes=num_classes)
 
-        # important: each model must use its own transform
-        val_ds.transform = model.backbone_wrapper.transform
         train_ds.transform = model.backbone_wrapper.transform
+        val_ds.transform = model.backbone_wrapper.transform
 
         cache_prefix = member.get("cache_prefix", member["name"])
-
-        query_embeddings = load_or_extract_jaguarid_embeddings_cached(
-            model=model,
-            torch_ds=val_ds,
-            config=config,
-            member_name=member["name"],
-            split_name="val",
-            cache_prefix=cache_prefix,
-        )
 
         train_embeddings = load_or_extract_jaguarid_embeddings_cached(
             model=model,
@@ -379,65 +365,58 @@ def create_simple_ensemble(config, save_dir):
             cache_prefix=cache_prefix,
         )
 
-        gallery_embeddings = np.concatenate([train_embeddings, query_embeddings], axis=0)
-        query_labels = np.asarray(val_ds.labels)
-        gallery_labels = np.concatenate([np.asarray(train_ds.labels), np.asarray(val_ds.labels)], axis=0)
-
-        query_global_indices = val_local_to_emb_row
-        gallery_global_indices = np.concatenate(
-            [train_local_to_emb_row, val_local_to_emb_row],
-            axis=0,
+        val_embeddings = load_or_extract_jaguarid_embeddings_cached(
+            model=model,
+            torch_ds=val_ds,
+            config=config,
+            member_name=member["name"],
+            split_name="val",
+            cache_prefix=cache_prefix,
         )
 
-        #sim_matrix_square = cosine_similarity_matrix_square(
-        #    embeddings,
-        #    use_qe=config["inference"]["use_qe"],
-        #    use_rerank=config["inference"]["use_rerank"]
-        #)
+        query_embeddings = val_embeddings
+        query_labels = np.asarray(val_ds.labels)
+        query_global_indices = val_local_to_emb_row
 
-        sim_matrix_rect = cosine_similarity_matrix_rect(query_embeddings, gallery_embeddings)
-        
+        if gallery_protocol == "trainval_gallery":
+            gallery_embeddings = np.concatenate([train_embeddings, val_embeddings], axis=0)
+            gallery_labels = np.concatenate(
+                [np.asarray(train_ds.labels), np.asarray(val_ds.labels)],
+                axis=0,
+            )
+            gallery_global_indices = np.concatenate(
+                [train_local_to_emb_row, val_local_to_emb_row],
+                axis=0,
+            )
+        else:  # valonly_gallery
+            gallery_embeddings = val_embeddings
+            gallery_labels = np.asarray(val_ds.labels)
+            gallery_global_indices = val_local_to_emb_row
 
-        """
-        print("\nSimilarity statistics:")
-        print(f"  Min:  {sim_matrix_square.min():.4f}")
-        print(f"  Max:  {sim_matrix_square.max():.4f}")
-        print(f"  Mean: {sim_matrix_square.mean():.4f}")
-        print(f"  Std:  {sim_matrix_square.std():.4f}")
+        sim_matrix = cosine_similarity_matrix_rect(
+            query_embeddings=query_embeddings,
+            gallery_embeddings=gallery_embeddings,
+        )
 
-        
-        member_outputs[member["name"]] = {
-            "embeddings": embeddings,
-            "sim_matrix": sim_matrix,
-            "weights": config["fusion"]["weights"][i]
-        }
-        """
-
-        print(f"  Min:  {sim_matrix_rect.min():.4f}")
-        print(f"  Max:  {sim_matrix_rect.max():.4f}")
-        print(f"  Mean: {sim_matrix_rect.mean():.4f}")
-        print(f"  Std:  {sim_matrix_rect.std():.4f}")
+        print(f"  Min:  {sim_matrix.min():.4f}")
+        print(f"  Max:  {sim_matrix.max():.4f}")
+        print(f"  Mean: {sim_matrix.mean():.4f}")
+        print(f"  Std:  {sim_matrix.std():.4f}")
 
         member_outputs[member["name"]] = {
             "query_embeddings": query_embeddings,
             "gallery_embeddings": gallery_embeddings,
-            "sim_matrix": sim_matrix_rect,
-            "weight": config["fusion"]["weights"][i],
+            "sim_matrix": sim_matrix,
+            "weight": weights[i],
         }
-
 
         del model
         if DEVICE.type == "cuda":
             torch.cuda.empty_cache()
 
-    # --------------------------------------------------
-    # 5. FUSE SIMILARITY MATRICES
-    # --------------------------------------------------
-
     sim_mats = [member_outputs[member["name"]]["sim_matrix"] for member in members]
 
     print("\nFusing similarity matrices...")
-    
     fused_sim_matrix = fuse_similarity_matrices(
         sim_mats=sim_mats,
         weights=weights,
@@ -445,36 +424,25 @@ def create_simple_ensemble(config, save_dir):
         square_before_fusion=square_before_fusion,
     )
 
-
     print("\nFused similarity statistics:")
     print(f"  Min:  {fused_sim_matrix.min():.4f}")
     print(f"  Max:  {fused_sim_matrix.max():.4f}")
     print(f"  Mean: {fused_sim_matrix.mean():.4f}")
     print(f"  Std:  {fused_sim_matrix.std():.4f}")
 
-    # --------------------------------------------------
-    # 6. EMBEDDING FUSION (concat + normalize)
-    # --------------------------------------------------
-    
-    """
-    embedding_list = [member_outputs[member["name"]]["embeddings"] for member in members]
-
-    fused_embeddings = fuse_embeddings_concat(
-        embeddings_list=embedding_list,
-        weights=weights,
-    )
-
-    fused_embedding_sim_matrix = fused_embeddings @ fused_embeddings.T
-    """
-
-    query_embedding_list = [member_outputs[member["name"]]["query_embeddings"] for member in members]
-    gallery_embedding_list = [member_outputs[member["name"]]["gallery_embeddings"] for member in members]
+    query_embedding_list = [
+        member_outputs[member["name"]]["query_embeddings"]
+        for member in members
+    ]
+    gallery_embedding_list = [
+        member_outputs[member["name"]]["gallery_embeddings"]
+        for member in members
+    ]
 
     fused_query_embeddings = fuse_embeddings_concat(
         embeddings_list=query_embedding_list,
         weights=weights,
     )
-
     fused_gallery_embeddings = fuse_embeddings_concat(
         embeddings_list=gallery_embedding_list,
         weights=weights,
@@ -487,7 +455,6 @@ def create_simple_ensemble(config, save_dir):
     print(f"  Max:  {fused_embedding_sim_matrix.max():.4f}")
     print(f"  Mean: {fused_embedding_sim_matrix.mean():.4f}")
     print(f"  Std:  {fused_embedding_sim_matrix.std():.4f}")
-    
 
     return {
         "member_outputs": member_outputs,

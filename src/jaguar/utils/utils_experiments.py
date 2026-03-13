@@ -2,6 +2,7 @@ from pathlib import Path
 import tomllib
 
 from jaguar.config import PATHS
+from jaguar.utils.utils_setup import build_split_stem
 
 
 def load_toml_config(config_name: str) -> dict:
@@ -43,13 +44,41 @@ def to_toml_value(value):
 
 
 def dict_to_toml(data: dict) -> str:
-    lines = []
-    for section, values in data.items():
+    lines: list[str] = []
+
+    scalar_items: list[tuple[str, object]] = []
+    table_items: list[tuple[str, dict]] = []
+    array_table_items: list[tuple[str, list[dict]]] = []
+
+    for key, value in data.items():
+        if isinstance(value, dict):
+            table_items.append((key, value))
+        elif isinstance(value, list) and value and all(isinstance(x, dict) for x in value):
+            array_table_items.append((key, value))
+        else:
+            scalar_items.append((key, value))
+
+    for key, value in scalar_items:
+        lines.append(f"{key} = {to_toml_value(value)}")
+
+    if scalar_items:
+        lines.append("")
+
+    for section, values in table_items:
         lines.append(f"[{section}]")
         for key, value in values.items():
             lines.append(f"{key} = {to_toml_value(value)}")
         lines.append("")
-    return "\n".join(lines)
+
+    for section, rows in array_table_items:
+        for row in rows:
+            lines.append(f"[[{section}]]")
+            for key, value in row.items():
+                lines.append(f"{key} = {to_toml_value(value)}")
+            lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
+
 
 
 def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
@@ -68,12 +97,22 @@ def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, 
     return cur
 
 
-def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: dict) -> dict:
+def build_ensemble_override(
+    run_cfg: dict,
+    experiment_meta: dict,
+    base_config: dict,
+) -> dict:
     override = {
         "ensemble": {
             "name": run_cfg["experiment_name"],
         }
     }
+
+    if "gallery_protocol" in run_cfg:
+        override["ensemble"]["gallery_protocol"] = run_cfg["gallery_protocol"]
+
+    if "members" in run_cfg:
+        override["members"] = run_cfg["members"]
 
     field_to_section = {
         "weights": ("fusion", "weights"),
@@ -88,7 +127,7 @@ def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: d
     }
 
     for key, value in run_cfg.items():
-        if key == "experiment_name":
+        if key in {"experiment_name", "gallery_protocol", "members"}:
             continue
         if key not in field_to_section:
             continue
@@ -97,16 +136,111 @@ def build_ensemble_override(run_cfg: dict, experiment_meta: dict, base_config: d
         override.setdefault(section, {})
         override[section][target_key] = value
 
+    output_profile = experiment_meta.get("output_profile")
+    experiment_group = experiment_meta.get("name")
+
+    if output_profile is not None or experiment_group is not None:
+        override.setdefault("output", {})
+        if output_profile is not None:
+            override["output"]["profile"] = output_profile
+        if experiment_group is not None:
+            override["output"]["experiment_group"] = experiment_group
+
+    fusion_suite_cfg = experiment_meta.get("fusion_suite")
+    if fusion_suite_cfg is not None:
+        override["fusion_suite"] = fusion_suite_cfg
+
     return override
-    
+
+
+
+def build_xai_override(
+    run_cfg: dict,
+    experiment_meta: dict,
+    base_config: dict,
+) -> dict:
+    override = {
+        "training": {
+            "experiment_name": run_cfg["experiment_name"],
+        },
+    }
+
+    field_to_section = {
+        "batch_size": ("inference", "batch_size"),
+        "use_tta": ("inference", "use_tta"),
+        "use_qe": ("inference", "use_qe"),
+        "use_rerank": ("inference", "use_rerank"),
+
+        "checkpoint_dir": ("evaluation", "checkpoint_dir"),
+
+        "num_workers": ("data", "num_workers"),
+        "include_duplicates": ("split", "include_duplicates"),
+
+        "dataset_name": ("xai", "dataset_name"),
+        "split_name": ("xai", "split_name"),
+        "n_samples": ("xai", "n_samples"),
+        "seed": ("xai", "seed"),
+        "explainer_names": ("xai", "explainer_names"),
+        "pair_types": ("xai", "pair_types"),
+        "ig_steps": ("xai", "ig_steps"),
+        "ig_internal_bs": ("xai", "ig_internal_bs"),
+        "ig_batch_size": ("xai", "ig_batch_size"),
+
+        "output_profile": ("output", "profile"),
+        "experiment_group": ("output", "experiment_group"),
+
+        "logging_enabled": ("logging", "enabled"),
+        "logging_project": ("logging", "project"),
+        "logging_mode": ("logging", "mode"),
+
+        "faithfulness_steps": ("xai_metrics.faithfulness", "steps"),
+        "faithfulness_baseline": ("xai_metrics.faithfulness", "baseline"),
+        "faithfulness_use_abs": ("xai_metrics.faithfulness", "use_abs"),
+
+        "complexity_abs": ("xai_metrics.complexity", "abs"),
+        "complexity_normalise": ("xai_metrics.complexity", "normalise"),
+        "complexity_display_progressbar": ("xai_metrics.complexity", "display_progressbar"),
+    }
+
+    for key, value in run_cfg.items():
+        if key == "experiment_name":
+            continue
+        if key not in field_to_section:
+            continue
+
+        section, target_key = field_to_section[key]
+
+        if "." in section:
+            outer, inner = section.split(".", 1)
+            override.setdefault(outer, {})
+            override[outer].setdefault(inner, {})
+            override[outer][inner][target_key] = value
+        else:
+            override.setdefault(section, {})
+            override[section][target_key] = value
+
+    output_profile = experiment_meta.get("output_profile")
+    experiment_group = experiment_meta.get("name")
+
+    if output_profile is not None or experiment_group is not None:
+        override.setdefault("output", {})
+        if output_profile is not None:
+            override["output"]["profile"] = output_profile
+        if experiment_group is not None:
+            override["output"]["experiment_group"] = experiment_group
+
+    return override
+
 
 def build_standard_override(
-    run_cfg: dict, 
+    run_cfg: dict,
     experiment_meta: dict,
-    base_config: dict
+    base_config: dict,
 ) -> dict:
-    override = { 
-        "training": { "experiment_name": run_cfg["experiment_name"], },
+    override = {
+        "training": {
+            "experiment_name": run_cfg["experiment_name"],
+        },
     }
 
     field_to_section = {
@@ -174,21 +308,22 @@ def build_standard_override(
     for key, value in run_cfg.items():
         if key == "experiment_name":
             continue
-
         if key not in field_to_section:
             continue
 
         section, target_key = field_to_section[key]
         override.setdefault(section, {})
         override[section][target_key] = value
-    
+
     output_profile = experiment_meta.get("output_profile")
     experiment_group = experiment_meta.get("name")
 
-    if output_profile is not None:
+    if output_profile is not None or experiment_group is not None:
         override.setdefault("output", {})
-        override["output"]["profile"] = output_profile
-        override["output"]["experiment_group"] = experiment_group
+        if output_profile is not None:
+            override["output"]["profile"] = output_profile
+        if experiment_group is not None:
+            override["output"]["experiment_group"] = experiment_group
 
     existing_split_path = _pick_value(run_cfg, experiment_meta, base_config, "data", "split_data_path")
 

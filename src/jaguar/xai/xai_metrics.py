@@ -1,22 +1,25 @@
 """
-XAI metric evaluation for Jaguar Re-ID (post-hoc explanation assessment).
+XAI Metric Evaluation for Jaguar Re-ID.
 
-Purpose in the project:
-- takes the saved XAI saliency artifacts from run_xai (IG / GradCAM, easy_pos / hard_neg, ...)
-- computes a small set of *explanation quality signals*:
-  - sanity: does the explanation depend on model parameters?
-  - faithfulness: does removing “important” pixels reduce similarity?
-  - complexity: how sparse / concentrated is the explanation?
-- saves per-sample metric vectors + a summary CSV for reporting/comparison across explainers
+Project role:
+- Loads saved pair-level saliency artifacts from the XAI analysis stage.
+- Computes a small set of explanation-quality metrics.
+- Stores per-sample metric vectors and aggregate summaries.
 
-This script evaluates *explanations*, not retrieval performance.
+Procedure:
+- Reuse saved saliency maps for each explainer and pair type.
+- Evaluate sanity via parameter randomization.
+- Evaluate faithfulness via deletion-based similarity drop.
+- Evaluate complexity via saliency sparsity.
+- Save summary tables and reusable metric artifacts.
+
+Purpose:
+- Assess the quality of post-hoc explanations rather than retrieval performance.
+- Support comparison of explainers and pair types in a reproducible way.
 """
 
 import gc
 from pathlib import Path
-from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
-from jaguar.utils.utils_evaluation import build_eval_context
-from jaguar.utils.utils_experiments import load_toml_from_path
 import numpy as np
 import torch
 from collections import defaultdict
@@ -31,11 +34,11 @@ from typing import Any, Dict
 from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
 from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
-from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
 from jaguar.utils.utils_xai import SimilarityForward, format_n_samples_tag, save_vec
-
-
+from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
+from jaguar.utils.utils_evaluation import build_eval_context
+from jaguar.utils.utils_experiments import load_toml_from_path
 
 
 def _get_faithfulness_config(config: dict) -> dict:

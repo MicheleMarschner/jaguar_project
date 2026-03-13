@@ -1,9 +1,34 @@
+"""
+Burst Discovery / Near-Duplicate Annotation for Jaguar Re-ID.
+
+Project role:
+- Identifies near-duplicate and burst-like image groups in the Jaguar dataset.
+- Produces burst annotations used later for split generation and duplicate-aware curation.
+
+Procedure:
+1) Compute or load image-level perceptual hashes (pHash).
+2) Generate candidate pairs using all-pairs pHash comparisons within each identity.
+3) Estimate a conservative pHash threshold via within-identity vs. cross-identity diagnostics.
+4) Keep edges below the selected threshold.
+5) Form connected components over retained edges and treat them as burst groups.
+6) Assign each image a burst_group_id, burst_cluster_size, and burst_role.
+
+Why this is done:
+- Camera-trap datasets often contain highly redundant images of the same individual.
+- These near-duplicates can inflate apparent sample diversity and bias training/evaluation.
+- Burst annotations make this redundancy explicit without removing images at this stage.
+
+Outputs:
+- Image-level burst assignments
+- Candidate-edge caches
+- Threshold diagnostics
+- Summary/config artifacts for reproducibility
+"""
+
 from collections import deque
 import json
 from pathlib import Path
 from typing import Optional
-from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
-from jaguar.utils.utils_setup import get_burst_paths
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -19,6 +44,8 @@ except ImportError:
 from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, ROUND, USE_FIFTYONE
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
+from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
+from jaguar.utils.utils_setup import get_burst_paths
 from jaguar.utils.utils_burst_discovery import (
     phash_distance, 
     build_meta_from_jaguar_dataset, 

@@ -1,5 +1,5 @@
 """
-Split and Curation Pipeline for Jaguar Re-ID.
+Split and Duplicate-Aware Curation for Jaguar Re-ID.
 
 Project role:
 - Produces reproducible train/val split artifacts from the *dedup-annotated manifest*.
@@ -7,30 +7,16 @@ Project role:
   while preserving the split protocol (no moving samples across splits).
 
 Pipeline Steps:
-1) Load manifest (dedup + burst annotations are the source of truth):
-   - one row per image with identity_id, burst_group_id, burst_role, filepath, etc.
+- Construct train/val splits from the burst-annotated manifest.
+- Support two protocols: open-set (identity-disjoint) and closed-set (burst-disjoint, identity-overlapping).
+- Treat burst groups as atomic units during splitting to avoid leakage of near-duplicates across splits.
+- Optionally apply post-split duplicate-aware curation within each split.
+- Sub-cluster burst members with a stricter pHash threshold and retain up to K images per sub-cluster.
+- Rank retained images by embedding centrality and sharpness.
 
-2) Create base splits (choose ONE protocol):
-   - Open-set: identities are disjoint across train/val (val tests unseen jaguars).
-   - Closed-set: identities may overlap, but bursts/images are split-disjoint
-     (val tests new images of known jaguars). Burst groups are treated as atomic split units.
-
-3) Post-split curation (optional, split-local; never changes split membership):
-   For each (split, burst_group_id):
-   a) Sub-cluster within the burst using a stricter pHash threshold (tight duplicates).
-   b) Rank images inside each sub-cluster by:
-        - embedding centrality (>= median within sub-cluster)
-        - then sharpness (descending), with centrality as tie-breaker
-   c) Keep Top-K per sub-cluster (typically K_train=1, K_val large/“all”).
-   Output columns:
-     - keep_curated: True/False (downstream training should filter on this)
-     - curation_reason: audit label for why kept/dropped
-
-4) Save artifacts:
-   - full_split.parquet: full audit table (kept + dropped)
-   - curated_split.parquet: only rows with keep_curated == True
-   - burst_delta.parquet: per-burst keep/drop summary
-   - config.json: provenance of strategy + thresholds + K values
+Purpose:
+- Enforce a controlled evaluation protocol while limiting redundancy within splits.
+- Provide reproducible split artifacts for experiments on generalization under duplicate-aware data curation.
 
 Notes / assumptions:
 - Embeddings must be aligned with dataset order via emb_row indexing:
@@ -38,20 +24,11 @@ Notes / assumptions:
 - Some helper functions may remain in the module for alternative workflows; the active path
   is the split + (optional) intra-burst curation described above.
 """
-
-import json
 import os
-
-from jaguar.utils.utils_models import load_or_extract_embeddings
-from jaguar.utils.utils_setup import get_split_paths
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-from pathlib import Path
-from typing import Optional, List, Dict, Tuple
+from typing import Optional, List
 import pandas as pd
-from sklearn.model_selection import ParameterGrid
-from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
-from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
 import numpy as np
 import networkx as nx
 from tqdm import tqdm
@@ -64,8 +41,12 @@ except ImportError:
     fo = None
     HAS_FIFTYONE = False
 
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, EXPERIMENTS_STORE, PATHS, USE_FIFTYONE
+from jaguar.config import DATA_ROOT, DEVICE, USE_FIFTYONE
 from jaguar.models.foundation_models import FoundationModelWrapper
+from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
+from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
+from jaguar.utils.utils_models import load_or_extract_embeddings
+from jaguar.utils.utils_setup import get_split_paths
 from jaguar.utils.utils_datasets import get_group_aware_stratified_train_val_split, load_full_jaguar_from_FO_export
 from jaguar.utils.utils_split_and_curate import (
     build_split_table_from_torch_dataset,

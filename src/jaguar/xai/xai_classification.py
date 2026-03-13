@@ -1,3 +1,23 @@
+"""
+Background Sensitivity Analysis for Jaguar Re-ID.
+
+Project role:
+- Compares retrieval and classification behavior across original, jaguar-only, and background-only query variants.
+- Quantifies whether identity evidence is carried more by the animal region or the background.
+- Produces qualitative heatmaps for selected background-dominant cases.
+
+Procedure:
+- Extract embeddings for original, jaguar-only, and background-only query views.
+- Compare retrieval outcomes against a fixed gallery across the three query variants.
+- Measure classification sensitivity via logit/log-prob changes under masking.
+- Measure embedding stability via cosine similarity to the original embedding.
+- Summarize background-vs-jaguar dominance and save analysis artifacts.
+
+Purpose:
+- Test whether retrieval or classification decisions rely disproportionately on background cues.
+- Provide quantitative and qualitative evidence for spurious background dependence.
+"""
+
 import json
 import torch
 import numpy as np
@@ -10,7 +30,7 @@ from pytorch_grad_cam import EigenCAM
 from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, DEVICE
-from jaguar.utils.utils import ensure_dir, resolve_path, save_parquet, to_rel_path
+from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
 from jaguar.utils.utils_xai import manual_gradcam_class
 
 

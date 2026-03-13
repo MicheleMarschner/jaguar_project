@@ -10,8 +10,8 @@ use_forward_features = false
 
 [split]
 strategy = "closed_set"
-val_split_size = 0.05   #0.2 round_2, 0.05 round_1
-include_duplicates = true
+val_split_size = 0.2   #0.2 round_2, 0.05 round_1
+include_duplicates = false
 seed = 42
 
 [data]
@@ -23,7 +23,7 @@ use_fiftyone = false
 
 [curation]
 train_k = 1
-val_k = 50
+val_k = 1
 phash_threshold = 4
 
 [preprocessing]
@@ -39,7 +39,7 @@ key_for_seed = "filename"
 monitor_metric = "pairwise_AP"
 save_dir = "checkpoints/round_2/" 
 experiment_name = "kaggle_base"
-epochs = 30
+epochs = 40
 batch_size = 32
 seed = 42
 early_stopping = true
@@ -51,7 +51,7 @@ unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set t
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
 lr = 1e-5              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
-weight_decay = 1e-3
+weight_decay = 0.001
 momentum = 0.9          # Only used for SGD
 betas = [0.9, 0.999]    # Only used for Adam/AdamW
 backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
@@ -69,11 +69,11 @@ lr_decay = 0.8              # Custom
 [augmentation]
 apply_augmentations = true
 horizontal_flip = true
-affine_degrees = 0
-affine_translate = [0.0, 0.0]
-affine_scale = [1.0, 1.0]
-color_jitter_brightness = 0.1
-color_jitter_contrast = 0.1
+affine_degrees = 15
+affine_translate = [0.15, 0.15]
+affine_scale = [0.85, 1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
 random_erasing_p = 0.25
 
 [progressive_resizing]

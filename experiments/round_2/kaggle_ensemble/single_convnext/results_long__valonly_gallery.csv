@@ -1,0 +1,5 @@
+experiment_name,experiment_group,gallery_protocol,method_name,method_type,member_set,n_members,mAP,rank1,best_single_mAP,gain_vs_best_single,oracle_mAP,oracle_rank1,oracle_gap_mAP
+single_convnext,kaggle_ensemble,valonly_gallery,ConvNeXt-V2,single,ConvNeXt-V2,1,0.4269055782934074,0.44776119402985076,0.4269055782934074,0.0,0.4269055782934074,0.44776119402985076,0.0
+single_convnext,kaggle_ensemble,valonly_gallery,score_fusion,fusion,ConvNeXt-V2,1,0.4269055782934074,0.44776119402985076,0.4269055782934074,0.0,0.4269055782934074,0.44776119402985076,0.0
+single_convnext,kaggle_ensemble,valonly_gallery,embedding_concat,fusion,ConvNeXt-V2,1,0.4269055782934074,0.44776119402985076,0.4269055782934074,0.0,0.4269055782934074,0.44776119402985076,0.0
+single_convnext,kaggle_ensemble,valonly_gallery,oracle,oracle,ConvNeXt-V2,1,0.4269055782934074,0.44776119402985076,0.4269055782934074,0.0,0.4269055782934074,0.44776119402985076,0.0

@@ -1,0 +1,5 @@
+experiment_name,experiment_group,gallery_protocol,method_name,method_type,member_set,n_members,mAP,rank1,best_single_mAP,gain_vs_best_single,oracle_mAP,oracle_rank1,oracle_gap_mAP
+single_miew_id,kaggle_ensemble,trainval_gallery,MiewID,single,MiewID,1,0.9422441882187563,0.9523809523809523,0.9422441882187563,0.0,0.9422441882187563,0.9523809523809523,0.0
+single_miew_id,kaggle_ensemble,trainval_gallery,score_fusion,fusion,MiewID,1,0.9422441882187563,0.9523809523809523,0.9422441882187563,0.0,0.9422441882187563,0.9523809523809523,0.0
+single_miew_id,kaggle_ensemble,trainval_gallery,embedding_concat,fusion,MiewID,1,0.9422441882187563,0.9523809523809523,0.9422441882187563,0.0,0.9422441882187563,0.9523809523809523,0.0
+single_miew_id,kaggle_ensemble,trainval_gallery,oracle,oracle,MiewID,1,0.9422441882187563,0.9523809523809523,0.9422441882187563,0.0,0.9422441882187563,0.9523809523809523,0.0

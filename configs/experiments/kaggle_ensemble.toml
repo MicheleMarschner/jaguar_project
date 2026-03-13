@@ -1,54 +1,51 @@
 [experiment]
 name = "kaggle_ensemble"
-description = "Score-fusion sweep for 3-model Jaguar ensemble."
+description = "Score-fusion sweep for Jaguar ensemble."
 base_config = "base/ensemble_base"
 mode = "ensemble"
 output_profile = "ensemble"
 
 [[experiment.runs]]
-experiment_name = "ens3_equal_global"
-weights = [0.3333, 0.3333, 0.3334]
-normalize_mode = "global_minmax"
-square_before_fusion = true
+experiment_name = "single_eva02"
+
+[[experiment.runs.members]]
+name = "EVA-02"
+checkpoint_path = "kaggle_backbone/backbone_eva02"
+config_path = "kaggle_backbone/backbone_eva02/config_leaderboard_exp.toml"
+cache_prefix = "backbone_eva02"
 
 [[experiment.runs]]
-experiment_name = "ens3_model1_stronger"
-weights = [0.5, 0.25, 0.25]
-normalize_mode = "global_minmax"
-square_before_fusion = true
+experiment_name = "single_convnext"
+
+[[experiment.runs.members]]
+name = "ConvNeXt-V2"
+checkpoint_path = "kaggle_backbone/backbone_convnext_v2"
+config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
+cache_prefix = "backbone_convnext_v2"
 
 [[experiment.runs]]
-experiment_name = "ens3_model2_stronger"
-weights = [0.25, 0.5, 0.25]
-normalize_mode = "global_minmax"
-square_before_fusion = true
+experiment_name = "single_dinov2_base"
+
+[[experiment.runs.members]]
+name = "DINOv2-Base"
+checkpoint_path = "kaggle_backbone/backbone_dinov2_base"
+config_path = "kaggle_backbone/backbone_dinov2_base/config_leaderboard_exp.toml"
+cache_prefix = "backbone_dinov2_base"
 
 [[experiment.runs]]
-experiment_name = "ens3_model3_stronger"
-weights = [0.25, 0.25, 0.5]
-normalize_mode = "global_minmax"
-square_before_fusion = true
+experiment_name = "single_megadescriptor_l"
+
+[[experiment.runs.members]]
+name = "MegaDescriptor-L"
+checkpoint_path = "kaggle_backbone/backbone_megadescriptor_l"
+config_path = "kaggle_backbone/backbone_megadescriptor_l/config_leaderboard_exp.toml"
+cache_prefix = "backbone_megadescriptor_l"
 
 [[experiment.runs]]
-experiment_name = "ens3_equal_rowminmax"
-weights = [0.3333, 0.3333, 0.3334]
-normalize_mode = "row_minmax"
-square_before_fusion = true
+experiment_name = "single_miew_id"
 
-[[experiment.runs]]
-experiment_name = "ens3_equal_rowzscore"
-weights = [0.3333, 0.3333, 0.3334]
-normalize_mode = "row_zscore"
-square_before_fusion = true
-
-[[experiment.runs]]
-experiment_name = "ens3_equal_no_square"
-weights = [0.3333, 0.3333, 0.3334]
-normalize_mode = "global_minmax"
-square_before_fusion = false
-
-[[experiment.runs]]
-experiment_name = "ens3_equal_no_norm"
-weights = [0.3333, 0.3333, 0.3334]
-normalize_mode = "none"
-square_before_fusion = true
+[[experiment.runs.members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"

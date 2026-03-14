@@ -6,8 +6,8 @@ epochs = 30
 
 [model]
 backbone_name = "ConvNeXt-V2"
-s = 40
-m = 0.4
+head_type = "triplet_focal"
+m = 0.7
 
 [progressive_resizing]
 enabled = true
@@ -21,4 +21,4 @@ profile = "resizing"
 experiment_group = "kaggle_progressive_resizing"
 
 [data]
-split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
+split_data_path = "/splits/default_kaggle/full_split.parquet"

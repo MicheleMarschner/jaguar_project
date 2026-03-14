@@ -162,6 +162,9 @@ def build_experiment_override(
         "silhouette_freq": ("mining_analysis", "silhouette_freq"),
         "force_silhouette": ("mining_analysis", "force_silhouette"),
         
+        "enabled": ("rare_identity_eval", "enabled"),
+        "threshold": ("rare_idenrare_identity_evaltity_val", "threshold"),
+        
         "pr_enabled": ("progressive_resizing", "enabled"),
         "pr_sizes": ("progressive_resizing", "sizes"),
         "pr_stage_epochs": ("progressive_resizing", "stage_epochs"),

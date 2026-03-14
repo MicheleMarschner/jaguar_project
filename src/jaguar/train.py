@@ -7,7 +7,7 @@ import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
 from muon import SingleDeviceMuonWithAuxAdam
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from timm.utils import ModelEmaV3
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
@@ -277,7 +277,7 @@ class JaguarTrainer:
         return running_loss / len(self.train_loader)
 
     @torch.no_grad()
-    def validate(self, epoch=None):
+    def validate(self, epoch=None, loader=None):
         # self.model.eval()
         eval_model = self.ema_model.module if self.use_ema and hasattr(self.ema_model, "module") else self.model
         eval_model.eval()
@@ -285,8 +285,9 @@ class JaguarTrainer:
         all_embeddings = []
         all_labels = []
         
+        eval_loader = loader if loader is not None else self.val_loader
         print("[Info] Validating and computing ReID metrics...")
-        for batch in tqdm(self.val_loader, desc="Extracting Val Embeds"):
+        for batch in tqdm(eval_loader, desc="Extracting Val Embeds"):
             imgs = batch["img"].to(self.device)
             # Use the model utility to get normalized embeddings
             emb = eval_model.get_embeddings(imgs) #self.model.get_embeddings(imgs)
@@ -299,9 +300,12 @@ class JaguarTrainer:
         
         analysis_cfg = self.config.get("mining_analysis", {})
         freq = analysis_cfg.get("silhouette_freq", 5)
+        eval_rare = self.config.get("rare_identity_eval", {}).get("enabled", False)
+        print(f"RARE EVAL : {eval_rare}")
         
-        is_mining_exp = (self.model.head_type == "triplet") or analysis_cfg.get("force_silhouette", False)
-        do_heavy_metrics = is_mining_exp and (epoch is not None and epoch % freq == 0)
+        is_mining_exp = (self.model.head_type == "triplet") or analysis_cfg.get("force_silhouette", False) 
+        do_heavy_metrics = is_mining_exp and (epoch is not None and epoch % freq == 0) and not eval_rare
+        print(f"DO HEAVY : {do_heavy_metrics}")
 
         bundle = ReIDEvalBundle(
             model=None, 
@@ -343,4 +347,4 @@ class JaguarTrainer:
 
         print(f"[Info] Saved config file: {config_save_path}")
 
-        return config_save_path
+        return config_save_path, save_path

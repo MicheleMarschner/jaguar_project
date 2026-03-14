@@ -44,6 +44,7 @@ def build_output_artifacts(
     train_history: list[dict],
     model=None,
     epoch_times: list[float] | None = None,
+    final_rare_results: dict | None = None,
 ) -> dict[str, Any]:
     artifacts: dict[str, Any] = {
         "run_dir": run_dir,

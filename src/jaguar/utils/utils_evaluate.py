@@ -5,6 +5,7 @@ import torch
 import numpy as np
 import pandas as pd
 
+from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import toml
@@ -18,6 +19,26 @@ SUPPORTED_MULTISCALE_BACKBONES = [
     "convnext_v2",
     "efficientnet_b4",
 ]
+
+def load_or_compute_embeddings(exp_dir, model, loader, tta_mode):
+    exp_dir = Path(exp_dir)
+    is_round2 = "round_2" in str(exp_dir).lower()
+
+    if is_round2:
+        emb_file = exp_dir / "embeddings_round_2_test.npy"
+    else:
+        emb_file = exp_dir / "embeddings_test.npy"
+
+    # if emb_file.exists():
+    #     print(f"Loading cached embeddings: {emb_file}")
+    #     return np.load(emb_file)
+
+    print("Extracting embeddings...")
+    embeddings = extract_embeddings(model, loader, tta_mode)
+
+    print(f"Saving embeddings to {emb_file}")
+    np.save(emb_file, embeddings)
+    return embeddings
 
 def k_reciprocal_rerank(prob, k1=20, k2=6, lambda_value=0.3):
     """

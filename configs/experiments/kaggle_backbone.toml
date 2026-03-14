@@ -6,21 +6,28 @@ mode = "kaggle"
 setup_name = "kaggle_base"
 output_profile = "backbone"
 
-# [[experiment.runs]]
-# experiment_name = "backbone_eva02"
-# backbone_name = "EVA-02"
+[[experiment.runs]]
+experiment_name = "backbone_eva02"
+backbone_name = "EVA-02"
+split_data_path = "/splits/default_kaggle/full_split.parquet"
+head_type = "triplet_focal"
 
-# [[experiment.runs]]
-# experiment_name = "backbone_megadescriptor_l"
-# backbone_name = "MegaDescriptor-L"
+[[experiment.runs]]
+experiment_name = "backbone_megadescriptor_l"
+backbone_name = "MegaDescriptor-L"
+split_data_path = "/splits/default_kaggle/full_split.parquet"
+head_type = "triplet_focal"
 
-# [[experiment.runs]]
-# experiment_name = "backbone_miew_id"
-# backbone_name = "MiewID"
+[[experiment.runs]]
+experiment_name = "backbone_miew_id"
+backbone_name = "MiewID"
+split_data_path = "/splits/default_kaggle/full_split.parquet"
+head_type = "triplet_focal"
 
 # [[experiment.runs]]
 # experiment_name = "backbone_dino_small"
 # backbone_name = "DINO-Small"
+# split_data_path = "/splits/default_kaggle/full_split.parquet"
 
 # [[experiment.runs]]
 # experiment_name = "backbone_dinov2_base"
@@ -38,28 +45,28 @@ output_profile = "backbone"
 # experiment_name = "backbone_dinov2_for_wildlife"
 # backbone_name = "DINOv2_for_wildlife"
 
-[[experiment.runs]]
-experiment_name = "backbone_convnext_v2"
-backbone_name = "ConvNeXt-V2"
-unfreeze_epoch = 3
-unfreeze_blocks = 100  
-epochs = 50
-# s = 40
-# m = 0.40
-m = 0.7
-random_resized_crop = true
+# [[experiment.runs]]
+# experiment_name = "backbone_convnext_v2"
+# backbone_name = "ConvNeXt-V2"
+# unfreeze_epoch = 3
+# unfreeze_blocks = 100  
+# epochs = 50
+# # s = 40
+# # m = 0.40
+# m = 0.7
+# random_resized_crop = true
 
-[[experiment.runs]]
-experiment_name = "backbone_efficientnet_b4"
-backbone_name = "EfficientNet-B4"
-unfreeze_epoch = 3    # to be tested if the same parameters as for ConvNext are valid, but they should !
-unfreeze_blocks = 100  
-epochs = 50
-# s = 40
-# m = 0.40
-m = 0.7
-random_resized_crop = true
+# [[experiment.runs]]
+# experiment_name = "backbone_efficientnet_b4"
+# backbone_name = "EfficientNet-B4"
+# unfreeze_epoch = 3    # to be tested if the same parameters as for ConvNext are valid, but they should !
+# unfreeze_blocks = 100  
+# epochs = 50
+# # s = 40
+# # m = 0.40
+# m = 0.7
+#random_resized_crop = true
 
-[[experiment.runs]]
-experiment_name = "backbone_swin_transformer"
-backbone_name = "Swin-Transformer"
+# [[experiment.runs]]
+# experiment_name = "backbone_swin_transformer"
+# backbone_name = "Swin-Transformer"

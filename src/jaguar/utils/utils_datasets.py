@@ -1,28 +1,60 @@
-from functools import partial
-
-import fiftyone as fo
-
-from tqdm import tqdm
-from jaguar.config import DATA_ROOT, DATA_STORE, DEVICE, PATHS, IN_HPC
-from jaguar.preprocessing.preprocessing_background import PROCESSORS
-from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 import numpy as np
 import random 
 import pandas as pd
 import torch 
+import fiftyone as fo
 import torchvision.transforms.v2 as transforms
-from torchvision.transforms import InterpolationMode
+import pandas as pd
 
-from torch.utils.data import Sampler, DataLoader, Dataset
+from functools import partial
+from tqdm import tqdm
+from torchvision.transforms import InterpolationMode
+from collections import Counter
+from torch.utils.data import Sampler, DataLoader, Dataset, Subset
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
-from PIL import Image
- 
 
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, IN_HPC,  IMGNET_MEAN, IMGNET_STD
+from jaguar.preprocessing.preprocessing_background import PROCESSORS
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
 from jaguar.datasets.FiftyOneDataset import FODataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
-from jaguar.config import IMGNET_MEAN, IMGNET_STD
+
+# --------------------Identity distribution analysis --------------------
+def analyze_identity_distribution(train_ds, val_ds, save_path=None):
+    train_counts = Counter(train_ds.labels_idx)
+    val_counts = Counter(val_ds.labels_idx)
+
+    all_ids = sorted(set(train_counts) | set(val_counts))
+
+    rows = []
+    for i in all_ids:
+        rows.append({
+            "identity": i,
+            "train_images": train_counts.get(i, 0),
+            "val_images": val_counts.get(i, 0),
+            "total_images": train_counts.get(i, 0) + val_counts.get(i, 0),
+        })
+
+    df = pd.DataFrame(rows).sort_values("total_images")
+
+    if save_path:
+        df.to_csv(save_path, index=False)
+
+    return df
+
+def get_rare_identities(identity_df, threshold=3):
+    rare_ids = identity_df[identity_df.total_images <= threshold]["identity"].tolist()
+    return set(rare_ids)
+
+def build_rare_val_dataset(val_ds, rare_ids):
+    rare_indices = [
+        i for i, lbl in enumerate(val_ds.labels_idx)
+        if lbl in rare_ids
+    ]
+
+    return Subset(val_ds, rare_indices)
 
 # --------------------Progressive resizing utilities--------------------
 def round_to_patch(size, patch):
@@ -58,9 +90,7 @@ def get_resize_for_epoch(epoch, sizes, stage_epochs):
             return size
     return sizes[-1]
 
-
-"""
-# --- Helper for different transforms on Subsets if full_ds is used ---
+# --------------------Helpers for augmentatiosn & transformations--------------------
 class TransformSubset(torch.utils.data.Dataset):
     def __init__(self, subset, transform=None, processing_fn=None):
         self.subset = subset
@@ -76,16 +106,7 @@ class TransformSubset(torch.utils.data.Dataset):
         
     def __len__(self):
         return len(self.subset)
-"""
-
-def get_resize_for_epoch(epoch: int, sizes: list[int], stage_epochs: list[int]) -> int:
-    cum = 0
-    for size, n_epochs in zip(sizes, stage_epochs):
-        cum += n_epochs
-        if epoch <= cum:
-            return size
-    return sizes[-1]
-
+    
 def get_transforms(config, model_wrapper, is_training=True, input_size_override=None):
     # Extract model-specific requirements from the wrapper's registry
     registry_entry = model_wrapper.registry_entry
@@ -143,9 +164,7 @@ def get_transforms(config, model_wrapper, is_training=True, input_size_override=
                     saturation=aug_cfg.get("color_jitter_saturation", 0.1),
                 )
             )
-
     else:
-
         transform_list.append(
             transforms.Resize((input_size, input_size), interpolation=interpolation)
         )
@@ -168,50 +187,6 @@ def get_transforms(config, model_wrapper, is_training=True, input_size_override=
             )
         )
     return transforms.Compose(transform_list)
-
-# def get_transforms(config, model_wrapper, is_training=True, input_size_override=None):
-#     # Extract model-specific requirements from the wrapper's registry
-#     registry_entry = model_wrapper.registry_entry
-#     input_size = input_size_override or registry_entry["input_size"]
-#     # Default to BICUBIC if not specified
-#     interpolation = InterpolationMode.BICUBIC 
-
-#     # Start with Resize
-#     transform_list = [
-#         transforms.Resize((input_size, input_size), interpolation=interpolation),
-#     ]
-
-#     # Add Training Augmentations
-#     aug_cfg = config.get("augmentation", {})
-#     if is_training and aug_cfg.get("apply_augmentations", False):
-#         if aug_cfg.get("horizontal_flip"):
-#             transform_list.append(transforms.RandomHorizontalFlip())
-        
-#         transform_list.append(transforms.RandomAffine(
-#             degrees=aug_cfg.get("affine_degrees", 0),
-#             translate=tuple(aug_cfg.get("affine_translate", [0, 0])),
-#             scale=tuple(aug_cfg.get("affine_scale", [1, 1]))
-#         ))
-        
-#         transform_list.append(transforms.ColorJitter(
-#             brightness=aug_cfg.get("color_jitter_brightness", 0),
-#             contrast=aug_cfg.get("color_jitter_contrast", 0)
-#         ))
-
-#     # Final Steps (Conversion & Normalization)
-#     transform_list.extend([
-#         transforms.ToImage(),
-#         transforms.ToDtype(torch.float32, scale=True),
-#         transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
-#     ])
-
-#     # Post-Normalization Augmentations (Random Erasing)
-#     if is_training and aug_cfg.get("apply_augmentations", False):
-#         p_erase = aug_cfg.get("random_erasing_p", 0)
-#         if p_erase > 0:
-#             transform_list.append(transforms.RandomErasing(p=p_erase))
-
-#     return transforms.Compose(transform_list)
 
 class PreprocessedDataset(Dataset):
     """

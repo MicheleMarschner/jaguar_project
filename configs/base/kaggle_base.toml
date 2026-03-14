@@ -39,8 +39,8 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-# save_dir = "checkpoints/round_1/"  
+save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_1/" 
+# save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
 epochs = 30
 batch_size = 32  # 16
@@ -91,6 +91,10 @@ random_erasing_p = 0.25
 [mining_analysis]
 silhouette_freq = 5         # Compute Silhouette and refresh viz data every x epochs if force_silhouette true
 force_silhouette = false    # Set to true for the mining RQ study
+
+[rare_identity_eval]
+enabled = false
+threshold = 50
 
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]

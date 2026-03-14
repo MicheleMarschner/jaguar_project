@@ -386,9 +386,6 @@ class ReIDEvalBundle:
         # Distance diagnostics (geometry of embedding space)
         dist_stats = self.intra_inter_distance()
         
-        # Silouhette score for embeddings 
-        sil = self.compute_silhouette()
-
         results = {
             # --- Competition / primary ---
             "id_balanced_mAP": id_map,
@@ -418,7 +415,8 @@ class ReIDEvalBundle:
         }
         
         if include_silhouette:
-            results["silhouette"] = sil
+            # Silouhette score for embeddings 
+            results["silhouette"] = self.compute_silhouette()
             
         return results 
 

@@ -28,9 +28,22 @@ output_profile = "loss"
 # experiment_name = "loss_softmax"
 # head_type = "softmax"
 
+# [[experiment.runs]]
+# experiment_name = "loss_triplet_bot_hard"
+# head_type = "triplet"
+# m = 0.7
+# mining_type = "hard"       
+# force_silhouette = false
+# early_stopping = false
+# optimizer_lr = 3.5e-5
+# backbone_lr = 3.5e-6
+# scheduler_lr_start = 3.5e-5
+# scheduler_lr_max = 3.5e-4
+# batch_size = 128
+
 [[experiment.runs]]
-experiment_name = "loss_triplet_bot_hard"
-head_type = "triplet"
+experiment_name = "loss_triplet_focal_bot_hard"
+head_type = "triplet_focal"
 m = 0.7
 mining_type = "hard"       
 force_silhouette = false

@@ -1,0 +1,15 @@
+[training]
+experiment_name = "round1_comparison_triplet_focal"
+
+[model]
+backbone_name = "EVA-02"
+head_type = "triplet_focal"
+m = 0.7
+mining_type = "hard"
+
+[output]
+profile = "rounds_comparison"
+experiment_group = "kaggle_rounds_comparison"
+
+[data]
+split_data_path = "/splits/default_kaggle/full_split.parquet"

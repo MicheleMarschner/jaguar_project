@@ -14,6 +14,7 @@ from jaguar.utils.utils_losses import (
     CosFaceLoss,
     SphereFaceLoss,
     TripletLoss,
+    FocalLoss
 )
 
 # ---------------------------
@@ -93,7 +94,7 @@ class JaguarIDModel(nn.Module):
         self.head_type = head_type.lower()
         self.use_forward_features = use_forward_features
         
-        if self.head_type == "triplet": use_projection = True
+        if self.head_type in ["triplet", "triplet_focal"]: use_projection = True
         
         # Initialize GeM if needed
         self.use_gem = use_gem
@@ -160,9 +161,14 @@ class JaguarIDModel(nn.Module):
             self.criterion = nn.CrossEntropyLoss(label_smoothing=label_smooth)
         elif self.head_type == "triplet":
             self.bn = nn.BatchNorm1d(emb_dim)
-            self.classifier = nn.Linear(head_input_dim, num_classes, bias=False)
+            self.classifier = nn.Linear(head_input_dim, num_classes, bias=False)  # From Bags-of-Tricks 
             self.criterion_tri = TripletLoss(loss_m, mining_type)
             self.criterion_ce = nn.CrossEntropyLoss(label_smoothing=label_smooth)
+        elif self.head_type == "triplet_focal":
+            self.bn = nn.BatchNorm1d(emb_dim)
+            self.classifier = nn.Linear(head_input_dim, num_classes, bias=False)  # From Bags-of-Tricks 
+            self.criterion_tri = TripletLoss(loss_m, mining_type)
+            self.criterion_ce = FocalLoss(gamma=2.0, alpha=0.25)
         else:
             raise ValueError(f"Unknown head type: {head_type}")
 
@@ -315,13 +321,13 @@ class JaguarIDModel(nn.Module):
             embeddings = self.bn(embeddings)
 
         # Triplet case (returns embeddings)
-        if self.head_type == "triplet":
+        if self.head_type in ["triplet", "triplet_focal"]:
             feat_after_bn = self.bn(embeddings)   # Used for CE and Final Embedding
             if labels is not None:
                 logits = self.classifier(feat_after_bn)
                 loss_tri = self.criterion_tri(embeddings, labels)
                 loss_ce = self.criterion_ce(logits, labels)
-                # Combined Loss (1.0 * Triplet + 1.0 * CE)
+                # Combined Loss (1.0 * Triplet + 1.0 * CE/Focal LOSS)
                 return loss_tri + loss_ce, logits
             # For inference, use normalized feat_after_bn
             return F.normalize(feat_after_bn, p=2, dim=1) # for Triplet loss we normalize here

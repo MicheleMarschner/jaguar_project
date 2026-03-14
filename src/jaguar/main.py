@@ -355,6 +355,9 @@ def main():
             f"Val Rank1: {metrics['rank1']:.4f} | "
             f"Val SimGap: {metrics['sim_gap']:.4f}"
         )
+        if was_heavy: 
+            print(f" | Val Silhouette: {metrics['silhouette']:.4f}")
+        
         
         # Save best model
         current_score = metrics[monitor_metric]
@@ -399,6 +402,7 @@ def main():
             "lr": float(current_lr),
             "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
             "epoch_time_sec": float(epoch_time_sec),
+            "silhouette": float(metrics["silhouette"]) if was_heavy else None,
         })
 
         log_wandb_epoch_metrics(

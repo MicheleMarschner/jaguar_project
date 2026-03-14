@@ -66,14 +66,15 @@ def generate_submission():
     # 1. CONFIG
     # --------------------------------------------------
     # closed_curated_traink_1_valk_50_p4; closed_keep_all; closed_curated_traink_3_valk_3_p4 < best one 
-    CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_optim_sched/muon__JaguardIdScheduler/best_model.pth"
+    CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_mining/loss_triplet_bot_hard/best_model.pth"
     # CHECKPOINT_PATH = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/kaggle_backbone/backbone_eva02/best_model.pth"
     TEST_CSV_PATH = "/fast/AG_Kainmueller/data/jaguar_project/data/round_2/raw/jaguar-re-id/test.csv"
 
     BACKBONE_NAME = "EVA-02" #"ConvNeXt-V2"
+    HEAD_TYPE= "triplet" # "arcface"
     EMB_DIM = 1024 #1536
     NUM_CLASSES = 31
-    BATCH_SIZE = 32
+    BATCH_SIZE = 3
     USE_PROJECTION = True
     USE_FORWARD_FEATURES = False
 
@@ -85,7 +86,7 @@ def generate_submission():
     model = JaguarIDModel(
         backbone_name=BACKBONE_NAME,
         num_classes=NUM_CLASSES,
-        head_type="arcface",
+        head_type=HEAD_TYPE,
         device=DEVICE,
         emb_dim=EMB_DIM,
         use_projection = USE_PROJECTION,

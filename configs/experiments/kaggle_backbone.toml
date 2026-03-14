@@ -6,25 +6,25 @@ mode = "kaggle"
 setup_name = "kaggle_base"
 output_profile = "backbone"
 
-[[experiment.runs]]
-experiment_name = "backbone_eva02"
-backbone_name = "EVA-02"
+# [[experiment.runs]]
+# experiment_name = "backbone_eva02"
+# backbone_name = "EVA-02"
 
-[[experiment.runs]]
-experiment_name = "backbone_megadescriptor_l"
-backbone_name = "MegaDescriptor-L"
+# [[experiment.runs]]
+# experiment_name = "backbone_megadescriptor_l"
+# backbone_name = "MegaDescriptor-L"
 
-[[experiment.runs]]
-experiment_name = "backbone_miew_id"
-backbone_name = "MiewID"
+# [[experiment.runs]]
+# experiment_name = "backbone_miew_id"
+# backbone_name = "MiewID"
 
-[[experiment.runs]]
-experiment_name = "backbone_dino_small"
-backbone_name = "DINO-Small"
+# [[experiment.runs]]
+# experiment_name = "backbone_dino_small"
+# backbone_name = "DINO-Small"
 
-[[experiment.runs]]
-experiment_name = "backbone_dinov2_base"
-backbone_name = "DINOv2-Base"
+# [[experiment.runs]]
+# experiment_name = "backbone_dinov2_base"
+# backbone_name = "DINOv2-Base"
 
 # [[experiment.runs]]
 # experiment_name = "backbone_dinov3_base"
@@ -44,18 +44,20 @@ backbone_name = "ConvNeXt-V2"
 unfreeze_epoch = 3
 unfreeze_blocks = 100  
 epochs = 50
-s = 40
-m = 0.40
+# s = 40
+# m = 0.40
+m = 0.7
 random_resized_crop = true
 
 [[experiment.runs]]
 experiment_name = "backbone_efficientnet_b4"
 backbone_name = "EfficientNet-B4"
-unfreeze_epoch = 3      # to be tested if the same parameters as for ConvNext are valid, but they should be !
+unfreeze_epoch = 3    # to be tested if the same parameters as for ConvNext are valid, but they should !
 unfreeze_blocks = 100  
 epochs = 50
-s = 40
-m = 0.40
+# s = 40
+# m = 0.40
+m = 0.7
 random_resized_crop = true
 
 [[experiment.runs]]

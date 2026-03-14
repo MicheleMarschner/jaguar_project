@@ -262,9 +262,6 @@ class JaguarIDModel(nn.Module):
             features = self.backbone(x)
             if isinstance(features, (tuple, list)):
                 features = features[0]
-                
-        # if self.head_type == "triplet":
-        #     features.requires_grad_(True)
         return features
     
     def get_embeddings(self, x):

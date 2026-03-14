@@ -348,7 +348,7 @@ def run_experiments():
         "#SBATCH --mem=200GB",
         "#SBATCH --account=kainmueller",
         f"#SBATCH --array=0-{len(config_paths)-1}",
-        "#SBATCH --nodelist=maxg[09]", #[09,10,20]",
+        "#SBATCH --nodelist=maxg[09,10,20]",
         # "#SBATCH --partition=h100",
         "#SBATCH --output=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.out",
         "#SBATCH --error=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.err",

@@ -142,8 +142,8 @@ def log_wandb_epoch_metrics(
     if run is None:
         return
 
-    run.log(
-        {
+    
+    log_dict = {
             "epoch": int(epoch),
             "train/loss": float(avg_loss),
             "val/mAP": float(metrics["mAP"]),
@@ -153,8 +153,12 @@ def log_wandb_epoch_metrics(
             "meta/lr": float(current_lr),
             "timing/epoch_time_sec": float(epoch_time_sec),
             "meta/input_size": input_size,
+            "val/silhouette": float(metrics["silhouette"]) if "silhouette" in metrics else None,
         }
-    )
+
+    if "silhouette" in metrics:
+        log_dict["val/silhouette"] = float(metrics["silhouette"])
+    run.log(log_dict)
 
 
 def finish_wandb_run(

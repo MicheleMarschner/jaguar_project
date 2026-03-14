@@ -160,6 +160,21 @@ class TripletLoss(nn.Module):
             # Weighted Negative
             w_an = self.softmax_weights(-dist_mat * is_neg, is_neg)
             dist_an = torch.sum(dist_mat * is_neg * w_an, dim=1)
+        elif self.mining == "random":
+            # Randomly select one positive and one negative per anchor
+            dist_ap = torch.zeros(N, device=dist_mat.device)
+            dist_an = torch.zeros(N, device=dist_mat.device)
+            for i in range(N):
+                pos_idx = torch.where(is_pos[i] > 0)[0]
+                neg_idx = torch.where(is_neg[i] > 0)[0]
+                if len(pos_idx) > 0:
+                    dist_ap[i] = dist_mat[i, pos_idx[torch.randint(len(pos_idx), (1,))]]
+                else:
+                    dist_ap[i] = 0.0  # fallback if no positive (should not happen)
+                if len(neg_idx) > 0:
+                    dist_an[i] = dist_mat[i, neg_idx[torch.randint(len(neg_idx), (1,))]]
+                else:
+                    dist_an[i] = INF  # fallback if no negative (should not happen)
         else: # semi-hard fallback
             dist_ap = dist_mat.masked_fill(is_pos == 0, -INF).max(dim=1)[0]
             mask_semi = is_neg * (dist_mat > dist_ap.unsqueeze(1)) * (dist_mat < dist_ap.unsqueeze(1) + self.margin)

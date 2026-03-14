@@ -1,10 +1,10 @@
 [model]
 backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
-head_type = "arcface"
+head_type = "triplet"   # Options: "arcface"
 emb_dim = 1024
 freeze_backbone = true
 s = 30.0
-m = 0.50
+m = 0.7 #m = 0.50
 use_projection = true
 use_forward_features = false
 mining_type = "hard"
@@ -89,7 +89,7 @@ color_jitter_contrast = 0.2
 random_erasing_p = 0.25
 
 [mining_analysis]
-silhouette_freq = 0         # Compute Silhouette and refresh viz data every x epochs
+silhouette_freq = 5         # Compute Silhouette and refresh viz data every x epochs if force_silhouette true
 force_silhouette = false    # Set to true for the mining RQ study
 
 [evaluation]

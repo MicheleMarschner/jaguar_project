@@ -45,6 +45,7 @@ output_profile = "resizing"
 [[experiment.runs]]
 experiment_name = "progressive_epochs_10_cnv2"
 backbone_name = "ConvNeXt-V2"
+head_type = "arcface"
 s = 40
 m = 0.40
 pr_enabled = true
@@ -58,6 +59,7 @@ random_resized_crop = true
 [[experiment.runs]]
 experiment_name = "progressive_varying_epochs_cnv2"
 backbone_name = "ConvNeXt-V2"
+head_type = "arcface"
 s = 40
 m = 0.40
 pr_enabled = true

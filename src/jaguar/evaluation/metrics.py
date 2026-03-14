@@ -418,7 +418,7 @@ class ReIDEvalBundle:
         }
         
         if include_silhouette:
-            results["silhouette"] = self.compute_silhouette()
+            results["silhouette"] = sil
             
         return results 
 

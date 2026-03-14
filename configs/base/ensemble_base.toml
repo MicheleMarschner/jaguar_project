@@ -15,7 +15,7 @@ include_duplicates = true
 seed = 42
 
 [data]
-split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
 dataset_name = "jaguar_stage0"
 num_workers = 8
 use_fiftyone = false

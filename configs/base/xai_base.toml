@@ -16,7 +16,7 @@ checkpoint_dir = "inference_model"
 
 [data]
 num_workers = 4
-split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
 
 [split]
 include_duplicates = false

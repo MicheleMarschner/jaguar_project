@@ -1,0 +1,28 @@
+[ensemble]
+name = "eva_miew_convnext_equal_rowminmax_sq"
+
+[fusion]
+weights = [1.0, 1.0, 1.0]
+square_before_fusion = true
+
+[output]
+profile = "ensemble"
+experiment_group = "kaggle_ensemble"
+
+[[members]]
+name = "EVA-02"
+checkpoint_path = "kaggle_backbone/backbone_eva02"
+config_path = "kaggle_backbone/backbone_eva02/config_leaderboard_exp.toml"
+cache_prefix = "backbone_eva02"
+
+[[members]]
+name = "MiewID"
+checkpoint_path = "kaggle_backbone/backbone_miew_id"
+config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
+cache_prefix = "backbone_miew_id"
+
+[[members]]
+name = "ConvNeXt-V2"
+checkpoint_path = "kaggle_backbone/backbone_convnext_v2"
+config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
+cache_prefix = "backbone_convnext_v2"

@@ -1,4 +1,4 @@
-Experiment family A: Background reliance
+Experiment family A: Background intervention
 - A1: intervention ablation
 - A2: jaguar-only vs bg-only decomposition
 

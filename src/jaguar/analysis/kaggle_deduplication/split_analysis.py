@@ -320,7 +320,7 @@ def summarize_curation_sweep(
     chosen_row = chosen_row.iloc[0]
 
     print(f"[Stage2] Loaded sweep from: {artifacts_dir}")
-    print(f"[Stage2] Loaded config from: {config_file}")
+    print(f"[Stage2] Loaded config from: {config_path}")
     print(f"[Stage2] Chosen intra-burst pHash threshold: {chosen_threshold}")
     print(f"[Stage2] train_k={train_k}, val_k={val_k}")
     print(
@@ -366,13 +366,22 @@ def summarize_curation_sweep(
 
 
 def run_split_diagnostics(
-    artifacts_dir: Path,
+    curated_file_path: Path,
     save_dir: Path,
     img_root: Path,
     manifest_dir: Path,
     dataset_name: str = "jaguar_curated",
 ) -> dict[str, Path]:
-    split_df = pd.read_parquet(artifacts_dir / "full_split.parquet")
+    
+    curated_dir = Path(curated_file_path).parent
+    #full_dir = (curated_dir.parent) / #mit dup_true
+    
+    #full_split_path = config["data"]["split_data_path"]
+    #full_artifacts_dir = PATHS.runs / full_split_path
+
+    # curated_split_path = Path(curated_split_path)
+    # curated_artifacts_dir = curated_split_path.parent
+    split_df = pd.read_parquet(curated_file_path)
 
     load_full_jaguar_from_FO_export(
         manifest_dir,
@@ -382,7 +391,7 @@ def run_split_diagnostics(
         use_fiftyone=USE_FIFTYONE
     )
 
-    with open(artifacts_dir / "config.json", "r") as f:
+    with open(curated_dir / "config.json", "r") as f:
         config = json.load(f)
 
     strategy = config["strategy"]
@@ -409,7 +418,7 @@ def run_split_diagnostics(
     )
 
     out = summarize_curation_sweep(
-        artifacts_dir=artifacts_dir,
+        artifacts_dir=curated_dir,
         save_dir=save_dir
     )
 

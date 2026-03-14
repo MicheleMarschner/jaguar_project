@@ -1,5 +1,6 @@
 import argparse
 
+from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.xai.xai_similarity import XAIConfig
 from jaguar.xai.xai_metrics import run_xai_similarity_metrics
 from jaguar.xai.xai_metrics import run_xai_class_metrics

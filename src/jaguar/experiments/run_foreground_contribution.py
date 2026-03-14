@@ -1,5 +1,6 @@
 import argparse
 from pathlib import Path
+from jaguar.experiments.experiment_output import save_requested_outputs
 import torch
 
 from jaguar.config import DATA_STORE, PATHS
@@ -26,8 +27,6 @@ def parse_args():
     parser.add_argument("--experiment_config", type=str, required=True)
     parser.add_argument("--experiment_name", type=str, required=True)
     return parser.parse_args()
-
-
 
 def main():
     args = parse_args()
@@ -141,6 +140,12 @@ def main():
     analysis_df = summary_result["analysis_df"]
     retrieval_summary = summary_result["retrieval_summary"]
     similarity_summary = summary_result["similarity_summary"]
+
+    artifacts = {
+        "run_dir": run_dir,
+        "config": config,
+    }
+    save_requested_outputs(config, artifacts)
 
     save_bg_sensitivity_outputs(
         save_path=run_dir,

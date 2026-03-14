@@ -14,7 +14,7 @@ from jaguar.utils.utils_evaluation import (
     evaluate_query_gallery_retrieval,
 )
 from jaguar.models.fusion_suite import build_fusion_suite_results
-from jaguar.analysis.E_kaggle_ensemble.ensemble_analysis import build_topk_candidates_df, build_qualitative_review_df
+from jaguar.analysis.kaggle_ensemble.ensemble_analysis import build_topk_candidates_df, build_qualitative_review_df
 
 
 def build_per_query_comparison_df(

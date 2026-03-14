@@ -24,12 +24,12 @@ from jaguar.utils.utils import read_json_if_exists
 
 REGISTRY = {
     "baseline": baseline_and_eda_analysis.run,
-    "kaggle_deduplication": kaggle_deduplication_analysis.run,          # run_dir = "closed_curated_traink_3_valk_3_p4"
+    "kaggle_deduplication": kaggle_deduplication_analysis.run,          
     "kaggle_ensemble": ensemble_analysis.run,
-    "background_sensitivity": background_intervention_analysis.run,
-    "foreground_contribution": foreground_contribution_analysis.run,
-    "xai_class_attribution": xai_class_attribution_analysis.run,
-    "xai_similarity": xai_similarity_analysis.run,
+    "eda_background_intervention": background_intervention_analysis.run,
+    "eda_foreground_contribution": foreground_contribution_analysis.run,
+    "eda_xai_class_attribution": xai_class_attribution_analysis.run,
+    "eda_xai_similarity": xai_similarity_analysis.run,
 }
 
 """
@@ -127,16 +127,20 @@ def main() -> None:
             f"No run directories with {args.config_name} found in: {root_dir}"
         )
 
-    exemplar_run_dir = candidate_run_dirs[0]
-    config = load_run_config(exemplar_run_dir, args.config_name)
+    run_dir = candidate_run_dirs[0]
+    config = load_run_config(run_dir, args.config_name)
 
     experiment_group = resolve_experiment_group(config)
     save_dir = build_results_out_dir(experiment_group)
 
+    #!TODO wie kann man dass auslagern??
+    if experiment_group == "kaggle_deduplication":
+        run_dir = root_dir / "closed_curated_traink_3_valk_3_p4"
+
     REGISTRY[experiment_group](
         config=config,
         root_dir=root_dir,
-        exemplar_run_dir=exemplar_run_dir,
+        run_dir=run_dir,
         save_dir=save_dir,
     )
 

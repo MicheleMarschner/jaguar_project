@@ -58,10 +58,10 @@ def plot_single_run_loss_and_map(
     return outputs
 
 
-def run_baseline_analysis(root_dir: Path, save_dir: Path, model_label = "EVA-02"):
+def run_baseline_analysis(train_dir: Path, save_dir: Path, model_label = "EVA-02"):
     
     return plot_single_run_loss_and_map(
-        run_dir=root_dir,
+        run_dir=train_dir,
         save_dir=save_dir,
         model_label=model_label,
     )

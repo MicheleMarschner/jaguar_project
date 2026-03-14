@@ -1,6 +1,7 @@
 import argparse
 
 from jaguar.config import PATHS
+from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.utils.utils import ensure_dir
 from jaguar.xai.xai_similarity import run_xai, XAIConfig
 from jaguar.utils.utils_experiments import load_toml_config, deep_update
@@ -49,6 +50,12 @@ def main():
         config=config,
         cfg=xai_cfg,
     )
+
+    artifacts = {
+        "run_dir": out_root,
+        "config": config,
+    }
+    save_requested_outputs(config, artifacts)
 
     print("[Done] XAI pair-similarity artifacts")
     for (expl, pair_type), path in artifact_paths.items():

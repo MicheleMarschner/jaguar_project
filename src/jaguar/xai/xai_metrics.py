@@ -20,6 +20,7 @@ Purpose:
 
 import gc
 from pathlib import Path
+from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.utils.utils_xai_class import compute_saliency_gradcam_class, compute_saliency_ig_class
 import numpy as np
 import torch
@@ -793,6 +794,12 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
         summary_filename="xai_summary_metrics.csv",
         slice_key="pair_type",
     )
+
+    artifacts = {
+        "run_dir": metrics_path,
+        "config": config,
+    }
+    save_requested_outputs(config, artifacts)
 
     log_wandb_xai_metrics_results(run, out)
     if run is not None:

@@ -1,9 +1,9 @@
 [experiment]
-name = "background_reliance_eval"
+name = "background_intervention_eval"
 description = "eda background ablation with fixed blur_bg validation."
 base_config = "base/eda_base"
 mode = "eval"
-eval_type = "background_reliance"
+eval_type = "background_intervention"
 setup_name = "eda_base"
 output_profile = "background"
 

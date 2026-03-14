@@ -15,10 +15,12 @@ def run(
     train_file = PATHS.data / "jaguar-re-id/train.csv"
     test_file = PATHS.data / "jaguar-re-id/test.csv"
     burst_dir = PATHS.runs / "bursts"
+    
     model_label = config["model"]["backbone_name"]
+    train_dir = root_dir / "baseline_init"
 
-    run_eda(train_file, test_file, save_dir, artifacts_dir=burst_dir)
-    #run_baseline_analysis(root_dir, save_dir, model_label)
+    #run_eda(train_file, test_file, save_dir, artifacts_dir=burst_dir)
+    run_baseline_analysis(train_dir, save_dir, model_label)
 
 
     

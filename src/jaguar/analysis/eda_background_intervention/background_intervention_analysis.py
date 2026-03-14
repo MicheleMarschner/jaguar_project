@@ -3,13 +3,14 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from jaguar.analysis.eda_background_intervention.background_plots import create_background_plots
 from jaguar.utils.utils import save_fig
 
 
 
 def load_background_results(run_dir: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Load aggregate and per-query background-reliance outputs from one run folder.
+    Load aggregate and per-query background-intervention outputs from one run folder.
     """
     summary_df = pd.read_parquet(run_dir / "background_summary_all.parquet")
     per_query_delta_df = pd.read_parquet(run_dir / "background_per_query_delta_vs_original.parquet")
@@ -163,6 +164,8 @@ def run(
     run_dir: Path | None = None, 
     **kwargs
 ) -> None:
+    
+    create_background_plots(config, run_dir, root_dir, run_dir, save_dir)
     
     results = run_background_analysis(run_dir=root_dir, save_dir=save_dir)
     print(results["main_table"])

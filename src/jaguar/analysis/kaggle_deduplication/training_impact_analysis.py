@@ -263,27 +263,49 @@ def plot_loss_and_map_overlay(
     return save_path
 
 
+from pathlib import Path
+from typing import Any
+import pandas as pd
+
+from jaguar.utils.utils import read_json_if_exists
+
+
 def build_stage3_summary_table(
-    run_specs: list[dict[str, Any]],
+    root_dir: str | Path,
     save_path: str | Path | None = None,
 ) -> pd.DataFrame:
     """
-    Build one compact summary table across multiple Stage-3 runs
+    Build one compact summary table across all run folders inside root_dir.
+    Each run folder is expected to contain:
+    - metrics.json
+    - experiment_config.json
     """
+    root_dir = Path(root_dir)
     rows = []
 
-    for spec in run_specs:
-        run_dir = Path(spec["run_dir"])
-        metrics = read_json_if_exists(run_dir / "metrics.json")
+    for run_dir in sorted(root_dir.iterdir()):
+        if not run_dir.is_dir():
+            continue
+
+        metrics_path = run_dir / "metrics.json"
+        config_path = run_dir / "experiment_config.json"
+
+        if not metrics_path.exists() or not config_path.exists():
+            continue
+
+        metrics = read_json_if_exists(metrics_path) or {}
+        config = read_json_if_exists(config_path) or {}
 
         metric_block = metrics.get("metrics", {})
+        curation_cfg = config.get("curation", {})
+        training_cfg = config.get("training", {})
 
         rows.append(
             {
-                "condition": spec["condition"],
-                "run_name": metrics.get("experiment_name", run_dir.name),
-                "train_k": spec.get("train_k"),
-                "val_k": spec.get("val_k"),
+                "condition": run_dir.name,
+                "run_name": training_cfg.get("experiment_name", run_dir.name),
+                "train_k": curation_cfg.get("train_k"),
+                "val_k": curation_cfg.get("val_k"),
                 "id_balanced_mAP": metric_block.get("id_balanced_mAP"),
                 "pairwise_AP": metric_block.get("pairwise_AP"),
                 "rank1": metric_block.get("rank1"),
@@ -294,12 +316,30 @@ def build_stage3_summary_table(
 
     df = pd.DataFrame(rows)
 
+    if not df.empty:
+        sort_cols = [c for c in ["train_k", "val_k", "run_name"] if c in df.columns]
+        if sort_cols:
+            df = df.sort_values(sort_cols).reset_index(drop=True)
+
     if save_path is not None:
         save_path = Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(save_path, index=False)
 
     return df
+
+
+def run_stage3_summary_report(
+    root_dir: str | Path,
+    save_path: str | Path,
+) -> pd.DataFrame:
+    """
+    Create a summary table across all stage-3 run folders in root_dir.
+    """
+    return build_stage3_summary_table(
+        root_dir=root_dir,
+        save_path=save_path,
+    )
 
 
 
@@ -309,6 +349,8 @@ def run_duplicate_impact_report(
     save_dir: str | Path,
     make_overlay_plot: bool = False,
 ) -> dict[str, Path]:
+
+    print(curated_run_dir)
 
     full_metrics, full_hist = load_run(full_run_dir)
     curated_metrics, curated_hist = load_run(curated_run_dir)
@@ -352,13 +394,10 @@ def run_duplicate_impact_report(
         )
         outputs["overlay_plot"] = overlay_path
 
-    summary_df = build_stage3_summary_table(
-        run_specs=[
-            {"run_dir": "runs/full", "condition": "full", "train_k": None, "val_k": None},
-            {"run_dir": "runs/curated_k1", "condition": "curated_k1", "train_k": 1, "val_k": 1},
-            {"run_dir": "runs/curated_k3", "condition": "curated_k3", "train_k": 3, "val_k": 3},
-        ],
-        save_path="analysis/stage3_summary.csv",
+    run_stage3_summary_report(
+        root_dir=curated_run_dir.parent,
+        save_path=save_dir / "stage3_summary.csv",
     )
+        
 
     return outputs

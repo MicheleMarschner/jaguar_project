@@ -56,7 +56,7 @@ To assess whether the degradation was broad or concentrated in a few difficult c
 The results show that retrieval performance is **[largely invariant / not fully invariant / clearly sensitive]** to query-side background manipulation. Because the gallery remains unchanged and only the query background is altered, any drop relative to the original condition indicates that the model is not perfectly robust to background changes at inference time.
 
 ### Limitation
-This experiment tests query-side robustness to background manipulation, but it does not fully separate true background reliance from artifacts introduced by the manipulation itself.
+This experiment tests query-side robustness to background manipulation, but it does not fully separate true background intervention from artifacts introduced by the manipulation itself.
 
 ### Conclusion
 Background manipulation caused the largest performance drop under **[setting]**, while **[setting]** remained closest to the original condition. Overall, this experiment provides evidence that the model is **[robust / somewhat sensitive / strongly sensitive]** to query background changes, suggesting **[limited / partial / substantial]** dependence on contextual information beyond the jaguar itself.

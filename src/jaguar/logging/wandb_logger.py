@@ -385,7 +385,7 @@ def log_wandb_checkpoint_artifact(
     run.log_artifact(artifact, aliases=aliases or ["best"])
 
 
-def log_wandb_background_reliance_results(
+def log_wandb_background_intervention_results(
     run: Run | None,
     result: dict,
 ) -> None:

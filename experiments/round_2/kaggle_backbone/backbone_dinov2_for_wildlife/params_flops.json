@@ -1,8 +1,0 @@
-{
-  "backbone_name": "DINOv2_for_wildlife",
-  "head_type": "arcface",
-  "total_params": 305451008,
-  "trainable_params": 26279936,
-  "input_size": 518,
-  "flops": null
-}

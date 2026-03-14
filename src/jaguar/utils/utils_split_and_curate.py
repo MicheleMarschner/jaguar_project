@@ -4,9 +4,7 @@ import pandas as pd
 
 from jaguar.utils.utils import json_default, save_parquet, to_rel_path
 
-# ============================================================
-# Load exported manifest into metadata table (one row per image)
-# ============================================================
+
 def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
     """
     Build one-row-per-image table from JaguarDataset manifest (source of truth).
@@ -44,9 +42,6 @@ def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
     return df
 
 
-# ============================================================
-# logging helpers
-# ============================================================
 
 def print_keep_drop_summary(df: pd.DataFrame, split_col="split_tmp", keep_col="keep_curated"):
     base = df.groupby(split_col).size().rename("n_total")
@@ -88,9 +83,6 @@ def print_top_changed_bursts(df: pd.DataFrame, top_n: int = 20):
     print("\n[Bursts] Top bursts by #dropped")
     print(burst_delta.sort_values("n_dropped", ascending=False).head(top_n))
     
-# ============================================================
-# Save artifacts
-# ============================================================
 
 def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col="identity_id"):
     def get_stats(subset_df):
@@ -109,14 +101,14 @@ def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col=
             }
         return total_samples, total_ids, splits_info
 
-    # 1. Raw Stats
+    # Raw Stats
     raw_total, raw_ids, raw_splits = get_stats(df)
 
-    # 2. Curated Stats
+    # Curated Stats
     curated_df = df[df[keep_col] == True]
     curated_total, curated_ids, curated_splits = get_stats(curated_df)
 
-    # 3. Combine into JSON structure
+    # Combine into JSON structure
     summary_config = {
         "raw_data": {
             "total_samples": raw_total,
@@ -139,20 +131,19 @@ def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col=
 def save_split_bundle(out_root: Path, final_df: pd.DataFrame, config: dict):
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # 1) FULL audit table
+    # full audit table
     full_path = out_root / f"full_split.parquet"
     save_parquet(full_path, final_df)
 
-    # 2) Curated training manifest
+    # Curated training manifest
     curated_df = final_df[final_df["keep_curated"]].copy()
     curated_path = out_root / f"curated_split.parquet"
     save_parquet(curated_path, curated_df)
 
-    # 3) Burst delta summary table (small + super useful)
+    # Burst delta summary table (small + super useful)
     burst_delta = build_burst_delta_table(final_df)
     burst_path = out_root / f"burst_delta.parquet"
     save_parquet(burst_path, burst_delta)
 
-    # 4) Config JSON
     cfg_path = out_root / f"config.json"
     cfg_path.write_text(json.dumps(config, indent=2, default=json_default))

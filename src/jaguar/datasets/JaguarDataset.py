@@ -12,8 +12,6 @@ from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transforms
 
-from jaguar.config import PROJECT_ROOT, PATHS, DATA_ROOT
-
 class JaguarDataset(Dataset):
     def __init__(
         self,
@@ -245,67 +243,3 @@ class MaskAwareJaguarDataset(JaguarDataset):
             "id": str(s.get("ground_truth", {}).get("label", "unknown"))
         }
         
-if __name__ == "__main__":
-    # Define your paths based on your folder structure
-    base_path = Path(f"{PROJECT_ROOT}/experiments/round_1")
-    data_path = DATA_ROOT
-    parquet_path = base_path / "splits" / "jaguar_burst__str_closed_set__pol_drop_duplicates__k1" / "full_split.parquet"
-
-    # Check if files exist before running
-    if not parquet_path.exists():
-        print(f"Error: Parquet file not found at {parquet_path}")
-        exit(1)
-
-    print(f"--- Dataset Test Start ---\n")
-
-    # Test Training Split (Filtered: Curated Only)
-    print("Test 1: Training mode (include_duplicates=False)")
-    train_ds = JaguarDataset(
-        base_root=base_path,
-        data_root=data_path,
-        mode="train",
-        split_parquet=parquet_path,
-        include_duplicates=False
-    )
-    print(f"Total curated train samples: {len(train_ds)}")
-    print(f"Total unique identities: {len(train_ds.label_to_idx)}")
-    
-    if len(train_ds) > 0:
-        sample = train_ds[0]
-        print(f"Sample index 0 Filename: {sample['filename']}")
-        print(f"Sample index 0 Label: {sample['label']} (Mapped ID: {sample['label_idx']})")
-        print(f"Full Resolved Path: {sample['filepath']}")
-        print(f"Image Tensor Shape: {sample['img'].shape}")
-    print("-" * 40)
-
-    # Test Validation Split
-    print("Test 2: Validation mode")
-    val_ds = JaguarDataset(
-        base_root=base_path,
-        data_root=data_path,
-        mode="val",
-        split_parquet=parquet_path
-    )
-    print(f"Total validation samples: {len(val_ds)}")
-    if len(val_ds) > 0:
-        print(f"Validation sample index 0: {val_ds[0]['filename']}")
-    print("-" * 40)
-
-    # Test Training Split (Unfiltered: Includes Duplicates)
-    print("Test 3: Training mode (include_duplicates=True)")
-    train_ds_all = JaguarDataset(
-        base_root=base_path,
-        data_root=data_path,
-        mode="train",
-        split_parquet=parquet_path,
-        include_duplicates=True
-    )
-    print(f"Total train samples (curated + duplicates): {len(train_ds_all)}")
-    
-    # Quick math check to see if duplicates were actually filtered in Test 1
-    diff = len(train_ds_all) - len(train_ds)
-    print(f"Detected {diff} duplicate samples filtered out in Test 1.")
-
-    print(f"\n--- Dataset Test Complete ---")
-
-

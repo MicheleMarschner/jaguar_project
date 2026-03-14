@@ -1,215 +1,149 @@
+from __future__ import annotations
+
 import argparse
+import json
 from pathlib import Path
 
-from jaguar.analysis.aggregate import aggregate_experiment_outputs
-from jaguar.analysis.experiment_analysis import run_experiment_analysis
-from jaguar.analysis.split_analysis import run_split_diagnostics
-from jaguar.analysis.burst_analysis import run_burst_analysis
-from jaguar.analysis.xai_metrics_analysis import run_xai_metrics_analysis
-from jaguar.analysis.xai_similarity_analysis import run_xai_similarity_analysis
-from jaguar.analysis.xai_background_analysis import run_xai_background_sensitivity
-from jaguar.analysis.aggregate import (
-    aggregate_experiment_outputs,
-    detect_output_profile,
-    discover_experiment_groups,
-)
 from jaguar.config import PATHS
 
-
-ANALYSIS_TASKS = [
-    "aggregate_all",
-    "split_diagnostics",
-    "burst_analysis",
-    "xai_metrics_analysis",
-    "xai_similarity_analysis",
-    "xai_background_sensitivity",
-]
-
-def run_xai_metrics_analysis_task(args) -> None:
-    if not args.run_root:
-        raise ValueError("--run_root is required for xai_metrics_analysis")
-
-    run_root = Path(args.run_root)
-
-    if args.save_dir:
-        save_dir = Path(args.save_dir)
-    else:
-        save_dir = PATHS.results / "xai" / "similarity"
-
-    outputs = run_xai_metrics_analysis(
-        run_root=run_root,
-        save_dir=save_dir,
-    )
-    print(f"[ANALYSIS] XAI metrics analysis saved: {outputs}")
+from jaguar.analysis.baseline_and_eda import run_analysis as baseline_and_eda_analysis
+from jaguar.analysis.eda_background_intervention import (
+    background_intervention_analysis,
+)
+from jaguar.analysis.eda_foreground_contribution import (
+    foreground_contribution_analysis,
+)
+from jaguar.analysis.eda_xai_class_attribution import (
+    xai_class_attribution_analysis,
+)
+from jaguar.analysis.eda_xai_similarity import xai_similarity_analysis
+from jaguar.analysis.kaggle_deduplication import run_analysis as kaggle_deduplication_analysis
+from jaguar.analysis.kaggle_ensemble import ensemble_analysis
+from jaguar.utils.utils import read_json_if_exists
 
 
-def run_xai_similarity_analysis_task(args) -> None:
-    if not args.run_root:
-        raise ValueError("--run_root is required for xai_similarity_analysis")
+REGISTRY = {
+    "baseline": baseline_and_eda_analysis.run,
+    "kaggle_deduplication": kaggle_deduplication_analysis.run,          
+    "kaggle_ensemble": ensemble_analysis.run,
+    "eda_background_intervention": background_intervention_analysis.run,
+    "eda_foreground_contribution": foreground_contribution_analysis.run,
+    "eda_xai_class_attribution": xai_class_attribution_analysis.run,
+    "eda_xai_similarity": xai_similarity_analysis.run,
+}
 
-    run_root = Path(args.run_root)
-
-    if args.save_dir:
-        save_dir = Path(args.save_dir)
-    else:
-        save_dir = PATHS.results / "xai" / "similarity"
-
-    if args.manifest_dir:
-        manifest_dir = Path(args.manifest_dir)
-    else:
-        manifest_dir = PATHS.data_export / "splits_curated"
-
-    outputs = run_xai_similarity_analysis(
-        run_root=run_root,
-        save_dir=save_dir,
-        manifest_dir=manifest_dir,
-        dataset_name=args.dataset_name,
-        overlay_model_name=args.overlay_model_name,
-        overlay_explainer=args.overlay_explainer,
-        n_per_model=args.n_per_model,
-    )
-    print(f"[ANALYSIS] XAI similarity analysis saved: {outputs}")
+"""
+"kaggle_backbone":,
+"kaggle_augmentation": ,
+"kaggle_losses": ,
+"kaggle_optim_and_sched":,
+"kaggle_resizing":,
+"kaggle_stat_stability":,
+"""
 
 
-def run_xai_background_analysis_task(args) -> None:
-    if args.experiments_dir:
-        experiments_dir = Path(args.experiments_dir)
-    else:
-        experiments_dir = PATHS.runs / "xai/background_sensitivity"
-
-    outputs = run_xai_background_sensitivity(
-        experiments_dir=experiments_dir,
-        #experiments_dir=PATHS.runs / "xai/background_sensitivity",
-        # runs = load_runs(PATHS.runs / "xai/background_sensitivity")
-    )
-    print(f"[ANALYSIS] XAI background analysis saved: {outputs}")
-
-
-
-def run_burst_analysis_task(args) -> None:
-    if not args.artifacts_dir:
-        raise ValueError("--artifacts_dir is required for burst_analysis")
-
-    artifacts_dir = Path(args.artifacts_dir)
-    # artifacts_dir = resolve_path( "bursts/burst_groups__within500__cross10000__ph13", EXPERIMENTS_STORE)
-
-    if args.save_dir:
-        save_dir = Path(args.save_dir)
-    else:
-        save_dir = PATHS.results / "burst_analysis" / artifacts_dir.name
-
-    outputs = run_burst_analysis(
-        artifacts_dir=artifacts_dir,
-        save_dir=save_dir,
-        img_root=PATHS.data_train,
-    )
-    print(f"[ANALYSIS] Burst analysis saved: {outputs}")
-
-
-def run_split_diagnostics_task(args) -> None:
-    if not args.artifacts_dir:
-        raise ValueError("--artifacts_dir is required for split_diagnostics")
-
-    artifacts_dir = Path(args.artifacts_dir)
-    # artifacts_dir = resolve_path( 
-
-    if args.save_dir:
-        save_dir = Path(args.save_dir)
-    else:
-        save_dir = PATHS.results / "split_diagnostics" / artifacts_dir.name
-
-    outputs = run_split_diagnostics(
-        artifacts_dir=artifacts_dir,
-        save_dir=save_dir,
-        img_root=PATHS.data_train,
-        manifest_dir=PATHS.data_export / "splits_curated",
-        dataset_name=args.dataset_name,
-    )
-    print(f"[ANALYSIS] Split diagnostics saved: {outputs}")
-
-def parse_args():
-    parser = argparse.ArgumentParser(description="Run analysis tasks")
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--task",
+        "--experiment_group",
         type=str,
         required=True,
-        choices=ANALYSIS_TASKS,
+        help="Experiment group / folder name under PATHS.runs",
     )
-    parser.add_argument("--artifacts_dir", type=str)
-    parser.add_argument("--save_dir", type=str)
-    parser.add_argument("--dataset_name", type=str, default="jaguar_curated")
-    parser.add_argument("--run_root", type=str)
-    parser.add_argument("--experiments_dir", type=str)
-    parser.add_argument("--manifest_dir", type=str)
-    parser.add_argument("--overlay_model_name", type=str)
-    parser.add_argument("--overlay_explainer", type=str, default="IG")
-    parser.add_argument("--n_per_model", type=int, default=10)
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default=None,
+        help="Optional run name. If omitted, the whole experiment group is analyzed.",
+    )
+    parser.add_argument(
+        "--config_name",
+        type=str,
+        default="experiment_config.json",
+        help="Stored final config filename inside a run directory.",
+    )
     return parser.parse_args()
 
 
-SPECIAL_ANALYSIS_TASKS = {
-    "split_diagnostics": run_split_diagnostics_task,
-    "burst_analysis": run_burst_analysis_task,
-    "xai_metrics_analysis": run_xai_metrics_analysis_task,
-    "xai_similarity_analysis": run_xai_similarity_analysis_task,
-    "xai_background_analysis": run_xai_background_analysis_task,
-}
+def load_run_config(run_dir: Path, config_name: str = "experiment_config.json") -> dict:
+    config_path = run_dir / config_name
+    if not config_path.exists():
+        raise FileNotFoundError(f"Missing config file: {config_path}")
+    return read_json_if_exists(config_path)
 
-def main():
+
+def find_run_dirs(root_dir: Path, config_name: str) -> list[Path]:
+    return sorted(
+        [
+            p for p in root_dir.iterdir()
+            if p.is_dir() and (p / config_name).exists()
+        ]
+    )
+
+
+def resolve_experiment_group(config: dict) -> str:
+    experiment_group = config.get("output", {}).get("experiment_group")
+    if not experiment_group:
+        raise KeyError("Missing output.experiment_group in stored config.json")
+    if experiment_group not in REGISTRY:
+        known = ", ".join(sorted(REGISTRY))
+        raise KeyError(
+            f"Unknown output.experiment_group='{experiment_group}'. Known groups: {known}"
+        )
+    return experiment_group
+
+def build_results_out_dir(experiment_group: str, run_name: str | None = None) -> Path:
+    if run_name is not None:
+        out_dir = PATHS.results / experiment_group / run_name
+    else:
+        out_dir = PATHS.results / experiment_group
+    out_dir.mkdir(parents=True, exist_ok=True)
+    return out_dir
+
+
+def main() -> None:
     args = parse_args()
 
-    if args.task == "aggregate_all":
-        experiment_groups = discover_experiment_groups()
+    root_dir = PATHS.runs / args.experiment_group
+    if not root_dir.exists():
+        raise FileNotFoundError(f"Experiment group directory not found: {root_dir}")
 
-        aggregated_count = 0
-        analyzed_count = 0
-        skipped_count = 0
+    # Single-run mode
+    if args.run_name is not None:
+        run_dir = root_dir / args.run_name
+        if not run_dir.exists():
+            raise FileNotFoundError(f"Run directory not found: {run_dir}")
 
-        if not experiment_groups:
-            print("[ANALYSIS] No experiment groups found.")
-            return
-
-        for experiment_group in experiment_groups:
-            output_profile = detect_output_profile(experiment_group)
-
-            if output_profile is None:
-                print(f"[ANALYSIS][WARN] No output.profile found for: {experiment_group} -> skip")
-                skipped_count += 1
-                continue
-
-            try:
-                out_path = aggregate_experiment_outputs(
-                    experiment_group=experiment_group,
-                    output_profile=output_profile,
-                )
-                print(f"[ANALYSIS] Saved summary for {experiment_group}: {out_path}")
-                aggregated_count += 1
-
-                run_experiment_analysis(
-                    experiment_group=experiment_group,
-                    output_profile=output_profile,
-                    summary_path=out_path,
-                )
-                analyzed_count += 1
-            except Exception as e:
-                skipped_count += 1
-                print(f"[ANALYSIS][WARN] Failed to aggregate {experiment_group}: {e}")
+        config = load_run_config(run_dir, args.config_name)
+        experiment_group = resolve_experiment_group(config)
+        save_dir = build_results_out_dir(experiment_group, args.run_name)
+        REGISTRY[experiment_group](config=config, run_dir=run_dir, save_dir=save_dir)
         return
-    
-    print(
-        f"[ANALYSIS] Done. "
-        f"aggregated={aggregated_count} | "
-        f"analyzed={analyzed_count} | "
-        f"skipped={skipped_count}"
+
+   # Group / aggregate mode
+    candidate_run_dirs = find_run_dirs(root_dir, args.config_name)
+    if not candidate_run_dirs:
+        raise FileNotFoundError(
+            f"No run directories with {args.config_name} found in: {root_dir}"
+        )
+
+    run_dir = candidate_run_dirs[0]
+    config = load_run_config(run_dir, args.config_name)
+
+    experiment_group = resolve_experiment_group(config)
+    save_dir = build_results_out_dir(experiment_group)
+
+    #!TODO wie kann man dass auslagern??
+    if experiment_group == "kaggle_deduplication":
+        run_dir = root_dir / "closed_curated_traink_3_valk_3_p4"
+
+    REGISTRY[experiment_group](
+        config=config,
+        root_dir=root_dir,
+        run_dir=run_dir,
+        save_dir=save_dir,
     )
-    
-    handler = SPECIAL_ANALYSIS_TASKS.get(args.task)
-    if handler is not None:
-        handler(args)
-        return
 
-    raise ValueError(f"Unknown analysis task: {args.task}")
-    
 
 if __name__ == "__main__":
     main()

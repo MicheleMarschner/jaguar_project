@@ -1,32 +1,61 @@
-from functools import partial
-
 try:
     import fiftyone as fo
     HAS_FIFTYONE = True
 except ImportError:
     fo = None
     HAS_FIFTYONE = False
-from tqdm import tqdm
-from jaguar.config import DATA_ROOT, DATA_STORE, PATHS
-from jaguar.preprocessing.preprocessing_background import PROCESSORS
-from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
+
 import numpy as np
 import random 
 import pandas as pd
 import torch 
 import torchvision.transforms.v2 as transforms
 from torchvision.transforms import InterpolationMode
-
-from torch.utils.data import Sampler, DataLoader, Dataset
+from functools import partial
+from torch.utils.data import Sampler, Dataset
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
-from PIL import Image
  
-
+from jaguar.config import DATA_ROOT, PATHS
+from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD
+
+# --------------------Progressive resizing utilities--------------------
+def round_to_patch(size, patch):
+    if patch is None:
+        return int(size)
+    return int(size // patch * patch)
+
+def build_progressive_sizes(base_size, patch=None):
+    sizes = [
+        int(base_size * 0.6),
+        int(base_size * 0.85),
+        base_size
+    ]
+    return [round_to_patch(s, patch) for s in sizes]
+
+def auto_generate_pr_sizes(model):
+    base_size = model.backbone_wrapper.input_size
+    if not model.backbone_wrapper.supports_progressive_resizing:
+        print(
+            f"[ProgressiveResizing] Disabled for backbone "
+            f"{model.backbone_wrapper.name} (fixed input size)"
+        )
+        return [base_size]
+    sizes = build_progressive_sizes(base_size)
+    print(f"[ProgressiveResizing] Auto-generated sizes: {sizes}")
+    return sizes
+
+def get_resize_for_epoch(epoch, sizes, stage_epochs):
+    cumulative = 0
+    for size, stage_len in zip(sizes, stage_epochs):
+        cumulative += stage_len
+        if epoch <= cumulative:
+            return size
+    return sizes[-1]
 
 
 """
@@ -56,49 +85,87 @@ def get_resize_for_epoch(epoch: int, sizes: list[int], stage_epochs: list[int]) 
             return size
     return sizes[-1]
 
-
 def get_transforms(config, model_wrapper, is_training=True, input_size_override=None):
     # Extract model-specific requirements from the wrapper's registry
     registry_entry = model_wrapper.registry_entry
     input_size = input_size_override or registry_entry["input_size"]
     # Default to BICUBIC if not specified
-    interpolation = InterpolationMode.BICUBIC 
+    interpolation = InterpolationMode.BICUBIC
 
-    # Start with Resize
-    transform_list = [
-        transforms.Resize((input_size, input_size), interpolation=interpolation),
-    ]
+    aug_cfg = config.get("augmentation", {})
+    transform_list = []
 
     # Add Training Augmentations
-    aug_cfg = config.get("augmentation", {})
     if is_training and aug_cfg.get("apply_augmentations", False):
-        if aug_cfg.get("horizontal_flip"):
+
+        # RandomResizedCrop instead of Resize
+        if aug_cfg.get("random_resized_crop", True):
+            transform_list.append(
+                transforms.RandomResizedCrop(
+                    input_size,
+                    scale=(0.6, 1.0),
+                    ratio=(0.9, 1.1),
+                    interpolation=interpolation,
+                )
+            )
+        else:
+            # Start with Resize by default 
+            transform_list.append(
+                transforms.Resize((input_size, input_size), interpolation=interpolation)
+            )
+
+        if aug_cfg.get("horizontal_flip", False):
             transform_list.append(transforms.RandomHorizontalFlip())
-        
-        transform_list.append(transforms.RandomAffine(
-            degrees=aug_cfg.get("affine_degrees", 0),
-            translate=tuple(aug_cfg.get("affine_translate", [0, 0])),
-            scale=tuple(aug_cfg.get("affine_scale", [1, 1]))
-        ))
-        
-        transform_list.append(transforms.ColorJitter(
-            brightness=aug_cfg.get("color_jitter_brightness", 0),
-            contrast=aug_cfg.get("color_jitter_contrast", 0)
-        ))
+
+        if aug_cfg.get("affine_degrees", 0) > 0:
+            transform_list.append(
+                transforms.RandomAffine(
+                    degrees=aug_cfg.get("affine_degrees", 0),
+                    translate=tuple(aug_cfg.get("affine_translate", [0, 0])),
+                    scale=tuple(aug_cfg.get("affine_scale", [1, 1])),
+                )
+            )
+
+        if aug_cfg.get("gaussian_blur", False):
+            transform_list.append(
+                transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 1.5))
+            )
+
+        if (
+            aug_cfg.get("color_jitter_brightness", 0) > 0
+            or aug_cfg.get("color_jitter_contrast", 0) > 0
+        ):
+            transform_list.append(
+                transforms.ColorJitter(
+                    brightness=aug_cfg.get("color_jitter_brightness", 0),
+                    contrast=aug_cfg.get("color_jitter_contrast", 0),
+                    saturation=aug_cfg.get("color_jitter_saturation", 0.1),
+                )
+            )
+
+    else:
+
+        transform_list.append(
+            transforms.Resize((input_size, input_size), interpolation=interpolation)
+        )
 
     # Final Steps (Conversion & Normalization)
-    transform_list.extend([
-        transforms.ToImage(),
-        transforms.ToDtype(torch.float32, scale=True),
-        transforms.Normalize(IMGNET_MEAN, IMGNET_STD)
-    ])
-
+    transform_list.extend(
+        [
+            transforms.ToImage(),
+            transforms.ToDtype(torch.float32, scale=True),
+            transforms.Normalize(IMGNET_MEAN, IMGNET_STD),
+        ]
+    )
     # Post-Normalization Augmentations (Random Erasing)
-    if is_training and aug_cfg.get("apply_augmentations", False):
-        p_erase = aug_cfg.get("random_erasing_p", 0)
-        if p_erase > 0:
-            transform_list.append(transforms.RandomErasing(p=p_erase))
-
+    if is_training and aug_cfg.get("random_erasing_p", 0) > 0:
+        transform_list.append(
+            transforms.RandomErasing(
+                p=aug_cfg.get("random_erasing_p"),
+                scale=(0.02, 0.1),
+                ratio=(0.3, 3.3),
+            )
+        )
     return transforms.Compose(transform_list)
 
 class PreprocessedDataset(Dataset):
@@ -280,14 +347,6 @@ def get_group_aware_stratified_train_val_split(
     """
     out = df.copy().reset_index(drop=True)
 
-    # ------------------------------------------------------------
-    # Step 1) Define the split unit for each row/image.
-    #
-    # If a burst_group_id exists, the whole burst becomes one indivisible split unit.
-    # Otherwise, the row becomes its own singleton split unit.
-    #
-    # This is the key leakage-prevention step for near-duplicate bursts.
-    # ------------------------------------------------------------
     group_ids = []
     has_burst_col = burst_group_col in out.columns
     has_fp_col = filepath_col in out.columns
@@ -308,13 +367,7 @@ def get_group_aware_stratified_train_val_split(
 
     out["_split_group_id"] = group_ids
 
-    # ------------------------------------------------------------
-    # Step 2) Build one representative label per split unit (group).
-    #
-    # Stratification expects one label per unit. Most groups should contain only one identity.
-    # If a group is mixed (unexpected data issue), use the majority identity as a defensive fallback
-    # and warn.
-    # ------------------------------------------------------------
+    
     group_rows = []
     for gid, g in out.groupby("_split_group_id", sort=False):
         ids = g[identity_col].dropna().astype(str).tolist()
@@ -339,12 +392,7 @@ def get_group_aware_stratified_train_val_split(
         )
 
     groups_df = pd.DataFrame(group_rows)
-
-    # ------------------------------------------------------------
-    # Step 3) Split group indices (NOT row indices) with approximate stratification by identity.
-    #
-    # After this step, every group is assigned to train or val exactly once.
-    # ------------------------------------------------------------
+    
     train_group_idx, val_group_idx = split_train_val_indices_from_labels(
         labels=groups_df["group_identity"].tolist(),
         val_split_size=val_split_size,
@@ -354,12 +402,6 @@ def get_group_aware_stratified_train_val_split(
     train_group_ids = set(groups_df.iloc[train_group_idx]["_split_group_id"].tolist())
     val_group_ids = set(groups_df.iloc[val_group_idx]["_split_group_id"].tolist())
 
-    # ------------------------------------------------------------
-    # Step 4) Map group assignments back to image rows.
-    #
-    # This produces row-level indices for downstream dataset filtering/training code,
-    # while preserving the group-level leakage constraint.
-    # ------------------------------------------------------------
     train_mask = out["_split_group_id"].isin(train_group_ids).to_numpy()
     val_mask = out["_split_group_id"].isin(val_group_ids).to_numpy()
 

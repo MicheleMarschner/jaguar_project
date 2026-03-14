@@ -32,10 +32,6 @@ OUTPUT_PROFILES = {
         "per_run": ["experiment_config", "metrics", "train_history"],
         "aggregate": ["resizing_summary"],
     },
-    "background": {
-        "per_run": ["experiment_config", "metrics"],
-        "aggregate": ["background_summary"],
-    },
     "deduplication": {
         "per_run": ["experiment_config", "metrics", "train_history"],
         "aggregate": ["deduplication_summary"],
@@ -43,10 +39,6 @@ OUTPUT_PROFILES = {
     "stat_stability": {
         "per_run": ["experiment_config", "metrics", "train_history"],
         "aggregate": ["stat_stability_summary"],
-    },
-    "viewpoint": {
-        "per_run": [],
-        "aggregate": ["viewpoint_summary"],
     },
     "xai": {
         "per_run": ["experiment_config"],

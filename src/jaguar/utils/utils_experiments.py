@@ -1,7 +1,8 @@
 from pathlib import Path
 import tomllib
 
-from jaguar.config import PATHS
+from jaguar.config import EXPERIMENTS_STORE, PATHS
+from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_setup import build_split_stem
 
 
@@ -154,13 +155,31 @@ def build_ensemble_override(
 
 
 
+def resolve_xai_metrics_paths(config: dict):
+    source_run_dir = Path(config["xai_metrics"]["source_run_dir"])
+
+    run_root = resolve_path(source_run_dir, EXPERIMENTS_STORE)
+    if not run_root.exists():
+        print(f"[Skip] Missing source XAI run: {run_root}")
+        raise SystemExit(0)
+
+    run_root_write = Path(EXPERIMENTS_STORE.write_root) / source_run_dir
+    metrics_path = run_root_write / "xai_metrics"
+    randomized_root = metrics_path / "explanations_randomized"
+
+    ensure_dir(metrics_path)
+    ensure_dir(randomized_root)
+
+    return run_root, run_root_write, metrics_path, randomized_root
+
+
 def build_xai_override(
     run_cfg: dict,
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
     override = {
-        "training": {
+        "evaluation": {
             "experiment_name": run_cfg["experiment_name"],
         },
     }
@@ -200,6 +219,9 @@ def build_xai_override(
         "complexity_abs": ("xai_metrics.complexity", "abs"),
         "complexity_normalise": ("xai_metrics.complexity", "normalise"),
         "complexity_display_progressbar": ("xai_metrics.complexity", "display_progressbar"),
+
+        "source_type": ("xai_metrics", "source_type"),
+        "source_run_dir": ("xai_metrics", "source_run_dir"),
     }
 
     for key, value in run_cfg.items():

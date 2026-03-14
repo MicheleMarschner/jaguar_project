@@ -101,57 +101,93 @@ class SphereFaceLoss(nn.Module):
         logits = (one_hot * phi_theta) + ((1.0 - one_hot) * cosine)
         logits = logits * self.s
         return F.cross_entropy(logits, labels), logits
-
-# class TripletLoss(nn.Module):
-#     """
-#     Standard Triplet Loss. 
-#     Note: Requires (Anchor, Positive, Negative) inputs.
-#     """
-#     def __init__(self, m:float = 0.3):
-#         super().__init__()
-#         self.m = m
-
-#     def forward(self, anchor, positive, negative):
-#         distance = F.triplet_margin_loss(anchor, positive, negative, margin=self.m, p=2)
-#         return distance
-    
+  
 class TripletLoss(nn.Module):
-    """
-    Batch-hard Triplet Loss for ReID, robust to small numbers of positives.
-    Works directly with (embeddings, labels) instead of explicit anchor/pos/neg.
-    """
-    def __init__(self, m: float = 0.3):
+    """Works directly with embeddings rather than with positives, negatives and anchors."""
+    def __init__(self, margin=0.3, mining="hard", norm_feat=True, debug=False):
         super().__init__()
-        self.margin = m
+        self.margin = margin
+        self.mining = mining.lower()
+        self.norm_feat = norm_feat # If true, uses Cosine, else Euclidean
+        self.debug = debug 
+        
+    def softmax_weights(self, dist, mask):
+        max_v = torch.max(dist * mask, dim=1, keepdim=True)[0]
+        diff = dist - max_v
+        Z = torch.sum(torch.exp(diff) * mask, dim=1, keepdim=True) + 1e-6
+        return torch.exp(diff) * mask / Z
 
-    def forward(self, embeddings: torch.Tensor, labels: torch.Tensor):
-        """
-        embeddings: (B, D) normalized feature vectors
-        labels: (B,) integer class labels
-        """
-        # pairwise Euclidean distance
-        dist_matrix = torch.cdist(embeddings, embeddings, p=2)
+    def forward(self, embedding, targets):
+        # Distance Matrix
+        if self.norm_feat:
+            # Cosine distance
+            embedding = F.normalize(embedding, p=2, dim=1)
+            dist_mat = 1 - torch.mm(embedding, embedding.t())
+        else:
+            # Euclidean distance
+            dist_mat = torch.cdist(embedding, embedding, p=2)
 
-        # masks for positives/negatives
-        labels = labels.unsqueeze(1)
-        mask_pos = labels.eq(labels.t())   # (B,B) same identity
-        mask_neg = ~mask_pos               # (B,B) different identity; we don't really need the neg one with the max_dist trick
+        N = dist_mat.size(0)
+        # Masks
+        is_pos = targets.view(N, 1).expand(N, N).eq(targets.view(N, 1).expand(N, N).t()).float()
+        is_neg = targets.view(N, 1).expand(N, N).ne(targets.view(N, 1).expand(N, N).t()).float()
+        
+        # Remove self-matching
+        is_pos = is_pos - torch.eye(N, device=dist_mat.device)
 
-        # remove self-comparisons
-        mask_pos.fill_diagonal_(False)
+        INF = torch.finfo(dist_mat.dtype).max
+        # Mining
+        if self.mining == "hard":
+            dist_ap = dist_mat.masked_fill(is_pos == 0, -INF).max(dim=1)[0]
+            dist_an = dist_mat.masked_fill(is_neg == 0,  INF).min(dim=1)[0]
+        elif self.mining == "weighted":
+            # Weighted Positive
+            w_ap = self.softmax_weights(dist_mat * is_pos, is_pos)
+            dist_ap = torch.sum(dist_mat * is_pos * w_ap, dim=1)
+            # Weighted Negative
+            w_an = self.softmax_weights(-dist_mat * is_neg, is_neg)
+            dist_an = torch.sum(dist_mat * is_neg * w_an, dim=1)
+        elif self.mining == "random":
+            # Randomly select one positive and one negative per anchor
+            dist_ap = torch.zeros(N, device=dist_mat.device)
+            dist_an = torch.zeros(N, device=dist_mat.device)
+            for i in range(N):
+                pos_idx = torch.where(is_pos[i] > 0)[0]
+                neg_idx = torch.where(is_neg[i] > 0)[0]
+                if len(pos_idx) > 0:
+                    dist_ap[i] = dist_mat[i, pos_idx[torch.randint(len(pos_idx), (1,))]]
+                else:
+                    dist_ap[i] = 0.0  # fallback if no positive (should not happen)
+                if len(neg_idx) > 0:
+                    dist_an[i] = dist_mat[i, neg_idx[torch.randint(len(neg_idx), (1,))]]
+                else:
+                    dist_an[i] = INF  # fallback if no negative (should not happen)
+        else: # semi-hard fallback
+            dist_ap = dist_mat.masked_fill(is_pos == 0, -INF).max(dim=1)[0]
+            mask_semi = is_neg * (dist_mat > dist_ap.unsqueeze(1)) * (dist_mat < dist_ap.unsqueeze(1) + self.margin)
+            if mask_semi.sum() > 0:
+                dist_an = (dist_mat * mask_semi).sum(1) / (mask_semi.sum(1) + 1e-6)
+            else:
+                dist_an = dist_mat.masked_fill(is_neg == 0,  INF).min(dim=1)[0]
 
-        # if no positives in batch, return zero loss
-        if mask_pos.sum() == 0:
-            return torch.tensor(0.0, device=embeddings.device)
+        # Loss calculation
+        y = torch.ones_like(dist_an)
+        
+        if self.debug:
+            pos_mean = dist_ap.mean().item()
+            neg_mean = dist_an.mean().item()
+            violation_rate = (dist_an < dist_ap + self.margin).float().mean().item()
 
-        # hardest positive distance for each anchor
-        hardest_pos = (dist_matrix * mask_pos.float()).max(dim=1)[0]
-
-        # hardest negative distance for each anchor
-        max_dist = dist_matrix.max().detach()
-        dist_neg = dist_matrix + max_dist * mask_pos.float()
-        hardest_neg = dist_neg.min(dim=1)[0]
-
-        # compute triplet loss
-        loss = F.relu(hardest_pos - hardest_neg + self.margin)
-        return loss.mean()
+            print(
+                f"[TripletDebug] pos={pos_mean:.3f} "
+                f"neg={neg_mean:.3f} "
+                f"viol={violation_rate:.3f}"
+            )
+        
+        if self.margin > 0:
+            # Standard Triplet (F.softplus or margin_ranking)
+            # return F.softplus(dist_ap - dist_an + self.margin)
+            return F.margin_ranking_loss(dist_an, dist_ap, y, margin=self.margin)
+        else:
+            # Soft-margin (no fixed boundary)
+            return F.soft_margin_loss(dist_an - dist_ap, y)

@@ -1,7 +1,7 @@
-
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
+import numpy as np
 import argparse
 from pathlib import Path
 from torch.utils.data import DataLoader
@@ -19,6 +19,7 @@ from jaguar.utils.utils_datasets import (
     load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
+    auto_generate_pr_sizes,
 )
 from jaguar.train import JaguarTrainer
 from jaguar.logging.wandb_logger import (
@@ -71,7 +72,6 @@ def main():
     checkpoints_dir = PATHS.checkpoints / config["training"]["save_dir"]
     exp_name = config["training"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
-    print(checkpoints_dir, experiment_group)
 
     # run artifact directory
     if experiment_group:
@@ -109,16 +109,10 @@ def main():
     pr_stage_epochs = pr_cfg.get("stage_epochs", [])
 
     if pr_enabled:
-        if len(pr_sizes) != len(pr_stage_epochs):
-            raise ValueError(
-                "progressive_resizing.sizes and progressive_resizing.stage_epochs must have the same length"
-            )
         if sum(pr_stage_epochs) != config["training"]["epochs"]:
             raise ValueError(
                 "Sum of progressive_resizing.stage_epochs must equal training.epochs"
             )
-
-    current_resize = None
     
     # Load pre-split and processed datasets (based on 'mode' in JaguarDataset)
     _, train_ds, val_ds = load_split_jaguar_from_FO_export(
@@ -143,7 +137,8 @@ def main():
         num_classes=num_classes,
         device=DEVICE,
     )
-
+    
+    print(config['model']["mining_type"])
     # Initialize Model
     model = JaguarIDModel(
         backbone_name=config['model']['backbone_name'],
@@ -156,39 +151,58 @@ def main():
         loss_m=config["model"].get("m", 0.5),
         use_projection=config['model']['use_projection'],
         use_forward_features=config['model']['use_forward_features'],
+        mining_type=config['model'].get("mining_type", "hard"),
     )
 
     log_wandb_model_info(
         run=wandb_run,
         model=model,
     )
+    
+    if pr_enabled and not model.backbone_wrapper.supports_progressive_resizing:
+        print(
+            f"[ProgressiveResizing] Disabled for backbone "
+            f"{model.backbone_wrapper.name}"
+        )
+        pr_enabled = False
+
+    current_resize = None
+    
+    # auto generate PR sizes if needed
+    if pr_enabled and not pr_sizes:
+        pr_sizes = auto_generate_pr_sizes(model)
+
+    if pr_enabled and len(pr_sizes) != len(pr_stage_epochs):
+        raise ValueError("progressive_resizing.sizes must match stage_epochs length")
 
     if pr_enabled:
         current_resize = get_resize_for_epoch(1, pr_sizes, pr_stage_epochs)
         print(f"[ProgressiveResizing] Initial input size: {current_resize}")
-
-        # Apply transforms directly to pre-split datasets
-        train_ds.transform = get_transforms(
-            config, model.backbone_wrapper, is_training=True, input_size_override=current_resize
-        )
-        val_ds.transform = get_transforms(
-            config, model.backbone_wrapper, is_training=False, input_size_override=current_resize
-        )
     else:
-        train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-        val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
-            
+        current_resize = model.backbone_wrapper.input_size
+        
+    if pr_enabled:
+        current_resize = get_resize_for_epoch(1, pr_sizes, pr_stage_epochs)
+        print(f"[ProgressiveResizing] Initial input size: {current_resize}")
+
+    # Apply transforms directly to pre-split datasets
+    train_ds.transform = get_transforms(
+        config,
+        model.backbone_wrapper,
+        is_training=True,
+        input_size_override=current_resize
+    )
+
+    val_ds.transform = get_transforms(
+        config,
+        model.backbone_wrapper,
+        is_training=False,
+        input_size_override=current_resize
+    )
     # Labels for Sampler
     train_labels = train_ds.labels_idx
-        
     
     print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Train: {len(train_ds)} | Val: {len(val_ds)}")
-
-    # Set Transforms from the Model Backbone
-    # train_ds.transform = model.backbone_wrapper.transform
-    # val_ds.transform = model.backbone_wrapper.transform
-    # train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-    # val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
 
     # Initialize Balanced Sampler for Re-ID
     # We use train_ds.labels_idx which contains numeric IDs for every sample
@@ -201,8 +215,6 @@ def main():
     # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
-        # batch_size=config['training']['batch_size'],
-        # shuffle=True,
         batch_sampler=custom_batch_sampler,
         num_workers=config['data']['num_workers'],
         pin_memory=True
@@ -216,44 +228,10 @@ def main():
         pin_memory=True
     )
     
-    # # Setup train/val splits  
-    # full_ds.transform = model.backbone_wrapper.transform 
-    # train_idx, val_idx, all_labels = get_stratified_train_val_split(
-    #     full_ds, 
-    #     val_split_size=config['data']['val_split_size'], 
-    #     seed=config['training']['seed']
-    # )
-
-    # train_ds = Subset(full_ds, train_idx)
-    # val_ds = Subset(full_ds, val_idx)
-
-    # # Extract labels specific to the training subset for the sampler
-    # train_subset_labels = [all_labels[i] for i in train_idx]
-
-    # # Initialize Balanced Sampler
-    # custom_batch_sampler = BalancedBatchSampler(
-    #     labels=train_subset_labels,
-    #     batch_size=config['training']['batch_size'],
-    #     samples_per_class=4 # P=8, K=4 for a batch size of 32
-    # )
-
-    # # Create DataLoaders. Note: If using a sampler, 'shuffle' must be False
-    # train_loader = DataLoader(
-    #     train_ds,
-    #     batch_sampler=custom_batch_sampler,
-    #     num_workers=config['data']['num_workers'],
-    #     pin_memory=True
-    # )
-
-    # val_loader = DataLoader(
-    #     val_ds,
-    #     batch_size=config['training']['batch_size'],
-    #     shuffle=False,
-    #     num_workers=config['data']['num_workers']
-    # )
     # Start Training Loop
     if not config['training']['save_dir']:
         config['training']['save_dir'] = PROJECT_ROOT
+        
     trainer = JaguarTrainer(model, train_loader, val_loader, config)
     
     best_score = 0.0 
@@ -266,12 +244,16 @@ def main():
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
     monitor_metric = config["training"].get("monitor_metric", "mAP")
+    
     for epoch in range(1, config['training']['epochs'] + 1):
         epoch_start_time = time.perf_counter()
+        
         if pr_enabled:
             epoch_resize = get_resize_for_epoch(epoch, pr_sizes, pr_stage_epochs)
+
             if epoch_resize != current_resize:
                 current_resize = epoch_resize
+                
                 print(f"\n[ProgressiveResizing] Switching input size to {current_resize} at epoch {epoch}")
 
                 train_ds.transform = get_transforms(
@@ -288,7 +270,8 @@ def main():
                 )
                 
         avg_loss = trainer.train_epoch(epoch)
-        metrics = trainer.validate()
+        metrics, current_embs, current_lbls, was_heavy = trainer.validate(epoch=epoch)
+        
         
         print(f"\nEpoch {epoch} Summary:")
         print(
@@ -298,6 +281,9 @@ def main():
             f"Val Rank1: {metrics['rank1']:.4f} | "
             f"Val SimGap: {metrics['sim_gap']:.4f}"
         )
+        if was_heavy: 
+            print(f" | Val Silhouette: {metrics['silhouette']:.4f}")
+        
         
         # Save best model
         current_score = metrics[monitor_metric]
@@ -307,6 +293,18 @@ def main():
             best_epoch = epoch
             patience_counter = 0
             best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
+            
+            viz_data = {
+                "embeddings": current_embs.numpy(),
+                "labels": current_lbls.numpy(),
+                "metrics": metrics,
+                "backbone": config['model']['backbone_name'],
+                "head": config['model']['head_type']
+            }
+            # Overwrites the previous best to save disk space
+            viz_path = Path(run_dir) / "best_val_viz_data.npz"
+            np.savez(viz_path, **viz_data)
+
         else:
             patience_counter += 1
             
@@ -330,6 +328,7 @@ def main():
             "lr": float(current_lr),
             "input_size": current_resize if pr_enabled else model.backbone_wrapper.input_size,
             "epoch_time_sec": float(epoch_time_sec),
+            "silhouette": float(metrics["silhouette"]) if was_heavy else None,
         })
 
         log_wandb_epoch_metrics(

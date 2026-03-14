@@ -1,221 +1,10 @@
-'''
-ArcFace CAM is best to inspect:
-- “what makes it predict ID y?” (supervised evidence)
-- whether the model is learning foreground vs background under the training loss
-
-Similarity CAM (query→positive ref and query→hard negative)
-'''
-
 from pathlib import Path
 from typing import Sequence
 from jaguar.utils.utils import ensure_dir, save_npy
 import torch
-from PIL import Image
-import torch.nn.functional as F
 import numpy as np
 import pandas as pd
-
-from pytorch_grad_cam import GradCAM
-from pytorch_grad_cam.utils.image import show_cam_on_image
-from captum.attr import IntegratedGradients
-
-
-class SimilarityForward(torch.nn.Module):
-    """
-    Returns scalar similarity per sample:
-        s(x) = cosine(f(x), ref_emb)
-    Output shape: [B]
-    """
-    def __init__(self, foundation_wrapper, ref_emb: torch.Tensor, maximize: bool = True):
-        super().__init__()
-        self.w = foundation_wrapper
-
-        ref = ref_emb.detach()
-        if ref.ndim == 2 and ref.shape[0] == 1:
-            ref = ref.squeeze(0)  # [D]
-        self.register_buffer("ref", F.normalize(ref, p=2, dim=0))
-        self.maximize = maximize
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        emb = self.w.get_embeddings_tensor(x)  # [B,D]
-        emb = F.normalize(emb, p=2, dim=1)
-        sim = (emb * self.ref.unsqueeze(0)).sum(dim=1)  # [B]
-        return sim if self.maximize else -sim
-
-
-class CosineSimilarityTarget:
-    def __init__(self, ref_embedding, maximize=True):
-        ref = ref_embedding.detach()
-        if ref.ndim == 2 and ref.shape[0] == 1:
-            ref = ref.squeeze(0)
-        self.ref_embedding = F.normalize(ref, p=2, dim=0)   # [D]
-        self.maximize = maximize
-
-    def __call__(self, model_output):
-        emb = model_output
-        if isinstance(emb, dict):
-            emb = emb.get("embeddings") or next(iter(emb.values()))
-        elif isinstance(emb, (tuple, list)):
-            emb = emb[0]
-        if emb.ndim == 2 and emb.shape[0] == 1:
-            emb = emb.squeeze(0)  # [D]
-        emb = F.normalize(emb, p=2, dim=0)
-        sim = (emb * self.ref_embedding).sum()
-        return sim if self.maximize else -sim
-
-
-class EmbeddingForwardWrapper(torch.nn.Module):
-    """
-    Wraps a model to ensure pytorch-grad-cam's forward hooks intercept the 
-    final embedding vector, even if the model uses a custom method like `get_embeddings`.
-    """
-    def __init__(self, base_model):
-        super().__init__()
-        self.base_model = base_model
-
-    def forward(self, x):
-        if hasattr(self.base_model, "get_embeddings"):
-            return self.base_model.get_embeddings(x)
-        return self.base_model(x)
-
-
-def manual_gradcam_class(model, target_layer, x, class_idx, reshape_transform=None):
-    acts = []
-    grads = []
-
-    def fwd_hook(m, inp, out):
-        acts.append(out)
-
-    def bwd_hook(m, gin, gout):
-        grads.append(gout[0])
-
-    h1 = target_layer.register_forward_hook(fwd_hook)
-    h2 = target_layer.register_full_backward_hook(bwd_hook)
-
-    try:
-        x = x.clone().detach().requires_grad_(True)
-        model.zero_grad(set_to_none=True)
-
-        logits = model(x)              # [1, C]
-        score = logits[0, class_idx]   # scalar
-        score.backward()
-
-        A = acts[0]
-        dA = grads[0]
-
-        # Transformer-style token outputs -> convert to spatial feature maps
-        if A.ndim == 3:
-            if reshape_transform is None:
-                raise ValueError(
-                    f"Got 3D activations {tuple(A.shape)} but no reshape_transform was provided."
-                )
-            A = reshape_transform(A)
-            dA = reshape_transform(dA)
-
-        # CNN-style outputs should already be [B, C, H, W]
-        if A.ndim != 4 or dA.ndim != 4:
-            raise ValueError(
-                f"Grad-CAM expects 4D tensors after optional reshape, got "
-                f"A={tuple(A.shape)}, dA={tuple(dA.shape)}"
-            )
-
-        w = dA.mean(dim=(2, 3), keepdim=True)      # [1, C, 1, 1]
-        cam = (w * A).sum(dim=1, keepdim=True)     # [1, 1, H, W]
-        cam = F.relu(cam)
-
-        cam = cam[0, 0]
-        cam = cam - cam.min()
-        cam = cam / (cam.max() + 1e-12)
-
-        return cam.detach().cpu().numpy()
-
-    finally:
-        h1.remove()
-        h2.remove()
-
-
-def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Image, maximize: bool = True):
-    """
-    Generates a GradCAM heatmap on the 'query_img' based on its similarity to 'ref_img'.
-    Accepts your FoundationModelWrapper as the first argument.
-    """
-    device = wrapper.device
-    model = wrapper.model
-    
-    # 1. Prepare tensors
-    query_tensor = wrapper.preprocess(query_img).unsqueeze(0).to(device)
-    ref_tensor = wrapper.preprocess(ref_img).unsqueeze(0).to(device)
-
-    # 2. Extract Reference Embedding
-    with torch.no_grad():
-        ref_emb = wrapper.get_embeddings_tensor(ref_tensor)   # [1,D]
-
-    # 3. Setup GradCAM using the Explainer Wrapper
-    cam_model = EmbeddingForwardWrapper(model)
-    target_layers, reshape_transform = wrapper.get_grad_cam_config()
-    
-    cam = GradCAM(
-        model=cam_model,
-        target_layers=target_layers,
-        reshape_transform=reshape_transform
-    )
-
-    # 4. Define target and generate CAM
-    targets = [CosineSimilarityTarget(ref_emb, maximize=maximize)]
-    grayscale_cam = cam(input_tensor=query_tensor, targets=targets)[0, :]
-
-    # 5. Create Visual Overlay
-    target_size = (query_tensor.shape[3], query_tensor.shape[2]) # (W, H)
-    query_img_resized = query_img.resize(target_size, Image.Resampling.LANCZOS)
-    query_img_rgb = np.array(query_img_resized).astype(np.float32) / 255.0
-    
-    visualization = show_cam_on_image(query_img_rgb, grayscale_cam, use_rgb=True)
-
-    return grayscale_cam, visualization
-
-
-def ig_saliency_similarity(
-    x: torch.Tensor,                  # [B,3,H,W], preprocessed (can be CPU)
-    explainer: IntegratedGradients,
-    device: torch.device | str,
-    steps: int = 32,
-    internal_bs: int = 16,
-) -> torch.Tensor:
-    """
-    IG for similarity scalar s(x)=cos(f(x), ref_emb).
-    No class target is used because forward returns [B].
-    Returns:
-        saliency [B,H,W] on CPU
-    """
-    x = x.to(device).requires_grad_(True)
-    baseline = torch.zeros_like(x)
-
-    attr = explainer.attribute(
-        inputs=x,
-        baselines=baseline,
-        target=None,
-        n_steps=steps,
-        internal_batch_size=internal_bs,
-        method="riemann_trapezoid",
-    )  # [B,3,H,W]
-
-    sal = attr.sum(dim=1)  # [B,H,W]
-    return sal.detach().cpu()
-
-
-def ig_saliency_batched_similarity(X, explainer, device, steps=32, internal_bs=32, batch_size=32):
-    outs = []
-    n = X.size(0)
-    print(f"[IG] Start batched IG: N={n}, batch_size={batch_size}, steps={steps}, internal_bs={internal_bs}")
-    for i in range(0, n, batch_size):
-        xb = X[i:i+batch_size]
-        print(f"[IG] Batch {i//batch_size + 1}/{(n + batch_size - 1)//batch_size} | xb.shape={tuple(xb.shape)}")
-        out = ig_saliency_similarity(
-            xb, explainer=explainer, device=device, steps=steps, internal_bs=internal_bs
-        )
-        print(f"[IG] Done batch {i//batch_size + 1}, out.shape={tuple(out.shape)}")
-        outs.append(out)
-    return torch.cat(outs, dim=0)
+import re
 
 
 def normalize_heatmap(h):
@@ -246,8 +35,6 @@ def save_vec(save_dir: Path, prefix: str, expl: str, pt: str, vec: np.ndarray) -
     p = Path(save_dir) / fname
     np.save(p, np.asarray(vec, dtype=np.float32))
     return fname
-
-
 
 # ============================================================
 # Deterministic query selection (curated val subset)
@@ -298,7 +85,6 @@ def get_val_query_indices(
     return val_chosen
 
 
-
 def resolve_n_samples(n_samples: int | str | None) -> int | None:
     """
     Resolve configured sample count.
@@ -322,3 +108,209 @@ def format_n_samples_tag(n_samples: int | str | None) -> str:
     """
     resolved = resolve_n_samples(n_samples)
     return "full" if resolved is None else str(resolved)
+
+
+def resolve_vec_path(vec_path_raw: str, metrics_dir: Path) -> Path:
+    """
+    Resolves a metric vector path from the summary CSV.
+
+    Supports:
+    1) Absolute path that exists
+    2) Absolute path that used to be under .../xai/<run>/... and is now under .../xai/similarity/<run>/...
+    3) Relative path (or filename) relative to metrics_dir
+    """
+    if not isinstance(vec_path_raw, str) or not vec_path_raw:
+        raise FileNotFoundError(f"Empty vec path: {vec_path_raw}")
+
+    p = Path(vec_path_raw)
+
+    if p.is_absolute() and p.exists():
+        return p
+
+    cand = metrics_dir / p
+    if cand.exists():
+        return cand
+
+    if p.is_absolute():
+        parts = list(p.parts)
+        try:
+            xai_i = parts.index("xai")
+        except ValueError:
+            pass
+        else:
+            # if it already has similarity right after xai, nothing to rewrite
+            if xai_i + 1 < len(parts) and parts[xai_i + 1] != "similarity":
+                rewritten = Path(*parts[: xai_i + 1], "similarity", *parts[xai_i + 1 :])
+                if rewritten.exists():
+                    return rewritten
+
+    raise FileNotFoundError(
+        f"Could not resolve vec path:\n"
+        f"  vec_path_raw: {vec_path_raw}\n"
+        f"  metrics_dir : {metrics_dir}"
+    )
+
+
+_RUN_RE = re.compile(r"^(?P<model>.+)__(?P<split>.+)__n(?P<n>\d+)__seed(?P<seed>\d+)$")
+
+
+def load_all_vectors(run_root: Path) -> pd.DataFrame:
+    """
+    Returns long dataframe with per-sample metric values:
+    model, split, n_samples, seed, run_id, explainer, pair_type, metric, sample_i, value
+    """
+    out = []
+
+    for summary_csv in run_root.rglob("metrics/xai_summary_metrics.csv"):
+        metrics_dir = summary_csv.parent          # .../metrics
+        run_dir = metrics_dir.parent              # .../<model>__<split>__n..__seed..
+        m = _RUN_RE.match(run_dir.name)
+        if m is None:
+            continue
+
+        model = m.group("model")
+        split = m.group("split")
+        n_samples = int(m.group("n"))
+        seed = int(m.group("seed"))
+
+        summary = pd.read_csv(summary_csv)
+
+        for _, row in summary.iterrows():
+            explainer = row["explainer"]
+            pair_type = row["pair_type"]
+
+            for metric_name, vec_col in [
+                ("sanity", "sanity_vec_path"),
+                ("faith_topk", "faith_topk_vec_path"),
+                ("faith_random", "faith_random_vec_path"),
+                ("faith_gap", "faith_gap_vec_path"),
+                ("complexity", "complexity_vec_path"),
+            ]:
+                vec_path_raw = row.get(vec_col, "")
+                vec_path = resolve_vec_path(vec_path_raw, metrics_dir=metrics_dir)
+
+                v = np.load(vec_path)  # shape [N]
+
+                for i, val in enumerate(v):
+                    out.append({
+                        "model": model,
+                        "split": split,
+                        "n_samples": n_samples,
+                        "seed": seed,
+                        "run_id": run_dir.name,
+                        "explainer": explainer,
+                        "pair_type": pair_type,
+                        "metric": metric_name,
+                        "sample_i": int(i),
+                        "value": float(val),
+                        "vec_path": str(vec_path),
+                    })
+
+    return pd.DataFrame(out)
+
+
+def load_all_refs(xai_similarity_root: Path) -> pd.DataFrame:
+    """
+    Loads and concatenates all refs_n*.parquet under xai_similarity_root.
+    Adds run metadata columns: model, split, n_samples, seed, run_id.
+    """
+    dfs = []
+
+    for pq in xai_similarity_root.rglob("refs_n*.parquet"):
+        # refs_n10.parquet is either directly under run_dir OR under run_dir/refs/
+        run_dir = pq.parent
+        m = _RUN_RE.match(run_dir.name)
+
+        if m is None and pq.parent.parent is not None:
+            run_dir = pq.parent.parent
+            m = _RUN_RE.match(run_dir.name)
+
+        if m is None:
+            continue
+
+        df = pd.read_parquet(pq)
+
+        df["model"] = m.group("model")
+        df["split"] = m.group("split")
+        df["n_samples"] = int(m.group("n"))
+        df["seed"] = int(m.group("seed"))
+        df["run_id"] = run_dir.name
+        df["refs_file"] = str(pq)
+
+        dfs.append(df)
+
+    return pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+
+def summarize_retrieval_variant(df: pd.DataFrame, suffix: str) -> dict:
+    return {
+        "rank1": float(df[f"is_rank1_{suffix}"].mean()),
+        "rank5": float(df[f"is_rank5_{suffix}"].mean()),
+        "median_gold_rank": float(df[f"gold_rank_{suffix}"].median()),
+        "mean_gold_rank": float(df[f"gold_rank_{suffix}"].mean()),
+        "mean_margin": float(df[f"margin_gold_minus_impostor_{suffix}"].mean()),
+    }
+
+
+def summarize_bg_vs_jaguar(df: pd.DataFrame) -> dict:
+    return {
+        "share_bg_better_rank": float(df["bg_better_than_jag_rank"].mean()),
+        "share_bg_better_rank1": float(df["bg_better_than_jag_rank1"].mean()),
+        "share_bg_better_rank5": float(df["bg_better_than_jag_rank5"].mean()),
+        "share_bg_better_margin": float(df["bg_better_than_jag_margin"].mean()),
+        "median_rank_delta_bg_minus_jag": float(df["gold_rank_delta_bg_minus_jag"].median()),
+        "mean_margin_delta_bg_minus_jag": float(df["margin_delta_bg_minus_jag"].mean()),
+    }
+
+
+def summarize_embedding_stability(df: pd.DataFrame) -> dict:
+    delta = df["stability_bg_only"] - df["stability_jaguar_only"]
+    return {
+        "mean_stability_jaguar_only": float(df["stability_jaguar_only"].mean()),
+        "mean_stability_bg_only": float(df["stability_bg_only"].mean()),
+        "median_stability_jaguar_only": float(df["stability_jaguar_only"].median()),
+        "median_stability_bg_only": float(df["stability_bg_only"].median()),
+        "share_bg_more_stable": float((df["stability_bg_only"] > df["stability_jaguar_only"]).mean()),
+        "mean_stability_delta_bg_minus_jag": float(delta.mean()),
+        "median_stability_delta_bg_minus_jag": float(delta.median()),
+    }
+
+
+def build_bg_sensitivity_summaries(
+    retrieval_df: pd.DataFrame,
+    similarity_res: pd.DataFrame,
+) -> dict:
+    analysis_df = retrieval_df.merge(
+        similarity_res,
+        on=["id", "filepath"],
+        how="left",
+    )
+
+    retrieval_variant_summary = {
+        "orig": summarize_retrieval_variant(analysis_df, "orig"),
+        "jaguar_only": summarize_retrieval_variant(analysis_df, "jaguar_only"),
+        "bg_only": summarize_retrieval_variant(analysis_df, "bg_only"),
+    }
+
+    analysis_correct = analysis_df[analysis_df["is_rank1_orig"]].copy()
+    analysis_wrong = analysis_df[~analysis_df["is_rank1_orig"]].copy()
+
+    retrieval_summary = {
+        "all": summarize_bg_vs_jaguar(analysis_df),
+        "orig_rank1_correct": summarize_bg_vs_jaguar(analysis_correct),
+        "orig_rank1_wrong": summarize_bg_vs_jaguar(analysis_wrong),
+        "variant_summary": retrieval_variant_summary,
+    }
+
+    similarity_summary = {
+        "all": summarize_embedding_stability(analysis_df),
+        "orig_rank1_correct": summarize_embedding_stability(analysis_correct),
+        "orig_rank1_wrong": summarize_embedding_stability(analysis_wrong),
+    }
+
+    return {
+        "analysis_df": analysis_df,
+        "retrieval_summary": retrieval_summary,
+        "similarity_summary": similarity_summary,
+    }
+

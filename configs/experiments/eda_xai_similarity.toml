@@ -1,11 +1,12 @@
 [experiment]
-name = "xai_similarity"
+name = "eda_xai_similarity"
 description = "Generate pair similarity explanations."
 base_config = "base/xai_base"
 mode = "explain"
 explain_type = "pair_similarity"
-setup_name = "xai_similarity"
+setup_name = "xai"
 output_profile = "xai"
 
 [[experiment.runs]]
 experiment_name = "eva02_easy_hard"
+

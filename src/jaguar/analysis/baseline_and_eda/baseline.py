@@ -58,14 +58,11 @@ def plot_single_run_loss_and_map(
     return outputs
 
 
-if __name__ == "__main__":
-    run_dir = PATHS.runs / ""
-    save_dir = PATHS.results
-    model_label = "EVA-02"
-
-    out = plot_single_run_loss_and_map(
-        run_dir=run_dir,
+def run_baseline_analysis(root_dir: Path, save_dir: Path, model_label = "EVA-02"):
+    
+    return plot_single_run_loss_and_map(
+        run_dir=root_dir,
         save_dir=save_dir,
-        model_label="megadescriptor_full",
+        model_label=model_label,
     )
 

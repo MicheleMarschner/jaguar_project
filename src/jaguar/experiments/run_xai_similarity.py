@@ -1,6 +1,7 @@
 import argparse
 
 from jaguar.config import PATHS
+from jaguar.utils.utils import ensure_dir
 from jaguar.xai.xai_similarity import run_xai, XAIConfig
 from jaguar.utils.utils_experiments import load_toml_config, deep_update
 
@@ -22,6 +23,14 @@ def main():
     
     config.setdefault("evaluation", {})
     config["evaluation"]["experiment_name"] = args.experiment_name
+    exp_name = config["evaluation"]["experiment_name"]
+    experiment_group = config.get("output", {}).get("experiment_group")
+
+    if experiment_group:
+        out_root = PATHS.runs / experiment_group / exp_name
+    else:
+        out_root = PATHS.runs / exp_name
+    ensure_dir(out_root)
 
     xai_cfg = XAIConfig(
         dataset_name=config["xai"]["dataset_name"],
@@ -33,7 +42,7 @@ def main():
         ig_internal_bs=config["xai"]["ig_internal_bs"],
         ig_batch_size=config["xai"]["ig_batch_size"],
         pair_types=tuple(config["xai"]["pair_types"]),
-        out_root=PATHS.runs / "xai/similarity",     ### TODO ISt das verhalten nur write oder auch read?
+        out_root=out_root,     ### TODO ISt das verhalten nur write oder auch read?
     )
 
     artifact_paths = run_xai(

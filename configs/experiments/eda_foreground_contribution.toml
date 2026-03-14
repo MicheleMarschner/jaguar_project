@@ -1,8 +1,8 @@
 
 [experiment]
-name = "background_sensitivity"
+name = "eda_foreground_contribution"
 mode = "explain"
-explain_type = "background_sensitivity"
+explain_type = "foreground_contribution"
 base_config = "base/xai_base"
 # setup_name = "eda_base"
 output_profile = "xai"

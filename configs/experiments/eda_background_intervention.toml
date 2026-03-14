@@ -1,8 +1,8 @@
 [experiment]
-name = "background_reliance_eval"
+name = "eda_background_intervention"
 mode = "eval"
 base_config = "base/xai_base"
-eval_type = "background_reliance"
+eval_type = "background_intervention"
 setup_name = "eda_base"
 output_profile = "xai"
 

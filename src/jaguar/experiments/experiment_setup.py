@@ -134,7 +134,7 @@ def ensure_background_pool():
 
 
 def run_initial_eda():
-    from jaguar.analysis.E01_baseline_and_eda.eda import run_eda
+    from jaguar.analysis.baseline_and_eda.eda import run_eda
     print("[SETUP] run_initial_eda")
 
     ## check if folder exists

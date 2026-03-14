@@ -71,7 +71,6 @@ def main():
     checkpoints_dir = PATHS.checkpoints / config["training"]["save_dir"]
     exp_name = config["training"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
-    print(checkpoints_dir, experiment_group)
 
     # run artifact directory
     if experiment_group:

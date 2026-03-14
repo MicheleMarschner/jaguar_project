@@ -31,8 +31,7 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, DEVICE
 from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
-from jaguar.utils.utils_xai_similarity import manual_gradcam_class, summarize_bg_vs_jaguar, summarize_embedding_stability, summarize_retrieval_variant
-
+from jaguar.utils.utils_xai_similarity import manual_gradcam_class
 
 def extract_query_variant_embeddings(model, dataloader, device):
     """Extracts embeddings for original, jaguar-only, and background-only query views."""

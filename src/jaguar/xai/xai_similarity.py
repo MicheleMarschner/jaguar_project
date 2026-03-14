@@ -20,6 +20,7 @@ Purpose:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
+from jaguar.utils.utils_xai import format_n_samples_tag
 import numpy as np
 import pandas as pd
 import torch
@@ -33,7 +34,7 @@ from jaguar.config import PATHS
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 from jaguar.utils.utils import ensure_dir, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
-from jaguar.utils.utils_xai_similarity import format_n_samples_tag, ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices, resolve_n_samples  
+from jaguar.utils.utils_xai_similarity import ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward, find_module_name, get_val_query_indices, resolve_n_samples  
 from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results
 from jaguar.utils.utils_experiments import load_toml_from_path
@@ -427,7 +428,6 @@ def load_or_create_saliency_maps(
                 out[(explainer_name, pair_type)] = sal_path
 
     return out
-
 
 
 def build_curated_train_val_gallery(

@@ -1,5 +1,5 @@
 [experiment]
-experiment_name = "eda_baseline"
+experiment_name = "baseline"
 description = "Train one single model on the data"
 base_config = "base/eda_base"
 mode = "train"
@@ -7,6 +7,6 @@ train_type = "eda"
 setup_name = "eda_base"
 
 [[experiment.runs]]
-experiment_name = "backbone_eva02"
+experiment_name = "baseline_init"
 backbone_name = "EVA-02"
 split_data_path = "splits/strclosed_set__dupFalse__kTrain4__kVal4__p4/full_split.parquet"

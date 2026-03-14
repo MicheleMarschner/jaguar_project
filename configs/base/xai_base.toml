@@ -5,9 +5,6 @@ mode = "explain"
 setup_name = "eda_base"          # hier braucht es noch eigenes setup!
 output_profile = "xai"
 
-[output]
-experiment_group = "xai"
-
 [inference]
 batch_size = 64
 use_tta = false

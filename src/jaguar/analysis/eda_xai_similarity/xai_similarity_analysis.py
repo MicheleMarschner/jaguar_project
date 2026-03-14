@@ -1,17 +1,17 @@
 import pandas as pd
-from jaguar.utils.utils_xai_similarity import load_all_refs, load_all_vectors
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
-import re
 import torch
 import cv2
 from PIL import Image
 
-from jaguar.utils.utils_datasets import load_jaguar_from_FO_export
-from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, RESULTS_STORE
+from jaguar.utils.utils_xai import load_all_refs, load_all_vectors
+from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, RESULTS_STORE
 from jaguar.utils.utils import ensure_dir, resolve_path
+from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
+from jaguar.analysis.xai_metrics_analysis import run_xai_similarity_metrics_analysis
 
 
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
@@ -100,7 +100,6 @@ def print_summary_table(df_vec: pd.DataFrame, save_path: Path):
     summary.to_csv(save_path / "xai_metrics_summary_table.csv")
     
     
-
 def compute_failure_summary_all_models(refs_all: pd.DataFrame) -> pd.DataFrame:
     """
     RQ1 (Why wrong outranks right) – quantitative overview across models.
@@ -276,7 +275,6 @@ def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) ->
     return easy, {"t_low": t_low, "t_high": t_high}
 
 
-
 def idx_to_imgpath(torch_ds, idx: int) -> Path:
     s = torch_ds.samples[int(idx)]
     # prefer absolute path if stored
@@ -287,7 +285,6 @@ def idx_to_imgpath(torch_ds, idx: int) -> Path:
     # if only filename stored, resolve using dataset helper if available
     # fall back: assume it's already absolute
     return Path(s.get("filename", ""))
-
 
 
 def build_saliency_lookup(artifact: dict) -> dict:
@@ -354,17 +351,19 @@ def save_pairtype_trained_vs_randomized_panels(
     [Query | Reference | Trained overlay on query | Randomized overlay on query]
     """
     run_dir = Path(run_dir)
-    out_dir = Path(out_dir) / f"{run_dir.name}__{explainer}"
+    source_run_dir = run_dir.parent if run_dir.name == "xai_metrics" else run_dir
+
+    out_dir = Path(out_dir) / f"{source_run_dir.name}__{explainer}"
     ensure_dir(out_dir)
 
-    refs_candidates = sorted(run_dir.glob("refs_n*.parquet"))
+    refs_candidates = sorted(source_run_dir.glob("refs_n*.parquet"))
     if not refs_candidates:
-        raise FileNotFoundError(f"No refs_n*.parquet found in {run_dir}")
+        raise FileNotFoundError(f"No refs_n*.parquet found in {source_run_dir}")
     refs_df = pd.read_parquet(refs_candidates[0])
 
     for pair_type in pair_types:
-        trained_path = run_dir / "explanations" / explainer / f"sal__{pair_type}.pt"
-        randomized_path = run_dir / "explanations_randomized" / explainer / f"sal__{pair_type}.pt"
+        trained_path = source_run_dir / "explanations" / explainer / f"sal__{pair_type}.pt"
+        randomized_path = source_run_dir / "xai_metrics" / "explanations_randomized" / explainer / f"sal__{pair_type}.pt"
 
         if not trained_path.exists():
             print(f"[WARN] Missing trained artifact: {trained_path}")
@@ -419,7 +418,7 @@ def save_pairtype_trained_vs_randomized_panels(
             axes[3].axis("off")
             axes[3].set_title("Randomized saliency")
 
-            plt.suptitle(f"{run_dir.name} | {explainer} | {pair_type}", y=1.02)
+            plt.suptitle(f"{source_run_dir.name} | {explainer} | {pair_type}", y=1.02)
             plt.tight_layout()
             save_path = pair_dir / f"{pair_type}_{k:02d}__q{q}__r{r}.png"
             plt.savefig(save_path, dpi=200, bbox_inches="tight")
@@ -465,7 +464,6 @@ def build_saliency_lookup_from_artifact(artifact: dict) -> dict:
     for i in range(len(q)):
         lookup[(int(q[i]), int(r[i]))] = sal[i]  # [H,W]
     return lookup
-
 
 
 def save_failure_panels_with_overlays(
@@ -531,23 +529,39 @@ def save_failure_panels_with_overlays(
     print(f"[{model}] Saved {len(failures)} overlay panels to {out_dir}")
 
 
-if __name__ == "__main__":
-    run_root = resolve_path("xai/similarity", EXPERIMENTS_STORE)
-    save_root = resolve_path("xai/similarity", RESULTS_STORE)
+def run(
+    config: dict,
+    save_dir: Path,
+    root_dir: Path | None = None,
+    run_dir: Path | None = None,
+    exemplar_run_dir: Path | None = None,
+    **kwargs,
+) -> None:
+    if run_dir is not None:
+        rel_path = run_dir.relative_to(PATHS.runs)
+        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        save_root = Path(RESULTS_STORE.write_root) / rel_path
+    elif root_dir is not None:
+        rel_path = root_dir.relative_to(PATHS.runs)
+        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        save_root = Path(RESULTS_STORE.write_root) / rel_path
+    else:
+        raise ValueError("Expected either run_dir or root_dir")
+
     ensure_dir(save_root)
-    dataset_name = "jaguar_xai" 
-    backbone_name = "EVA-02" #TODO go over all folder by yourself
-    n_samples = 10
-    seed = 42
-    explainer = "IG"
+
+    if root_dir is not None and run_dir is None:
+        raise NotImplementedError("Group-mode analysis not implemented yet.")
+
+    dataset_name = config["xai"]["dataset_name"]
+    n_samples = config["xai"]["n_samples"]
+    explainer = config["xai"]["explainer_names"][0]
 
     df_vec = load_all_vectors(run_root)
     refs_all = load_all_refs(run_root)
     print(refs_all.head())
 
     main_table = save_pairwise_xai_main_table(df_vec, save_root)
-    print(main_table.head())
-    
     
     # RQ 3 + RQ 4 (and boxplot per model for complexity is RQ")
     print_summary_table(df_vec, save_root)
@@ -556,10 +570,9 @@ if __name__ == "__main__":
     summary_fail_display = summary_fail.copy()
     summary_fail_display[["median_easy_rank_in_failures","median_sim_gap_wrong_minus_right"]] = \
     summary_fail_display[["median_easy_rank_in_failures","median_sim_gap_wrong_minus_right"]].fillna("—")
-    print(summary_fail_display)
     summary_fail.to_csv(save_root / "failure_summary_all_models.csv", index=False)
 
-    _, torch_ds = load_jaguar_from_FO_export(
+    _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=dataset_name,
         processing_fn=None,
@@ -568,39 +581,40 @@ if __name__ == "__main__":
 
     save_failure_panels(refs_all, torch_ds, save_root / "failure_panels", n_per_model=n_samples)
 
-    runs_dir = resolve_path(
-        f"xai/similarity/{backbone_name}__val__n{n_samples}__seed{seed}",
-        EXPERIMENTS_STORE,
-    )
-    refs_path = runs_dir / f"refs_n{n_samples}.parquet"
+    refs_candidates = sorted(run_root.glob("refs_n*.parquet"))
+    if not refs_candidates:
+        raise FileNotFoundError(f"No refs_n*.parquet found in {run_root}")
+    refs_path = refs_candidates[0]
 
     pairs_df = pd.read_parquet(refs_path)
-
-    rank_col="rank_in_gallery"
     
     # failures list (for RQ1)
     failures = get_top1_failures_for_model(pairs_df)
-    print(failures.head(20))
-    print("n_failures:", len(failures))
-
     if not failures.empty:
         save_failure_panels_with_overlays(
             refs_all=refs_all,
             torch_ds=torch_ds,
-            run_dir=runs_dir,
+            run_dir=run_root,
             out_dir=save_root / "failure_overlays",
-            model=backbone_name,
+            model=run_root.name,
             explainer=explainer,
             n=n_samples,
         )
     
-    save_pairtype_trained_vs_randomized_panels(
-        torch_ds=torch_ds,
-        run_dir=runs_dir,
-        out_dir=save_root / "trained_vs_randomized_panels",
-        explainer=explainer,
-        pair_types=("easy_pos", "hard_pos", "hard_neg"),
-        n_per_type=3,
+    randomized_root = run_root / "xai_metrics" / "explanations_randomized"
+    if randomized_root.exists():
+        save_pairtype_trained_vs_randomized_panels(
+            torch_ds=torch_ds,
+            run_dir=run_root / "xai_metrics",
+            out_dir=save_root / "trained_vs_randomized_panels",
+            explainer=explainer,
+            pair_types=("easy_pos", "hard_pos", "hard_neg"),
+            n_per_type=3,
+        )
+
+    run_xai_similarity_metrics_analysis(
+        run_root=run_root,
+        save_root=save_root / "xai_metrics",
     )
 
     print(f"\nAnalysis complete. Results saved to {save_root}")

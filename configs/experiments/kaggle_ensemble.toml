@@ -1,6 +1,6 @@
 [experiment]
 name = "kaggle_ensemble"
-description = "Score-fusion sweep for Jaguar ensemble."
+description = "fusion sweep for Jaguar ensemble."
 base_config = "base/ensemble_base"
 mode = "ensemble"
 output_profile = "ensemble"

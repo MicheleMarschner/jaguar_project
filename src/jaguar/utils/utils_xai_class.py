@@ -120,13 +120,25 @@ def compute_saliency_ig_class(
 
 class ClassTarget:
     """
-    GradCAM target for a fixed class index.
+    GradCAM target for one class logit.
     """
     def __init__(self, class_idx: int):
         self.class_idx = int(class_idx)
 
     def __call__(self, model_output: torch.Tensor) -> torch.Tensor:
         return model_output[:, self.class_idx]
+
+
+def get_class_gradcam_config(model):
+    """
+    Reuse the backbone-specific GradCAM config, but apply it to the full classifier.
+    """
+    wrapper = model.backbone_wrapper
+    grad_cam_cfg = wrapper.registry_entry["grad_cam"]
+    layer_getter = grad_cam_cfg["layer_getter"]
+    reshape_transform = grad_cam_cfg["reshape_transform"]
+    target_layer = layer_getter(model.backbone)
+    return target_layer, reshape_transform
 
 
 def compute_saliency_gradcam_class(
@@ -137,6 +149,10 @@ def compute_saliency_gradcam_class(
 ) -> Dict[str, Any]:
     """
     Compute GradCAM saliency for gold-class attribution.
+
+    Expected artifact input:
+    - sample_indices: tensor [N]
+    - meta.group optional
     """
     sample_indices = artifact["sample_indices"].cpu().numpy().astype(np.int64)
 
@@ -147,12 +163,11 @@ def compute_saliency_gradcam_class(
 
     model.eval()
 
-    target_layers, reshape_transform = model.get_grad_cam_config()
-    cam_model = model.model if hasattr(model, "model") else model
+    target_layer, reshape_transform = get_class_gradcam_config(model)
 
     cam = GradCAM(
-        model=cam_model,
-        target_layers=target_layers,
+        model=model,
+        target_layers=[target_layer],
         reshape_transform=reshape_transform,
     )
 
@@ -190,6 +205,10 @@ def compute_saliency_gradcam_class(
             "explainer": "GradCAM",
             "target": "gold_class_logit",
             "group": artifact.get("meta", {}).get("group", "all"),
+            "target_layer_type": target_layer.__class__.__name__,
+            "reshape_transform": None if reshape_transform is None else getattr(
+                reshape_transform, "__name__", str(reshape_transform)
+            ),
         },
         "sample_indices": torch.tensor(sample_indices, dtype=torch.long),
         "gold_idx": torch.tensor(gold_idx_out, dtype=torch.long),

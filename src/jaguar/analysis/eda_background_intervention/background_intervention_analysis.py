@@ -3,7 +3,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from jaguar.config import PATHS
 from jaguar.utils.utils import save_fig
 
 
@@ -133,28 +132,7 @@ def plot_background_delta_ap_boxplot(per_query_delta_df: pd.DataFrame, save_path
     save_fig(fig, save_path)
 
 
-# -----------------------------
-# Sentences for README/report
-# -----------------------------
-
-def build_rank1_flip_sentence(per_query_diag_df: pd.DataFrame) -> str:
-    """
-    Create one short sentence summarizing rank-1 flip rates.
-    """
-    if per_query_diag_df.empty:
-        return "Rank-1 flip rate could not be computed."
-
-    best_row = per_query_diag_df.sort_values(
-        "rank1_flip_rate_vs_original", ascending=False
-    ).iloc[0]
-
-    return (
-        f"Rank-1 predictions were moderately stable overall, with the largest flip rate "
-        f"under {best_row['setting']} ({best_row['rank1_flip_rate_vs_original']:.1%} of queries)."
-    )
-
-
-def run_background_analysis(run_dir: str | Path) -> dict[str, pd.DataFrame | str]:
+def run_background_analysis(run_dir: Path, save_dir: Path) -> dict[str, pd.DataFrame | str]:
     """
     Build all requested tables, plots, and short report sentences for one run folder.
     """
@@ -163,29 +141,30 @@ def run_background_analysis(run_dir: str | Path) -> dict[str, pd.DataFrame | str
     main_table = build_background_main_table(summary_df)
     per_query_diag = build_background_per_query_diagnostics(per_query_delta_df)
 
-    main_table.to_csv(run_dir / "background_main_table.csv", index=False)
-    per_query_diag.to_csv(run_dir / "background_per_query_diagnostics.csv", index=False)
+    main_table.to_csv(save_dir / "background_main_table.csv", index=False)
+    per_query_diag.to_csv(save_dir / "background_per_query_diagnostics.csv", index=False)
 
-    plot_background_main_metrics(summary_df, run_dir / "plot_background_main_metrics.png")
-    plot_background_deltas(summary_df, run_dir / "plot_background_deltas.png")
+    plot_background_main_metrics(summary_df, save_dir / "plot_background_main_metrics.png")
+    plot_background_deltas(summary_df, save_dir / "plot_background_deltas.png")
     plot_background_delta_ap_boxplot(
-        per_query_delta_df, run_dir / "plot_background_delta_ap_boxplot.png"
+        per_query_delta_df, save_dir / "plot_background_delta_ap_boxplot.png"
     )
-
-    rank1_flip_sentence = build_rank1_flip_sentence(per_query_diag)
 
     return {
         "main_table": main_table,
         "per_query_diagnostics": per_query_diag,
-        "rank1_flip_sentence": rank1_flip_sentence,
     }
 
 
-if __name__ == "__main__":
+def run(
+    config: dict, 
+    save_dir: Path, 
+    root_dir: Path | None = None, 
+    run_dir: Path | None = None, 
+    **kwargs
+) -> None:
     
-    experiment_group = "eda_background"
-    run_dir = PATHS.runs / experiment_group
-    results = run_background_analysis()
+    results = run_background_analysis(run_dir=root_dir, save_dir=save_dir)
     print(results["main_table"])
     print(results["per_query_diagnostics"])
     print(results["rank1_flip_sentence"])

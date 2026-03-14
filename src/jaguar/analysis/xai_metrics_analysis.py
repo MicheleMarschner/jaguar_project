@@ -1,13 +1,12 @@
 import pandas as pd
-from jaguar.utils.utils_xai_similarity import load_all_vectors, resolve_vec_path
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy import stats
 
-from jaguar.config import EXPERIMENTS_STORE, RESULTS_STORE
-from jaguar.utils.utils import ensure_dir, resolve_path
+from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils_xai import resolve_vec_path
 
 
 sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
@@ -339,11 +338,12 @@ def run_significance_tests_independent(
     return res_df
 
 
-if __name__ == "__main__":
 
-    ## example pairwise similarity
-    run_root = resolve_path("xai/similarity", EXPERIMENTS_STORE)
-    save_root = resolve_path("xai/similarity", RESULTS_STORE)
+
+def run_xai_similarity_metrics_analysis(
+    run_root: Path,
+    save_root: Path,
+) -> pd.DataFrame:
     ensure_dir(save_root)
 
     df_vec = load_xai_metric_vectors(
@@ -358,6 +358,10 @@ if __name__ == "__main__":
             ("complexity", "complexity_vec_path"),
         ],
     )
+
+    if df_vec.empty:
+        print(f"[WARN] No similarity metric vectors found in {run_root}")
+        return df_vec
 
     save_xai_main_table(
         df_vec=df_vec,
@@ -415,10 +419,13 @@ if __name__ == "__main__":
         filename="significance_tests_mannwhitney.csv",
     )
 
+    return df_vec
 
-     ## example class attribution
-    run_root = resolve_path("xai/class_attribution", EXPERIMENTS_STORE)
-    save_root = resolve_path("xai/class_attribution", RESULTS_STORE)
+
+def run_xai_class_metrics_analysis(
+    run_root: Path,
+    save_root: Path,
+) -> pd.DataFrame:
     ensure_dir(save_root)
 
     df_vec = load_xai_metric_vectors(
@@ -432,6 +439,10 @@ if __name__ == "__main__":
             ("faith_gap", "faith_gap_vec_path"),
         ],
     )
+
+    if df_vec.empty:
+        print(f"[WARN] No class-attribution metric vectors found in {run_root}")
+        return df_vec
 
     save_xai_main_table(
         df_vec=df_vec,
@@ -486,3 +497,5 @@ if __name__ == "__main__":
         model_col="run_id",
         filename="xai_class_significance_tests_mannwhitney.csv",
     )
+
+    return df_vec

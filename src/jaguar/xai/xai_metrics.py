@@ -39,7 +39,7 @@ from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
 from jaguar.utils.utils_xai_similarity import SimilarityForward, format_n_samples_tag, save_vec
 from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
 from jaguar.utils.utils_evaluation import build_eval_context
-from jaguar.utils.utils_experiments import load_toml_from_path
+from jaguar.utils.utils_experiments import load_toml_from_path, resolve_xai_metrics_paths
 
 
 def _get_faithfulness_config(config: dict) -> dict:
@@ -58,18 +58,6 @@ def _get_faithfulness_config(config: dict) -> dict:
 # ============================================================
 # Faithfulness
 # ============================================================
-
-import gc
-from pathlib import Path
-import numpy as np
-import pandas as pd
-import torch
-import torch.nn.functional as F
-from tqdm import tqdm
-
-from jaguar.utils.utils_xai_similarity import save_vec
-
-
 def _mask_pixels_from_order(
     x: torch.Tensor,
     order: torch.Tensor,
@@ -737,22 +725,11 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
     ctx = build_eval_context(config, train_config, checkpoint_dir, eval_val_setting="original")
 
     explainer_names = list(cfg.explainer_names)
-    n_tag = format_n_samples_tag(cfg.n_samples)
-    run_id = f"{ctx.model.backbone_wrapper.name}__{cfg.split_name}__n{n_tag}__seed{cfg.seed}"
-    rel_run_path = f"xai/similarity/{run_id}"
-
-    run_root = resolve_path(rel_run_path, EXPERIMENTS_STORE)
-    if not run_root.exists():
-        print(f"[Skip] Missing run_root: {run_root} (run XAI first)")
-        raise SystemExit(0)
-
-    run_root_write = Path(EXPERIMENTS_STORE.write_root) / rel_run_path
-    metrics_path = run_root_write / "metrics"
-    ensure_dir(metrics_path)
+    run_root, run_root_write, metrics_path, randomized_root = resolve_xai_metrics_paths(config)
 
     run = init_wandb_run(
         config=config,
-        run_dir=run_root_write,
+        run_dir=metrics_path,
         exp_name=config["evaluation"]["experiment_name"],
         experiment_group=config.get("output", {}).get("experiment_group"),
         job_type="explain_eval",
@@ -765,6 +742,7 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
     resolve_sample = build_emb_row_sample_resolver(ctx)
 
     # Load the mined reference pairs so metrics are aligned to the exact evaluated pairs.
+    n_tag = format_n_samples_tag(cfg.n_samples)
     out_path = run_root / f"refs_n{n_tag}.parquet"
     ref_df = load_parquet(out_path)
 
@@ -790,7 +768,7 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
     out = run_xai_metrics(
         items=items,
         metrics_path=metrics_path,
-        randomized_root=run_root_write / "explanations_randomized",
+        randomized_root=randomized_root,
         run_sanity_fn=run_sanity_metric,
         run_faithfulness_fn=run_faithfulness_metric,
         run_complexity_fn=run_complexity_metric,
@@ -823,12 +801,13 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
     return out
 
         
-def run_xai_class_metrics(config: dict, cfg, model, resolve_sample, run_root: Path, run_root_write: Path) -> pd.DataFrame:
-    metrics_path = run_root_write / "metrics"
+def run_xai_class_metrics(config: dict, cfg) -> pd.DataFrame:
+
+    run_root, run_root_write, metrics_path, randomized_root = resolve_xai_metrics_paths(config)
 
     run = init_wandb_run(
         config=config,
-        run_dir=run_root_write,
+        run_dir=metrics_path,
         exp_name=config["evaluation"]["experiment_name"],
         experiment_group=config.get("output", {}).get("experiment_group"),
         job_type="explain_eval",
@@ -853,7 +832,7 @@ def run_xai_class_metrics(config: dict, cfg, model, resolve_sample, run_root: Pa
     out = run_xai_metrics(
         items=items,
         metrics_path=metrics_path,
-        randomized_root=run_root_write / "explanations_randomized",
+        randomized_root=randomized_root,
         run_sanity_fn=run_sanity_metric_class,          # class-specific wrapper
         run_faithfulness_fn=faithfulness_topk_vs_random_class,  # class-specific wrapper
         run_complexity_fn=run_complexity_metric,

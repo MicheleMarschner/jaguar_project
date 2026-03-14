@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir, save_parquet
-from jaguar.xai.foreground_contribution import (
+from jaguar.utils.utils_xai import (
     summarize_bg_vs_jaguar,
     summarize_embedding_stability,
     summarize_retrieval_variant,
@@ -525,13 +525,14 @@ def save_report_tables(master_df: pd.DataFrame, summary_dir: Path) -> dict[str, 
     }
 
 
-def run_foreground_background_analysis(
-    experiments_dir: Path,
-) -> dict[str, Path]:
-    runs = load_runs(experiments_dir)
-    if not runs:
-        print(f"[ANALYSIS][WARN] No background-sensitivity runs found under: {experiments_dir}")
-        return {}
+def run(
+    config: dict, 
+    save_dir: Path,
+    root_dir: Path | None = None, 
+    run_dir: Path | None = None, 
+    **kwargs
+) -> None:
+    runs = load_runs(root_dir)
 
     grouped_outputs = save_grouped_master_summaries(runs)
 

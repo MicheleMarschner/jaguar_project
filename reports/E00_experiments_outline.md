@@ -12,8 +12,7 @@ This README is the central index of the experimental project. It is designed to 
 
 The documentation is organized on two levels:
 * Overview README: summarizes the full experimental program and maps experiments to their implementation and outputs.
-* Per-experiment READMEs: document each experiment in a consistent format:
-question → intervention → evaluation → results → analysis.
+* Per-experiment READMEs: document each experiment in a consistent format: question → intervention → evaluation → results → analysis.
 
 For each experiment, the overview will point to the relevant:
 * code entry point or module,
@@ -27,11 +26,11 @@ The purpose of this document is not to repeat all methodological details, but to
 ## 3. Conducted Experiments at a Glance
 
 The experimental work is organized into **five main areas**:
-1. Data-centric studies: analyses of dataset quality, duplicate structure, and split design.
-2. Core model development: backbone, training, and embedding experiments aimed at improving retrieval performance.
-3. Robustness and diagnostic experiments: targeted tests of how retrieval behaves under controlled changes such as background manipulations or alternative evaluation protocols.
-4. Interpretability analyses: experiments that examine which image regions influence similarity decisions and how reliable these explanations are.
-5. Ensemble experiments: final experiments that combine complementary models to test whether fusion improves retrieval beyond the best individual model.
+1. *Data-centric studies:* analyses of dataset quality, duplicate structure, and split design.
+2. *Core model development:* backbone, training, and embedding experiments aimed at improving retrieval performance.
+3. *Robustness and diagnostic experiments:* targeted tests of how retrieval behaves under controlled changes such as background manipulations or alternative evaluation protocols.
+4. *Interpretability analyses:* experiments that examine which image regions influence similarity decisions and how reliable these explanations are.
+5. *Ensemble experiments:* final experiments that combine complementary models to test whether fusion improves retrieval beyond the best individual model.
 
 Together, these experiment groups move from baseline model development to deeper analysis of robustness, explanation quality, and model complementarity.
 
@@ -40,23 +39,26 @@ Together, these experiment groups move from baseline model development to deeper
 
 ### 4.1 Experiment overview
 
+## EDA Experiments
+
 | ID | Experiment | Research question | README |
 |---|---|---|---|
-| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/e01_baseline.md` |
-| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior?  | `reports/experiments/e02_deduplication.md` |
-| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? (X models) | `reports/experiments/e03_backbone_comparison.md` |
-| E04; Q11 | Loss comparison | (X loss types + X combinations) | `reports/experiments/e04_loss_comparison.md` |
+| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/E01_baseline_and_eda.md` |
+| E0X; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E04_eda_background_intervention.md` |
+| E0X; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `reports/experiments/E_eda_foreground_contribution` |
+| E0X; Q2 | XAI class attribution |  | `reports/experiments/E_eda_class_attribution` |
+| E0X; Q31 | XAI similarity |  | `reports/experiments/E_eda_xai_similarity` |
 
+## Leaderboard Experiments
 
+| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior?  | `reports/experiments/E02_kaggle_deduplication.md` |
+| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? (X models) | `reports/experiments/E03_backbone_comparison.md` |
+| E04; Q11 | Loss comparison | (X loss types + X combinations) | `reports/experiments/.md` |
+|  | Augmentation  |  | `reports/experiments/.md` |
+|  | Scheduler and Optimizer |  | `reports/experiments/.md` |
+|  | Resizing |  | `reports/experiments/.md` |
 
-
-| E0X; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/e04_background_reliance.md` |
-| E0X; Q0 | Foreground vs. Background | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `` |
-| E0X; Q2 | Class attribution (xai) |  | `` |
-| E0X; Q31 | Pairwise Similarity (xai) |  | `` |
-
-
-| E0X | Ensemble fusion | Can complementary models be combined to outperform the best single model? | `reports/experiments/e06_ensemble.md` |
+| E0X | Ensemble | Can complementary models be combined to outperform the best single model? | `reports/experiments/E0X_kaggle_ensemble.md` |
 
 ### 4.2 Traceability map
 

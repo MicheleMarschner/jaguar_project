@@ -1,12 +1,10 @@
-from jaguar.config import PATHS
-from jaguar.utils.utils import ensure_dir
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from PIL import Image
 from pathlib import Path
 
 
+from jaguar.config import PATHS
 from jaguar.utils.utils_evaluation import get_ranked_candidates_for_query
 
 
@@ -150,20 +148,16 @@ def build_topk_candidates_df(
     return pd.DataFrame(rows)
 
 
-from pathlib import Path
-import pandas as pd
-
-
-def build_singles_group_summary(experiment_group_dir: str | Path) -> pd.DataFrame:
+def build_singles_group_summary(experiment_root_dir: str | Path) -> pd.DataFrame:
     """
     Aggregate protocol_comparison.csv files from all single-model runs in one
     experiment group into one summary table with one row per model.
     """
-    experiment_group_dir = Path(experiment_group_dir)
+    experiment_root_dir = Path(experiment_root_dir)
 
     rows = []
 
-    for run_dir in sorted(experiment_group_dir.iterdir()):
+    for run_dir in sorted(experiment_root_dir.iterdir()):
         if not run_dir.is_dir():
             continue
 
@@ -190,7 +184,7 @@ def build_singles_group_summary(experiment_group_dir: str | Path) -> pd.DataFram
         rows.append(row)
 
     if not rows:
-        raise ValueError(f"No usable protocol_comparison.csv files found in {experiment_group_dir}")
+        raise ValueError(f"No usable protocol_comparison.csv files found in {experiment_root_dir}")
 
     out_df = pd.DataFrame(rows)
 
@@ -211,13 +205,18 @@ def build_singles_group_summary(experiment_group_dir: str | Path) -> pd.DataFram
     return out_df
     
 
-if __name__ == "__main__":
-
-    group_dir = PATHS.runs / "kaggle_ensemble"
-    singles_df = build_singles_group_summary(group_dir)
+def run(
+    config: dict, 
+    save_dir: Path, 
+    root_dir: Path | None = None, 
+    run_dir: Path | None = None, 
+    **kwargs
+) -> None:
+    img_root = PATHS.data_train
+    singles_df = build_singles_group_summary(root_dir)
 
     print(singles_df.to_string(index=False))
-    singles_df.to_csv(group_dir / "singles_group_summary.csv", index=False)
+    singles_df.to_csv(root_dir / "singles_group_summary.csv", index=False)
 
     cols = [
         "run_name",
@@ -232,10 +231,6 @@ if __name__ == "__main__":
 
     cols = [c for c in cols if c in singles_df.columns]
     print(singles_df[cols].to_string(index=False))
-
-    # Adjust this root if needed
-    img_root = PATHS.data_train
-
 
     """
     Fall: gute Query, aber schlechte Positives

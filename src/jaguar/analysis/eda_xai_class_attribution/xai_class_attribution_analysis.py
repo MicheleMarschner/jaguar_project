@@ -1,6 +1,9 @@
 import pandas as pd
 from pathlib import Path
 
+from jaguar.analysis.xai_metrics_analysis import run_xai_class_metrics_analysis
+from jaguar.config import PATHS
+
 def build_class_xai_main_table(df_vec: pd.DataFrame) -> pd.DataFrame:
     """
     Main report table:
@@ -33,3 +36,20 @@ def save_class_xai_main_table(df_vec: pd.DataFrame, save_dir: Path) -> Path:
     out = save_dir / "xai_class_main_table.csv"
     table.to_csv(out, index=False)
     return out
+
+
+def run(
+    config: dict,
+    save_dir: Path, 
+    root_dir: Path | None = None,
+    run_dir: Path | None = None,
+    exemplar_run_dir: Path | None = None,
+    **kwargs,
+) -> None:
+    
+    save_root = PATHS.results / "xai_metrics"
+        
+    run_xai_class_metrics_analysis(
+        run_root=run_dir,
+        save_root=save_root,
+    )

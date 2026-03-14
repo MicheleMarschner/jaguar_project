@@ -9,9 +9,7 @@ from jaguar.utils.utils import read_json_if_exists
 
 def load_run(run_dir: Path) -> tuple[dict[str, Any], pd.DataFrame]:
     """
-    Load one experiment run from:
-    - metrics.json
-    - train_history.json
+    Load one experiment run from experiment folder
     """
     metrics = read_json_if_exists(run_dir / "metrics.json")
     history = pd.DataFrame(read_json_if_exists(run_dir / "train_history.json"))

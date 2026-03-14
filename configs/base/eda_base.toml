@@ -11,21 +11,13 @@ mining_type = "hard"
 
 [split]
 strategy = "closed_set"
-<<<<<<< HEAD:configs/base/eda_base.toml
-val_split_size = 0.2   #0.2 round_2, 0.05 round_1
-=======
 val_split_size =  0.2  #0.05   #0.2
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 include_duplicates = false
 seed = 42
 
 [data]
-<<<<<<< HEAD:configs/base/eda_base.toml
-split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
-=======
 split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
 # split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = true    # Set to true to handle class imbalance
 num_workers = 4
@@ -33,21 +25,12 @@ use_fiftyone = false
 
 [curation]
 train_k = 1
-<<<<<<< HEAD:configs/base/eda_base.toml
-val_k = 1
-phash_threshold = 4
-
-[preprocessing]
-train_background = "original"
-val_background = "original"
-=======
 val_k = 30  #50
 phash_threshold = 4
 
 [preprocessing]
 train_background = "original" #"random_bg"
 val_background = "original" #"blur_bg"
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 bg_dir = "data/round_2/backgrounds"
 p_original = 0.5
 edge_softness = 2
@@ -56,31 +39,21 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"
-<<<<<<< HEAD:configs/base/eda_base.toml
-save_dir = "checkpoints/round_2/" 
-experiment_name = "kaggle_base"
-epochs = 40
-batch_size = 32
-=======
 save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
 # save_dir = "checkpoints/round_1/"  # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
 experiment_name = "scientific_base"
 epochs = 30
 batch_size = 32   #16
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 seed = 42
 early_stopping = true
 early_stopping_patience = 5
 # ---Fine-tuning Params---
 unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 unfreeze_blocks = 2      # Number of blocks (from the end) to unfreeze; if set to 0 the backbone stays frozen
-<<<<<<< HEAD:configs/base/eda_base.toml
-=======
 backbone_lr = 2e-6      # Keep this very small (1/10th or 1/100th of head LR)
 # ---EMA Params---
 ema = false
 ema_decay = 0.995
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 
 [optimizer]
 type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
@@ -112,12 +85,6 @@ color_jitter_brightness = 0.2
 color_jitter_contrast = 0.2
 random_erasing_p = 0.25
 
-<<<<<<< HEAD:configs/base/eda_base.toml
-[progressive_resizing]
-enabled = false
-sizes = []              # [224, 384, 512]
-stage_epochs = []       # [10, 10, 10]
-=======
 [mining_analysis]
 silhouette_freq = 0         # Compute Silhouette and refresh viz data every x epochs
 force_silhouette = false    # Set to true for the mining RQ study
@@ -129,7 +96,6 @@ extra_val_backgrounds = ["original", "gray_bg"]
 seed = 42
 n_samples = 100
 ig_steps = 10
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml
 
 [progressive_resizing]
 enabled = false
@@ -137,10 +103,5 @@ stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true
-<<<<<<< HEAD:configs/base/eda_base.toml
-project = "jaguar-reid-SpotItLikeItsHot"
-mode = "online"
-=======
 project = "jaguar-reid" # "jaguar-reid-SpotItLikeItsHot"
 mode = "online"
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0:configs/base/scientific_base.toml

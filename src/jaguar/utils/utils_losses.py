@@ -101,20 +101,7 @@ class SphereFaceLoss(nn.Module):
         logits = (one_hot * phi_theta) + ((1.0 - one_hot) * cosine)
         logits = logits * self.s
         return F.cross_entropy(logits, labels), logits
-
-# class TripletLoss(nn.Module):
-#     """
-#     Standard Triplet Loss. 
-#     Note: Requires (Anchor, Positive, Negative) inputs.
-#     """
-#     def __init__(self, m:float = 0.3):
-#         super().__init__()
-#         self.m = m
-
-#     def forward(self, anchor, positive, negative):
-#         distance = F.triplet_margin_loss(anchor, positive, negative, margin=self.m, p=2)
-#         return distance
-    
+  
 class TripletLoss(nn.Module):
     """Works directly with embeddings rather than with positives, negatives and anchors."""
     def __init__(self, margin=0.3, mining="hard", norm_feat=True, debug=False):

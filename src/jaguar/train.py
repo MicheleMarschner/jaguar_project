@@ -3,15 +3,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
 import tomli_w
-import torch.optim as optim
 from tqdm import tqdm
 from pathlib import Path
 from muon import SingleDeviceMuonWithAuxAdam
-from torch.cuda.amp import autocast, GradScaler
+from torch.cuda.amp import GradScaler
 from timm.utils import ModelEmaV3
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
-from jaguar.config import PATHS, DEVICE 
+from jaguar.config import DEVICE 
 from jaguar.utils.utils_scheduler import JaguardIdScheduler
     
 class JaguarTrainer:
@@ -159,75 +158,7 @@ class JaguarTrainer:
             self.scheduler = JaguardIdScheduler(self.optimizer, **sched_cfg)
         else:
             raise ValueError(f"Unknown scheduler type: {sched_type}")
-        
-        # self.optimizer = optim.Adam( #optim.AdamW
-        #     filter(lambda p: p.requires_grad, model.parameters()),
-        #     lr=config["scheduler_params"]["lr_start"],
-        #     # weight_decay=config['training']['weight_decay']
-        # )
-        # self.scheduler = JaguardIdScheduler(self.optimizer, **dict(config["scheduler_params"]))
-        
-        # First version with CosineAnnealingLR for comparison
-        # self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
-        #     self.optimizer, T_max=config['training']['epochs']
-        # )
-        
-        # # ----------------------------
-        # # Optimizer
-        # # ----------------------------
-        # opt_cfg = config['optimizer']
-        # params = filter(lambda p: p.requires_grad, self.model.parameters())
-
-        # if opt_cfg['type'] == "AdamW":
-        #     self.optimizer = torch.optim.AdamW(
-        #         params, lr=opt_cfg['lr'], weight_decay=opt_cfg.get('weight_decay', 0)
-        #     )
-        # elif opt_cfg['type'] == "Adam":
-        #     self.optimizer = torch.optim.Adam(
-        #         params, lr=opt_cfg['lr'], betas=tuple(opt_cfg.get('betas', [0.9,0.999])), weight_decay=opt_cfg.get('weight_decay', 0)
-        #     )
-        # elif opt_cfg['type'] == "SGD":
-        #     self.optimizer = torch.optim.SGD(
-        #         params, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
-        #     )
-        # elif opt_cfg['type'] == "Muon":  # Muon accepts similar arguments to AdamW
-        #     self.optimizer = Muon(
-        #         params, lr=opt_cfg["lr"], weight_decay=opt_cfg.get("weight_decay", 0), betas=tuple(opt_cfg.get("betas", [0.9,0.999]))
-        #     )
-        # else:
-        #     raise ValueError(f"Unknown optimizer type: {opt_cfg['type']}")
-
-        # # ----------------------------
-        # # Scheduler
-        # # ----------------------------
-        # sched_cfg = config['scheduler']
-        # sched_type = sched_cfg.get("type", "CosineAnnealingLR")
-
-        # if sched_type == "CosineAnnealingLR":
-        #     self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        #         self.optimizer, T_max=sched_cfg['T_max'], eta_min=sched_cfg.get('lr_min',0)
-        #     )
-        # elif sched_type == "OneCycleLR":
-        #     self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
-        #         self.optimizer,
-        #         max_lr=sched_cfg['lr_max'],
-        #         total_steps=sched_cfg.get('total_steps', None),
-        #         epochs=sched_cfg.get('epochs', None),
-        #         steps_per_epoch=len(self.train_loader),
-        #     )
-        # elif sched_type == "ReduceLROnPlateau":
-        #     self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #         self.optimizer,
-        #         mode='max',
-        #         factor=sched_cfg.get('factor', 0.1),
-        #         patience=sched_cfg.get('patience', 2),
-        #         min_lr=sched_cfg.get('lr_min', 1e-7)
-        #     )
-        # elif sched_type == "JaguardIdScheduler":
-        #     self.scheduler = JaguardIdScheduler(self.optimizer, **sched_cfg)
-        # else:
-        #     raise ValueError(f"Unknown scheduler type: {sched_type}")
-
+   
     def train_epoch(self, epoch):
         # Check if it's time to unfreeze part of the backbone
         unfreeze_ep = self.config['training'].get('unfreeze_epoch', 0)
@@ -251,11 +182,6 @@ class JaguarTrainer:
             labels = batch["label_idx"].to(self.device)
             
             self.optimizer.zero_grad()
-            # # JaguarIDModel returns (loss, logits) when labels are provided
-            # loss, _ = self.model(imgs, labels)
-            
-            # loss.backward()
-            # self.optimizer.step()
             
             device = 'cuda' if torch.cuda.is_available() else 'cpu'
             with torch.autocast(device_type=device, dtype=torch.float16):
@@ -311,15 +237,13 @@ class JaguarTrainer:
         )
         metrics = bundle.compute_all(include_silhouette=do_heavy_metrics)
         return metrics, full_embeddings, full_labels, do_heavy_metrics
-        # return bundle.compute_all()
 
     def save_checkpoint(self, epoch, metrics) -> Path:
         path = self.save_dir
         os.makedirs(path, exist_ok=True)
         save_path = path / "best_model.pth"
-        save_dict = {                                                ## !TODO should be in experiments folder!!
+        save_dict = {                                                
             'epoch': epoch,
-            # 'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
             'metrics': metrics,
             'config': self.config
@@ -330,14 +254,11 @@ class JaguarTrainer:
         else:
             save_dict['model_state_dict'] = self.model.state_dict()
     
-        # if self.use_ema and self.ema_model is not None:
-        #     save_dict['ema_state_dict'] = self.ema_model.state_dict()
-
         torch.save(save_dict, save_path)
         print(f"[Info] Saved checkpoint: {save_path}")
         
         # save final runtime config
-        config_save_path = path / "config_leaderboard_exp.toml"         ## !TODO here or in main - should be in experiments folder!!
+        config_save_path = path / "config_leaderboard_exp.toml"       
         with open(config_save_path, "wb") as f:
             tomli_w.dump(self.config, f)
 

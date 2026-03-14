@@ -1,12 +1,7 @@
-from __future__ import annotations
-
 import json
-import os
 import re
-import shutil
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
-
 try:
     import fiftyone as fo
     HAS_FIFTYONE = True
@@ -16,9 +11,7 @@ except ImportError:
 from PIL import Image
 
 
-# ----------------------------
-# Minimal builder assumption
-# ----------------------------
+
 FNAME_RE = re.compile(r"^(train|test)_(\d+)\.(png|jpg|jpeg|webp)$", re.IGNORECASE)
 
 def _require_fiftyone() -> None:
@@ -161,13 +154,10 @@ class FODataset:
         inst.dataset = ds
         return inst
 
-    # ----------------------------
-    # App
-    # ----------------------------
+
     def launch(self):
         _require_fiftyone()
         return fo.launch_app(self.dataset, auto=False)
-
 
 
 def rewrite_samples_json_to_data_relative(export_dir: Path, data_root: Path) -> Path:
@@ -208,9 +198,6 @@ def rewrite_samples_json_to_data_relative(export_dir: Path, data_root: Path) -> 
     print(f"[FO] Rewrote {changed} sample filepaths to data-relative in {fp}")
     return fp
 
-# =====================================================================
-# Minimal "build from raw" helper (filename ids)
-# =====================================================================
 def build_from_raw_filename_ids(
     dataset_name: str,
     train_dir: Union[str, Path],
@@ -257,9 +244,6 @@ def build_from_raw_filename_ids(
     return fo_ds
 
 
-# =====================================================================
-# Manifest cache helper (THIS is what Stage0 uses)
-# =====================================================================
 def manifest_exists(manifest_dir: Union[str, Path]) -> bool:
     return FODataset._manifest_exists(manifest_dir)
 

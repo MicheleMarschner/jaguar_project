@@ -19,7 +19,6 @@ from jaguar.utils.utils_datasets import (
     load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
-    # get_stratified_train_val_split,
     auto_generate_pr_sizes,
 )
 from jaguar.train import JaguarTrainer
@@ -200,20 +199,10 @@ def main():
         is_training=False,
         input_size_override=current_resize
     )
-    # else:
-    #     train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-    #     val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
-            
     # Labels for Sampler
     train_labels = train_ds.labels_idx
     
     print(f"[JaguarIDModelInfo] Training Identities: {num_classes} | Train: {len(train_ds)} | Val: {len(val_ds)}")
-
-    # Set Transforms from the Model Backbone
-    # train_ds.transform = model.backbone_wrapper.transform
-    # val_ds.transform = model.backbone_wrapper.transform
-    # train_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=True)
-    # val_ds.transform = get_transforms(config, model.backbone_wrapper, is_training=False)
 
     # Initialize Balanced Sampler for Re-ID
     # We use train_ds.labels_idx which contains numeric IDs for every sample
@@ -226,8 +215,6 @@ def main():
     # Create DataLoaders
     train_loader = DataLoader(
         train_ds,
-        # batch_size=config['training']['batch_size'],
-        # shuffle=True,
         batch_sampler=custom_batch_sampler,
         num_workers=config['data']['num_workers'],
         pin_memory=True
@@ -241,41 +228,6 @@ def main():
         pin_memory=True
     )
     
-    # # Setup train/val splits  
-    # full_ds.transform = model.backbone_wrapper.transform 
-    # train_idx, val_idx, all_labels = get_stratified_train_val_split(
-    #     full_ds, 
-    #     val_split_size=config['data']['val_split_size'], 
-    #     seed=config['training']['seed']
-    # )
-
-    # train_ds = Subset(full_ds, train_idx)
-    # val_ds = Subset(full_ds, val_idx)
-
-    # # Extract labels specific to the training subset for the sampler
-    # train_subset_labels = [all_labels[i] for i in train_idx]
-
-    # # Initialize Balanced Sampler
-    # custom_batch_sampler = BalancedBatchSampler(
-    #     labels=train_subset_labels,
-    #     batch_size=config['training']['batch_size'],
-    #     samples_per_class=4 # P=8, K=4 for a batch size of 32
-    # )
-
-    # # Create DataLoaders. Note: If using a sampler, 'shuffle' must be False
-    # train_loader = DataLoader(
-    #     train_ds,
-    #     batch_sampler=custom_batch_sampler,
-    #     num_workers=config['data']['num_workers'],
-    #     pin_memory=True
-    # )
-
-    # val_loader = DataLoader(
-    #     val_ds,
-    #     batch_size=config['training']['batch_size'],
-    #     shuffle=False,
-    #     num_workers=config['data']['num_workers']
-    # )
     # Start Training Loop
     if not config['training']['save_dir']:
         config['training']['save_dir'] = PROJECT_ROOT
@@ -318,8 +270,6 @@ def main():
                 )
                 
         avg_loss = trainer.train_epoch(epoch)
-        # metrics = trainer.validate()
-        # Validate returns metrics, embeddings and a flag
         metrics, current_embs, current_lbls, was_heavy = trainer.validate(epoch=epoch)
         
         

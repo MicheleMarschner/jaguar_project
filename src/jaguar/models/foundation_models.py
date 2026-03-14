@@ -265,16 +265,10 @@ class FoundationModelWrapper:
                 tensors.append(img)
         batch = torch.stack(tensors).to(self.device)
         
-        #TO-DO: re-check whether we need the part commented out 
+        #!TODO: re-check whether we need the part commented out 
         with torch.no_grad():
             # Process the batch in one go
             emb = self.model(batch)  # Direct call for embedding extraction
-        # with torch.no_grad():
-        #     # assume the model has `get_embeddings` method
-        #     if hasattr(self.model, "get_embeddings"):
-        #         emb = self.model.get_embeddings(batch)
-        #     else:
-        #         emb = self.model(batch)  # fallback: use raw output
         emb_np = emb.cpu().numpy()
         print(f"[Info] Extracted embeddings shape: {emb_np.shape}")
         return emb_np
@@ -325,17 +319,3 @@ class FoundationModelWrapper:
         target_layers = [config["layer_getter"](self.model)]
         
         return target_layers, config["reshape_transform"]
-
-    
-if __name__ == "__main__":
-    
-    # Create a dummy image
-    dummy_img = Image.fromarray((np.random.rand(448,448,3)*255).astype(np.uint8))
-    # Initialize model wrapper
-    model_wrapper = FoundationModelWrapper("EVA-02", device="cpu")
-    # Extract embeddings
-    embeddings = model_wrapper.extract_embeddings([dummy_img])
-    print("Embeddings:", embeddings.shape)
-    # Save and load embeddings
-    model_wrapper.save_embeddings(embeddings, split="training")
-    loaded_emb = model_wrapper.load_embeddings(split="training")

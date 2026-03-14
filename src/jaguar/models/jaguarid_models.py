@@ -140,11 +140,8 @@ class JaguarIDModel(nn.Module):
             self.bn = nn.BatchNorm1d(self.feature_dim)
             head_input_dim = self.feature_dim
 
-<<<<<<< HEAD
-=======
         print(f"[JaguarID] Feature dim: {self.feature_dim}")     
 
->>>>>>> 6c72455f70423f354c26d0c011032db04b0b84a0
         # Select head + loss
         if self.head_type == "arcface":
             self.head = BaseMarginHead(head_input_dim, num_classes)

@@ -366,11 +366,9 @@ def evaluate_query_gallery_retrieval(
 
 def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir: Path):
     """
-    Builds the shared original gallery used as the fixed reference for background-intervention
+    Builds the shared original gallery used as the fixed reference for background-reliance
     comparisons across query settings.
     """
-
-    print("[DEBUG] build_original_gallery_base", train_config)
 
     ctx_orig = build_eval_context(
         config=config,

@@ -46,6 +46,8 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
         eval_type = experiment_meta.get("eval_type")
         if eval_type == "background_intervention":
             return "src/jaguar/experiments/run_background_intervention.py"
+        elif eval_type == "foreground_contribution":
+            return "src/jaguar/experiments/run_foreground_contribution.py"
         raise ValueError(f"Unknown eval_type: {eval_type}")
 
     if mode == "explain":

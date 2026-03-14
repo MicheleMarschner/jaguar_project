@@ -1,0 +1,63 @@
+{
+  "experiment": {
+    "name": "xai_base",
+    "mode": "explain",
+    "setup_name": "eda_base",
+    "output_profile": "xai"
+  },
+  "inference": {
+    "batch_size": 64,
+    "use_tta": false,
+    "use_qe": false,
+    "use_rerank": false
+  },
+  "evaluation": {
+    "checkpoint_dir": "inference_model",
+    "experiment_name": "eva02"
+  },
+  "data": {
+    "num_workers": 4,
+    "split_data_path": "splits/strclosed_set__dupFalse__kTrain3__kVal1__p4/full_split.parquet"
+  },
+  "split": {
+    "include_duplicates": false
+  },
+  "xai": {
+    "dataset_name": "jaguar_splits_curated",
+    "split_name": "val",
+    "n_samples": 50,
+    "seed": 51,
+    "explainer_names": [
+      "IG",
+      "GradCAM"
+    ],
+    "pair_types": [
+      "easy_pos",
+      "hard_neg"
+    ],
+    "ig_steps": 50,
+    "ig_internal_bs": 64,
+    "ig_batch_size": 64
+  },
+  "xai_metrics": {
+    "faithfulness": {
+      "steps": 30,
+      "baseline": "blur",
+      "use_abs": true
+    },
+    "complexity": {
+      "abs": true,
+      "normalise": true,
+      "display_progressbar": true
+    }
+  },
+  "logging": {
+    "enabled": true,
+    "project": "jaguar-reid-SpotItLikeItsHot",
+    "mode": "online"
+  },
+  "output": {
+    "profile": "xai",
+    "experiment_group": "eda_background_intervention"
+  }
+}

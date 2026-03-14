@@ -1,6 +1,0 @@
-[evaluation]
-experiment_name = "eva02_origin_gray"
-
-[output]
-profile = "xai"
-experiment_group = "eda_background_intervention"

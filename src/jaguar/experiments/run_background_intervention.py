@@ -138,8 +138,6 @@ def run_background_intervention(config, save_dir):
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
 
-    print("[DEBUG] run_background_intervention_eval", train_config)
-
     base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
 
     ctx_orig = base["ctx_orig"]

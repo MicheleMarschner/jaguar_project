@@ -122,8 +122,6 @@ def log_wandb_ensemble_config(
         allow_val_change=True,
     )
 
-
-
 def log_wandb_dataset_info(
     run: Run | None,
     run_dir: Path,

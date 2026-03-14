@@ -1,8 +1,0 @@
-{
-  "backbone_name": "EfficientNet-B4",
-  "head_type": "arcface",
-  "total_params": 20400432,
-  "trainable_params": 2851816,
-  "input_size": 380,
-  "flops": null
-}

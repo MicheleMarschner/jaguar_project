@@ -1,0 +1,21 @@
+{
+  "experiment_name": "backbone_megadescriptor_l",
+  "best_epoch": 18,
+  "monitor_metric": "pairwise_AP",
+  "best_score": 0.8823099515858717,
+  "metrics": {
+    "id_balanced_mAP": 0.6093348957594287,
+    "mAP": 0.6093348957594287,
+    "pairwise_AP": 0.8823099515858717,
+    "rank1": 0.9149659863945578,
+    "rank5": 0.9285714285714286,
+    "nDCG@10": 0.9919086859546344,
+    "recall@5": 0.9285714285714286,
+    "pos_sim": 0.7764185070991516,
+    "neg_sim": -0.009654139168560505,
+    "sim_gap": 0.7860726462677121,
+    "intra_dist": 0.5357831120491028,
+    "inter_dist": 1.4165852069854736,
+    "dist_gap": 0.8808020949363708
+  }
+}

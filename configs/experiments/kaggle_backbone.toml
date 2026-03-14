@@ -1,10 +1,10 @@
 [experiment]
-name = "kaggle_backbone"
+name = "scientific_backbone"
 description = "Backbone ablation for Kaggle-oriented training runs."
-base_config = "base/kaggle_base"
+base_config = "base/scientific_base"
 mode = "train"
-train_type = "kaggle"
-setup_name = "kaggle_base"
+train_type = "scientific"
+setup_name = "scientific_base"
 output_profile = "backbone"
 
 [[experiment.runs]]
@@ -20,33 +20,5 @@ experiment_name = "backbone_miew_id"
 backbone_name = "MiewID"
 
 [[experiment.runs]]
-experiment_name = "backbone_dino_small"
-backbone_name = "DINO-Small"
-
-[[experiment.runs]]
 experiment_name = "backbone_dinov2_base"
 backbone_name = "DINOv2-Base"
-
-[[experiment.runs]]
-experiment_name = "backbone_dinov3_base"
-backbone_name = "DINOv3-Base"
-
-[[experiment.runs]]
-experiment_name = "backbone_dinov3_large"
-backbone_name = "DINOv3-Large"
-
-[[experiment.runs]]
-experiment_name = "backbone_dinov2_for_wildlife"
-backbone_name = "DINOv2_for_wildlife"
-
-[[experiment.runs]]
-experiment_name = "backbone_convnext_v2"
-backbone_name = "ConvNeXt-V2"
-
-[[experiment.runs]]
-experiment_name = "backbone_efficientnet_b4"
-backbone_name = "EfficientNet-B4"
-
-[[experiment.runs]]
-experiment_name = "backbone_swin_transformer"
-backbone_name = "Swin-Transformer"

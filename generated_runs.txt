@@ -1,0 +1,4 @@
+configs/_generated/scientific_backbone/backbone_dinov2_base.toml
+configs/_generated/scientific_backbone/backbone_eva02.toml
+configs/_generated/scientific_backbone/backbone_megadescriptor_l.toml
+configs/_generated/scientific_backbone/backbone_miew_id.toml

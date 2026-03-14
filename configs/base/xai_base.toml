@@ -2,7 +2,7 @@
 name = "xai_base"
 mode = "explain"
 # type = "similarity"
-setup_name = "scientific_base"          # hier braucht es noch eigenes setup!
+setup_name = "eda_base"          # hier braucht es noch eigenes setup!
 output_profile = "xai"
 
 [output]

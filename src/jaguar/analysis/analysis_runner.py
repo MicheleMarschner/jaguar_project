@@ -3,11 +3,11 @@ from pathlib import Path
 
 from jaguar.analysis.aggregate import aggregate_experiment_outputs
 from jaguar.analysis.experiment_analysis import run_experiment_analysis
-from jaguar.analysis.split_analysis import run_split_diagnostics
-from jaguar.analysis.burst_analysis import run_burst_analysis
+from jaguar.analysis.E02_kaggle_deduplication.split_analysis import run_split_diagnostics
+from jaguar.analysis.E02_kaggle_deduplication.burst_analysis import run_burst_analysis
 from jaguar.analysis.xai_metrics_analysis import run_xai_metrics_analysis
 from jaguar.analysis.xai_similarity_analysis import run_xai_similarity_analysis
-from jaguar.analysis.xai_background_analysis import run_xai_background_sensitivity
+from jaguar.analysis.xai_background_analysis import run_foreground_background_analysis
 from jaguar.analysis.aggregate import (
     aggregate_experiment_outputs,
     detect_output_profile,
@@ -77,7 +77,7 @@ def run_xai_background_analysis_task(args) -> None:
     else:
         experiments_dir = PATHS.runs / "xai/background_sensitivity"
 
-    outputs = run_xai_background_sensitivity(
+    outputs = run_foreground_background_analysis(
         experiments_dir=experiments_dir,
         #experiments_dir=PATHS.runs / "xai/background_sensitivity",
         # runs = load_runs(PATHS.runs / "xai/background_sensitivity")

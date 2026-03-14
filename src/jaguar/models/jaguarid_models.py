@@ -106,7 +106,7 @@ class JaguarIDModel(nn.Module):
 
         # Dynamic feature_dim # --- DYNAMIC DIMENSION INFERENCE ---
         self.backbone.eval()
-        input_res = self.backbone_wrapper.input_size # Use the wrapper's config!
+        input_res = self.backbone_wrapper.input_size 
         
         with torch.no_grad():
             dummy = torch.randn(1, 3, input_res, input_res).to(device)

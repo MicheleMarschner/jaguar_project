@@ -8,13 +8,14 @@ from dataclasses import fields
 from pathlib import Path
 import random
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from typing import Any, Literal, Optional, Sequence
 
 from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
 
 
-def read_json_if_exists(path: Path) -> Optional[dict[str, Any]]:
+def read_json_if_exists(path: Path) -> Optional[dict[str, Any]] | Optional[list[dict[str, Any]]]:
     if not path.exists():
         return None
     with open(path, "r", encoding="utf-8") as f:
@@ -245,3 +246,11 @@ def to_rel_path(p: str | Path) -> dict:
 
     # fallback: store only filename (last resort)
     return {"root": "data", "rel": p.name}
+
+
+def save_fig(fig: plt.Figure, save_path: str | Path, dpi: int = 200) -> None:
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)

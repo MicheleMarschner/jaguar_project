@@ -30,6 +30,7 @@ dependencies = [
   "seaborn==0.13.2",
   "torchmetrics",
   "tomli-w==1.2.0",
+  "git+https://github.com/KellerJordan/Muon.git",
 ]
 
 [project.optional-dependencies]

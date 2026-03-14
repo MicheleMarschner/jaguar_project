@@ -1,0 +1,24 @@
+[training]
+experiment_name = "progressive_epochs_10_cnv2"
+unfreeze_epoch = 3
+unfreeze_blocks = 100
+epochs = 30
+
+[model]
+backbone_name = "ConvNeXt-V2"
+s = 40
+m = 0.4
+
+[progressive_resizing]
+enabled = true
+stage_epochs = [10, 10, 10]
+
+[augmentation]
+random_resized_crop = true
+
+[output]
+profile = "resizing"
+experiment_group = "kaggle_progressive_resizing"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

@@ -1,0 +1,16 @@
+[training]
+experiment_name = "progressive_epochs_10"
+
+[model]
+backbone_name = "ConvNeXt-V2"
+
+[progressive_resizing]
+enabled = true
+stage_epochs = [10, 10, 10]
+
+[output]
+profile = "resizing"
+experiment_group = "kaggle_progressive_resizing"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

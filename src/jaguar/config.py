@@ -133,8 +133,8 @@ PATHS = Paths(
 # NOTE: caching pattern (read-if-exists else compute+write)
 # - Local: read_roots empty, write_root is under WORK_ROOT (often same as PROJECT_ROOT)
 # - Kaggle: optional read cache dataset mounted at /kaggle/input/jaguar-artifacts, write_root under /kaggle/working
-_experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_2")  # .../round_1"
-_results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_2") # .../round_1"
+_experiments_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-code/experiments/round_1")  # .../round_1"
+_results_cache     = Path("/kaggle/input/datasets/mmarschn/jaguar-code/results/round_1") # .../round_1"
 _data_cache = Path("/kaggle/input/datasets/mmarschn/jaguar-data/jaguar_data")   
 
 _experiments_read_roots = []

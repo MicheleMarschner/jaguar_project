@@ -1,0 +1,71 @@
+[experiment]
+name = "kaggle_mining"
+description = "Hard- vs semi- negative mining analysis ablation on triplet loss, with fixed backbone and training setup."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_base"
+output_profile = "mining"
+
+[[experiment.runs]]
+experiment_name = "loss_triplet_bot_hard"
+head_type = "triplet"
+m = 0.7
+mining_type = "hard"
+silhouette_freq = 5        
+force_silhouette = true
+early_stopping = false
+optimizer_lr = 3.5e-5
+backbone_lr = 3.5e-6
+scheduler_lr_start = 3.5e-5
+scheduler_lr_max = 3.5e-4
+batch_size = 128
+unfreeze_epoch = 5
+samples_per_class = 4
+
+[[experiment.runs]]
+experiment_name = "loss_triplet_bot_semi_hard"
+head_type = "triplet"
+m = 0.7
+mining_type = "semi-hard"
+silhouette_freq = 5        
+force_silhouette = true
+early_stopping = false
+optimizer_lr = 3.5e-5
+backbone_lr = 3.5e-6
+scheduler_lr_start = 3.5e-5
+scheduler_lr_max = 3.5e-4
+batch_size = 128
+unfreeze_epoch = 5
+samples_per_class = 4
+
+[[experiment.runs]]
+experiment_name = "loss_triplet_bot_weighted"
+head_type = "triplet"
+m = 0.7
+mining_type = "weighted"
+silhouette_freq = 5        
+force_silhouette = true
+early_stopping = false
+optimizer_lr = 3.5e-5
+backbone_lr = 3.5e-6
+scheduler_lr_start = 3.5e-5
+scheduler_lr_max = 3.5e-4
+batch_size = 128
+unfreeze_epoch = 5
+samples_per_class = 4
+
+# [[experiment.runs]]
+# experiment_name = "loss_triplet_bot_random"
+# head_type = "triplet"
+# m = 0.7
+# mining_type = "random"
+# silhouette_freq = 5        
+# force_silhouette = true
+# early_stopping = false
+# optimizer_lr = 3.5e-5
+# backbone_lr = 3.5e-6
+# scheduler_lr_start = 3.5e-5
+# scheduler_lr_max = 3.5e-4
+# batch_size = 128
+# unfreeze_epoch = 5
+# samples_per_class = 4

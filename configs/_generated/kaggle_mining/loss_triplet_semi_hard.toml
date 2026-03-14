@@ -1,0 +1,25 @@
+[training]
+experiment_name = "loss_triplet_semi_hard"
+unfreeze_epoch = 10
+
+[model]
+head_type = "triplet"
+m = 0.7
+mining_type = "semi-hard"
+
+[mining_analysis]
+silhouette_freq = 5
+force_silhouette = true
+
+[optimizer]
+lr = 0.001
+
+[scheduler]
+lr_start = 0.001
+
+[output]
+profile = "mining"
+experiment_group = "kaggle_mining"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

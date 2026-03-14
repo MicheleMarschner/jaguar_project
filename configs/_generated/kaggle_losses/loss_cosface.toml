@@ -1,0 +1,14 @@
+[training]
+experiment_name = "loss_cosface"
+
+[model]
+head_type = "cosface"
+s = 30.0
+m = 0.35
+
+[output]
+profile = "loss"
+experiment_group = "kaggle_losses"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

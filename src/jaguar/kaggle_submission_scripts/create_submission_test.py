@@ -68,8 +68,9 @@ def generate_submission():
     CHECKPOINT_PATH = PATHS.checkpoints / "backbone_eva02/best_model.pth"
     TEST_CSV_PATH = PATHS.data / "jaguar-re-id/test.csv"
 
-    BACKBONE_NAME = "EVA-02"
-    EMB_DIM = 1024
+    BACKBONE_NAME = "EVA-02" #"ConvNeXt-V2"
+    HEAD_TYPE= "triplet" # "arcface"
+    EMB_DIM = 1024 #1536
     NUM_CLASSES = 31
     BATCH_SIZE = 32
     USE_PROJECTION = True
@@ -83,7 +84,7 @@ def generate_submission():
     model = JaguarIDModel(
         backbone_name=BACKBONE_NAME,
         num_classes=NUM_CLASSES,
-        head_type="arcface",
+        head_type=HEAD_TYPE,
         device=DEVICE,
         emb_dim=EMB_DIM,
         use_projection = USE_PROJECTION,

@@ -132,6 +132,7 @@ def build_eval_context(
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     num_classes = len(train_ds.label_to_idx)

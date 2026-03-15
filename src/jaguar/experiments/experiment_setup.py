@@ -12,8 +12,6 @@ SETUP_STEPS = {
         "ensure_output_dirs",
         "ensure_fiftyone_init_dataset",
         "ensure_background_pool",
-        "ensure_burst_artifacts",
-        "ensure_split_artifacts"
     ],
     "deduplication": [
         "ensure_output_dirs",

@@ -13,23 +13,18 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size =  0.2  #0.05   #0.2
 include_duplicates = false
-seed = 42
+seed = 51
 
 [data]
-<<<<<<< HEAD:configs/base/scientific_base.toml
 split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
-=======
-split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
-# split_data_path = "splits/strclosed_set__dupFalse__kTrain3__kVal4__p13/full_split.parquet"
->>>>>>> 922652c794e41a7633e78f40a459cf6839ae71ad:configs/base/eda_base.toml
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = true    # Set to true to handle class imbalance
 num_workers = 4
 use_fiftyone = false
 
 [curation]
-train_k = 1
-val_k = 30  #50
+train_k = 3
+val_k = 3
 phash_threshold = 4
 
 [preprocessing]
@@ -43,11 +38,10 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-# save_dir = "checkpoints/round_1/"  # "/media/vanessa/UBUNTU1/home/vanessa/Documents/jaguar_checkpoints/"
-experiment_name = "scientific_base"
-epochs = 30
-batch_size = 32   #16
+save_dir = "Vanessa_split" 
+experiment_name = "kaggle_base"
+epochs = 40
+batch_size = 32
 seed = 42
 early_stopping = true
 early_stopping_patience = 8
@@ -97,7 +91,7 @@ force_silhouette = false    # Set to true for the mining RQ study
 extra_val_backgrounds = ["original", "gray_bg"]
 
 [xai]
-seed = 42
+seed = 51
 n_samples = 100
 ig_steps = 10
 
@@ -107,5 +101,4 @@ stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true
-project = "jaguar-reid" # "jaguar-reid-SpotItLikeItsHot"
 mode = "online"

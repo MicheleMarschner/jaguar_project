@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import re
 from pathlib import Path
@@ -11,7 +13,6 @@ except ImportError:
 from PIL import Image
 
 
-
 FNAME_RE = re.compile(r"^(train|test)_(\d+)\.(png|jpg|jpeg|webp)$", re.IGNORECASE)
 
 def _require_fiftyone() -> None:
@@ -20,7 +21,6 @@ def _require_fiftyone() -> None:
             "FiftyOne is not installed. Use manifest-only loading on cluster "
             "or install FiftyOne locally."
         )
-
 
 class FODataset:
     """
@@ -47,7 +47,7 @@ class FODataset:
 
         self.dataset.persistent = bool(persistent)
 
-    def get_dataset(self) -> fo.Dataset:
+    def get_dataset(self) -> "fo.Dataset":
         return self.dataset
 
     # ----------------------------
@@ -65,7 +65,7 @@ class FODataset:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict] = None,
         detections: Optional[List[Dict]] = None,
-    ) -> fo.Sample:
+    ) -> "fo.Sample":
         _require_fiftyone()
         abs_path = str(Path(filepath).absolute())
         sample = fo.Sample(filepath=abs_path)
@@ -99,7 +99,7 @@ class FODataset:
 
         return sample
 
-    def add_samples(self, samples: List[fo.Sample]) -> None:
+    def add_samples(self, samples: List["fo.Sample"]) -> None:
         self.dataset.add_samples(samples)
         self.dataset.save()
 
@@ -143,7 +143,7 @@ class FODataset:
         if not cls._manifest_exists(export_dir):
             raise FileNotFoundError(f"Manifest missing in: {export_dir}")
 
-        ds = fo.Dataset.from_dir(
+        ds = "fo.Dataset".from_dir(
             dataset_dir=str(export_dir),
             dataset_type=fo.types.FiftyOneDataset,
             name=dataset_name,
@@ -210,7 +210,7 @@ def build_from_raw_filename_ids(
 
     fo_ds = FODataset(dataset_name=dataset_name, overwrite=overwrite_db)
 
-    samples: List[fo.Sample] = []
+    samples: List["fo.Sample"] = []
 
     # train labeled
     for p in sorted(train_dir.glob("*")):

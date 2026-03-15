@@ -13,7 +13,7 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
 include_duplicates = false
-seed = 42
+seed = 51
 
 [data]
 split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
@@ -22,11 +22,11 @@ split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_spli
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
 num_workers = 4
-use_fiftyone = false
+use_fiftyone = true
 
 [curation]
 train_k = 1
-val_k = 30    #50
+val_k = 50
 phash_threshold = 4
 
 [preprocessing]
@@ -41,7 +41,7 @@ key_for_seed = "filename"
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
 # save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-save_dir = "checkpoints/round_1/"  
+save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
 epochs = 30
 batch_size = 32  # 16
@@ -97,7 +97,7 @@ force_silhouette = false    # Set to true for the mining RQ study
 extra_val_backgrounds = ["original", "gray_bg"]
 
 [xai]
-seed = 42
+seed = 51
 n_samples = 100
 ig_steps = 10
 
@@ -107,5 +107,4 @@ stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true
-project = "jaguar-reid-SpotItLikeItsHot"
 mode = "online"

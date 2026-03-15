@@ -244,6 +244,8 @@ def main():
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
     monitor_metric = config["training"].get("monitor_metric", "mAP")
+    analysis_cfg = config.get("analysis", {})
+    save_embeddings_dict = analysis_cfg.get("force_silhouette", False)
     
     for epoch in range(1, config['training']['epochs'] + 1):
         epoch_start_time = time.perf_counter()
@@ -284,7 +286,6 @@ def main():
         if was_heavy: 
             print(f" | Val Silhouette: {metrics['silhouette']:.4f}")
         
-        
         # Save best model
         current_score = metrics[monitor_metric]
         if current_score > best_score:
@@ -292,18 +293,19 @@ def main():
             best_metrics = metrics
             best_epoch = epoch
             patience_counter = 0
-            best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
+            _, best_checkpoint_path = trainer.save_checkpoint(epoch, metrics)
             
-            viz_data = {
-                "embeddings": current_embs.numpy(),
-                "labels": current_lbls.numpy(),
-                "metrics": metrics,
-                "backbone": config['model']['backbone_name'],
-                "head": config['model']['head_type']
-            }
-            # Overwrites the previous best to save disk space
-            viz_path = Path(run_dir) / "best_val_viz_data.npz"
-            np.savez(viz_path, **viz_data)
+            if save_embeddings_dict:
+                viz_data = {
+                    "embeddings": current_embs.numpy(),
+                    "labels": current_lbls.numpy(),
+                    "metrics": metrics,
+                    "backbone": config['model']['backbone_name'],
+                    "head": config['model']['head_type']
+                }
+                # Overwrites the previous best to save disk space
+                viz_path = Path(run_dir) / "best_val_viz_data.npz"
+                np.savez(viz_path, **viz_data)
 
         else:
             patience_counter += 1
@@ -371,6 +373,7 @@ def main():
         artifact_name=f"{exp_name}-outputs",
     )
 
+    print(f"[DEBUG BEST checkpoint path: {best_checkpoint_path}]")
     log_wandb_checkpoint_artifact(
         run=wandb_run,
         checkpoint_path=best_checkpoint_path,

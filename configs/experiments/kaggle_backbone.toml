@@ -3,8 +3,12 @@ name = "scientific_backbone"
 description = "Backbone ablation for Kaggle-oriented training runs."
 base_config = "base/scientific_base"
 mode = "train"
+<<<<<<< HEAD
 train_type = "scientific"
 setup_name = "scientific_base"
+=======
+train_type = "kaggle"
+>>>>>>> 42713125df6a726593b00200ae9d7cb507c15ca6
 output_profile = "backbone"
 
 [[experiment.runs]]
@@ -22,6 +26,7 @@ backbone_name = "MiewID"
 [[experiment.runs]]
 experiment_name = "backbone_dinov2_base"
 backbone_name = "DINOv2-Base"
+<<<<<<< HEAD
 
 [[experiment.runs]]
 experiment_name = "backbone_dinov3_base"
@@ -60,3 +65,5 @@ random_resized_crop = true
 [[experiment.runs]]
 experiment_name = "backbone_swin_transformer"
 backbone_name = "Swin-Transformer"
+=======
+>>>>>>> 42713125df6a726593b00200ae9d7cb507c15ca6

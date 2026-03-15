@@ -1,5 +1,0 @@
-experiment_name,experiment_group,gallery_protocol,method_name,method_type,member_set,n_members,mAP,rank1,best_single_mAP,gain_vs_best_single,oracle_mAP,oracle_rank1,oracle_gap_mAP
-single_eva02,kaggle_ensemble,trainval_gallery,EVA-02,single,EVA-02,1,0.904190273354028,0.9238095238095239,0.904190273354028,0.0,0.904190273354028,0.9238095238095239,0.0
-single_eva02,kaggle_ensemble,trainval_gallery,score_fusion,fusion,EVA-02,1,0.904190273354028,0.9238095238095239,0.904190273354028,0.0,0.904190273354028,0.9238095238095239,0.0
-single_eva02,kaggle_ensemble,trainval_gallery,embedding_concat,fusion,EVA-02,1,0.904190273354028,0.9238095238095239,0.904190273354028,0.0,0.904190273354028,0.9238095238095239,0.0
-single_eva02,kaggle_ensemble,trainval_gallery,oracle,oracle,EVA-02,1,0.904190273354028,0.9238095238095239,0.904190273354028,0.0,0.904190273354028,0.9238095238095239,0.0

@@ -23,7 +23,7 @@ class JaguarTrainer:
         
         # Define experiments paths and folders 
         self.experiment_name = config['training']['experiment_name']
-        self.config_folder = config['model']['backbone_name'] #['training']['config_folder'] 
+        self.config_folder = config['model']['backbone_name']  
         self.save_dir = Path(config['training']['save_dir'])
         self.save_dir.mkdir(parents=True, exist_ok=True)
         
@@ -264,4 +264,4 @@ class JaguarTrainer:
 
         print(f"[Info] Saved config file: {config_save_path}")
 
-        return config_save_path
+        return config_save_path, save_path

@@ -7,7 +7,7 @@
 #SBATCH --gpus=1
 #SBATCH --mem=16G
 #SBATCH --time=08:00:00
-#SBATCH --array=0-10%4
+#SBATCH --array=0-6%4
 #SBATCH --output=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.out
 #SBATCH --error=/sc/home/michele.marschner/project/jaguar_project/logs/array_%A_%a.err
 
@@ -33,6 +33,10 @@ nvidia-smi || true
 python -c "import torch; print('cuda available:', torch.cuda.is_available()); print('device count:', torch.cuda.device_count())"
 
 PYTHONPATH=src python src/jaguar/main.py \
+<<<<<<< HEAD
   --base_config base/scientific_base \
+=======
+  --base_config base/kaggle_base \
+>>>>>>> 42713125df6a726593b00200ae9d7cb507c15ca6
   --experiment_config "$REL_PATH" \
   --experiment_name "$NAME"

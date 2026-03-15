@@ -7,7 +7,7 @@ from jaguar.config import DATA_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_sensitivity_results
 from jaguar.utils.utils import resolve_path
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
-from jaguar.utils.utils_xai_similarity import build_bg_sensitivity_summaries
+from jaguar.utils.utils_xai import build_bg_sensitivity_summaries
 from jaguar.xai.foreground_contribution import (
     run_foreground_contribution_analysis,
     run_bg_vs_jaguar_stress_analysis,
@@ -18,7 +18,7 @@ from jaguar.utils.utils_evaluation import (
     build_original_gallery_base,
     select_val_samples_from_emb_rows,
 )
-from jaguar.utils.utils_xai_similarity import get_val_query_indices
+from jaguar.utils.utils_xai import get_val_query_indices
 
 
 def parse_args():
@@ -34,7 +34,7 @@ def main():
     base_config = load_toml_config(args.base_config)
     experiment_config = load_toml_config(args.experiment_config)
     config = deep_update(base_config, experiment_config)
-    exp_name = config["training"]["experiment_name"]
+    exp_name = config["evaluation"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
 
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
@@ -54,7 +54,7 @@ def main():
         suffix =  exp_name
     
     run_dir = PATHS.runs / suffix
-    config["training"]["save_dir"] = str(checkpoint_dir / suffix)
+    #config["training"]["save_dir"] = str(checkpoint_dir / suffix)
     results_path = PATHS.results / suffix
     #save_path = resolve_path(f"xai/background_sensitivity/{run_name}", EXPERIMENTS_STORE)
     #results_path = resolve_path(f"xai/background_sensitivity/{run_name}", RESULTS_STORE)

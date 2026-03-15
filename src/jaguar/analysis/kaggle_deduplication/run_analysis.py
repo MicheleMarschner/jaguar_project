@@ -25,6 +25,7 @@ def run(
     burst_artifacts_dir = PATHS.runs / "bursts/burst_groups__within500__cross10000__ph11"
     manifest_dir = PATHS.data_export / "splits_curated"
     img_root = PATHS.data_train
+    use_fiftyone = config["data"].get("use_fiftyone", False)
 
 
     run_burst_analysis(burst_artifacts_dir, save_dir, img_root)
@@ -33,7 +34,10 @@ def run(
         save_dir=save_dir, 
         img_root=img_root, 
         manifest_dir=manifest_dir, 
-        dataset_name="jaguar_curated")
+        dataset_name="jaguar_curated",
+        use_fiftyone=use_fiftyone
+    )
+        
     outputs = run_duplicate_impact_report(
         full_run_dir=training_full_dir,
         curated_run_dir=training_curated_dir,

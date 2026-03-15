@@ -23,14 +23,18 @@ dependencies = [
   "wandb==0.23.1",
   "opencv-python-headless>=4.10,<4.11",
   "python-dotenv==1.2.1",
+  "fiftyone>=1.13.3",
+  "grad-cam==1.5.5",
   "transformers==4.39.3", # "transformers==4.51.0",
   "timm",
   "pyarrow==23.0.1",
+  "quantus==0.6.0",
   "ImageHash",
   "seaborn==0.13.2",
   "torchmetrics",
   "tomli-w==1.2.0",
-  "git+https://github.com/KellerJordan/Muon.git",
+  "muon-optimizer @ git+https://github.com/KellerJordan/Muon.git",
+  "ipykernel"
 ]
 
 [project.optional-dependencies]

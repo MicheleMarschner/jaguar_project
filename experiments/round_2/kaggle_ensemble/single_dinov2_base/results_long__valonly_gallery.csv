@@ -1,5 +1,0 @@
-experiment_name,experiment_group,gallery_protocol,method_name,method_type,member_set,n_members,mAP,rank1,best_single_mAP,gain_vs_best_single,oracle_mAP,oracle_rank1,oracle_gap_mAP
-single_dinov2_base,kaggle_ensemble,valonly_gallery,DINOv2-Base,single,DINOv2-Base,1,0.5412830915921301,0.5522388059701493,0.5412830915921301,0.0,0.5412830915921301,0.5522388059701493,0.0
-single_dinov2_base,kaggle_ensemble,valonly_gallery,score_fusion,fusion,DINOv2-Base,1,0.5412830915921301,0.5522388059701493,0.5412830915921301,0.0,0.5412830915921301,0.5522388059701493,0.0
-single_dinov2_base,kaggle_ensemble,valonly_gallery,embedding_concat,fusion,DINOv2-Base,1,0.5412830915921301,0.5522388059701493,0.5412830915921301,0.0,0.5412830915921301,0.5522388059701493,0.0
-single_dinov2_base,kaggle_ensemble,valonly_gallery,oracle,oracle,DINOv2-Base,1,0.5412830915921301,0.5522388059701493,0.5412830915921301,0.0,0.5412830915921301,0.5522388059701493,0.0

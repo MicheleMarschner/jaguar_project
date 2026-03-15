@@ -40,7 +40,7 @@ To assess whether the degradation was broad or concentrated in a few difficult c
 | blur_bg  | [ ]                  | [ ]                    | [ ]              | [ ]                        |
 | black_bg | [ ]                  | [ ]                    | [ ]              | [ ]                        |
 
-**Rank-1 stability.** [Paste the auto-generated sentence here.]
+**Rank-1 stability.** 
 
 ### Plots
 1. **Aggregate performance by setting** (`plot_background_main_metrics.png`)  

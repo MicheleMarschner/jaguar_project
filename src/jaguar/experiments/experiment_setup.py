@@ -12,6 +12,8 @@ SETUP_STEPS = {
         "ensure_output_dirs",
         "ensure_fiftyone_init_dataset",
         "ensure_background_pool",
+        "ensure_burst_artifacts",
+        "ensure_split_artifacts"
     ],
     "deduplication": [
         "ensure_output_dirs",
@@ -200,7 +202,6 @@ def ensure_split_artifacts(config) -> Path:
 
 
 def run_step(step_name: str, config: dict):
-    print(f"[SETUP] {step_name}")
 
     if step_name == "ensure_output_dirs":
         ensure_output_dirs()

@@ -13,8 +13,12 @@ from jaguar.evaluation.metrics import ReIDEvalBundle
 from jaguar.config import DEVICE 
 from jaguar.utils.utils_scheduler import JaguardIdScheduler
     
+
 class JaguarTrainer:
+    """Train, validate, and checkpoint a Jaguar Re-ID model from a config-driven setup."""
+
     def __init__(self, model, train_loader, val_loader, config):
+        """Initialize model, loaders, paths, optimizer, scheduler, EMA, and AMP state."""
         self.model = model
         self.train_loader = train_loader
         self.val_loader = val_loader
@@ -46,7 +50,7 @@ class JaguarTrainer:
         self.scaler = GradScaler()
 
     def _setup_optimizer(self):
-        """Logic to create optimizer with optional differential learning rates."""
+        """Build the optimizer and parameter groups, including optional differential backbone learning rates."""
         opt_cfg = self.config['optimizer']
         train_cfg = self.config['training']
         
@@ -77,11 +81,11 @@ class JaguarTrainer:
             )
         elif opt_cfg['type'] == "Adam":
             self.optimizer = torch.optim.Adam(
-                params_groups, betas=tuple(opt_cfg.get('betas', [0.9,0.999])), weight_decay=opt_cfg.get('weight_decay', 0)
+                params_groups, betas=tuple(opt_cfg.get('betas', [0.9, 0.999])), weight_decay=opt_cfg.get('weight_decay', 0)
             )
         elif opt_cfg['type'] == "SGD":
             self.optimizer = torch.optim.SGD(
-                params_groups, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay',0)
+                params_groups, lr=opt_cfg['lr'], momentum=opt_cfg.get('momentum', 0.9), weight_decay=opt_cfg.get('weight_decay', 0)
             )
         elif opt_cfg['type'] == "Muon":
             betas = tuple(opt_cfg.get("betas", [0.9, 0.95]))
@@ -128,19 +132,19 @@ class JaguarTrainer:
         print(f"[Trainer] Optimizer built. Head LR: {opt_cfg['lr']} | Backbone LR: {backbone_lr}")
 
     def _setup_scheduler(self):
-        """Logic to create the scheduler."""
+        """Build the configured learning-rate scheduler on top of the current optimizer."""
         sched_cfg = self.config['scheduler']
         opt_cfg = self.config['optimizer']
         sched_type = sched_cfg.get("type", "CosineAnnealingLR")
 
         if sched_type == "CosineAnnealingLR":
             self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                self.optimizer, T_max=sched_cfg['T_max'], eta_min=sched_cfg.get('lr_min',0)
+                self.optimizer, T_max=sched_cfg['T_max'], eta_min=sched_cfg.get('lr_min', 0)
             )
         elif sched_type == "OneCycleLR":
             self.scheduler = torch.optim.lr_scheduler.OneCycleLR(
                 self.optimizer,
-                max_lr=[g["lr"] for g in self.optimizer.param_groups], # differential LR groups are preserved
+                max_lr=[g["lr"] for g in self.optimizer.param_groups],  # differential LR groups are preserved
                 epochs=self.config["training"]["epochs"], 
                 steps_per_epoch=len(self.train_loader),
                 pct_start=0.3,
@@ -160,9 +164,10 @@ class JaguarTrainer:
             raise ValueError(f"Unknown scheduler type: {sched_type}")
    
     def train_epoch(self, epoch):
+        """Run one training epoch, including optional backbone unfreezing, AMP, EMA, and scheduler stepping."""
         # Check if it's time to unfreeze part of the backbone
         unfreeze_ep = self.config['training'].get('unfreeze_epoch', 0)
-        if (unfreeze_ep > 0 and epoch == unfreeze_ep): # and self.model.head_type != "triplet"): 
+        if (unfreeze_ep > 0 and epoch == unfreeze_ep):  # and self.model.head_type != "triplet"): 
             num_blocks = self.config['training'].get('unfreeze_blocks', 2)
             print(f"\n[Trainer] Triggering Backbone Fine-tuning at epoch {epoch}")
             self.model.unfreeze_backbone_layers(num_blocks)
@@ -191,7 +196,7 @@ class JaguarTrainer:
             self.scaler.step(self.optimizer)
             self.scaler.update()
             
-            if self.config["scheduler"]["type"] == "OneCycleLR": #gets optimized per batch
+            if self.config["scheduler"]["type"] == "OneCycleLR":  # gets optimized per batch
                 self.scheduler.step()
             
             if self.use_ema and self.ema_model is not None:
@@ -204,6 +209,7 @@ class JaguarTrainer:
 
     @torch.no_grad()
     def validate(self, epoch=None):
+        """Extract validation embeddings and compute Re-ID metrics, with optional heavy mining analysis."""
         # self.model.eval()
         eval_model = self.ema_model.module if self.use_ema and hasattr(self.ema_model, "module") else self.model
         eval_model.eval()
@@ -215,7 +221,7 @@ class JaguarTrainer:
         for batch in tqdm(self.val_loader, desc="Extracting Val Embeds"):
             imgs = batch["img"].to(self.device)
             # Use the model utility to get normalized embeddings
-            emb = eval_model.get_embeddings(imgs) #self.model.get_embeddings(imgs)
+            emb = eval_model.get_embeddings(imgs)  # self.model.get_embeddings(imgs)
             
             all_embeddings.append(emb.cpu())
             all_labels.append(batch["label_idx"])
@@ -239,6 +245,7 @@ class JaguarTrainer:
         return metrics, full_embeddings, full_labels, do_heavy_metrics
 
     def save_checkpoint(self, epoch, metrics) -> Path:
+        """Save the best checkpoint and the resolved runtime config into the experiment directory."""
         path = self.save_dir
         os.makedirs(path, exist_ok=True)
         save_path = path / "best_model.pth"
@@ -250,7 +257,7 @@ class JaguarTrainer:
         }
         
         if self.ema_model is not None:
-            save_dict['model_state_dict'] = self.ema_model.module.state_dict() # EMA weights
+            save_dict['model_state_dict'] = self.ema_model.module.state_dict()  # EMA weights
         else:
             save_dict['model_state_dict'] = self.model.state_dict()
     

@@ -145,7 +145,7 @@ def run_background_intervention(config, save_dir):
     gallery_labels_orig = base["gallery_labels_orig"]
     gallery_global_indices_orig = base["gallery_global_indices_orig"]
 
-    settings = ["original", "gray_bg", "blur_bg", "black_bg"]
+    settings = ["original", "gray_bg", "black_bg", "blur_bg", "random_bg", "mixed_original_random_bg"]
 
     if "original" not in settings:
         raise ValueError(

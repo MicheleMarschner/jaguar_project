@@ -2,26 +2,26 @@
 name = "kaggle_retrieval"
 
 [[experiment.runs]]
-experiment_name = "baseline_retrieval"
+experiment_name = "retrieval_baseline"
 apply_tta = false
 
 [[experiment.runs]]
-experiment_name = "tta_flip_retrieval"
+experiment_name = "retrieval_tta_flip"
 apply_tta = true
 tta_modality = "flip"
 
 # [[experiment.runs]]
-# experiment_name = "tta_multiscale_retrieval"
+# experiment_name = "retrieval_tta_multiscale"
 # apply_tta = true
 # tta_modality = "multiscale"
 
 [[experiment.runs]]
-experiment_name = "qe_retrieval"
+experiment_name = "retrieval_qe"
 apply_qe = true
 top_k_expansion = [3,5,7,10]
 
 [[experiment.runs]]
-experiment_name = "qe_rerank_retrieval"
+experiment_name = "retrieval_qe_rerank"
 apply_qe = true
 top_k_expansion = [5,7]
 apply_rerank = true
@@ -30,14 +30,14 @@ k2 = [6,8,10]
 lambda_value = [0.3,0.5]
 
 [[experiment.runs]]
-experiment_name = "tta_qe_retrieval"
+experiment_name = "retrieval_tta_qe"
 apply_tta = true
 tta_modality = "flip"
 apply_qe = true
 top_k_expansion = [3]
 
 [[experiment.runs]]
-experiment_name = "tta_qe_rerank_retrieval"
+experiment_name = "retrieval_tta_qe_rerank"
 apply_tta = true
 tta_modality = "flip"
 apply_qe = true

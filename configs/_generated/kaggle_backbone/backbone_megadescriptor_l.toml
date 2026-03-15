@@ -3,7 +3,6 @@ experiment_name = "backbone_megadescriptor_l"
 
 [model]
 backbone_name = "MegaDescriptor-L"
-head_type = "triplet_focal"
 
 [output]
 profile = "backbone"

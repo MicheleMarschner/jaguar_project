@@ -10,19 +10,16 @@ output_profile = "backbone"
 experiment_name = "backbone_eva02"
 backbone_name = "EVA-02"
 split_data_path = "/splits/default_kaggle/full_split.parquet"
-head_type = "triplet_focal"
 
 [[experiment.runs]]
 experiment_name = "backbone_megadescriptor_l"
 backbone_name = "MegaDescriptor-L"
 split_data_path = "/splits/default_kaggle/full_split.parquet"
-head_type = "triplet_focal"
 
 [[experiment.runs]]
 experiment_name = "backbone_miew_id"
 backbone_name = "MiewID"
 split_data_path = "/splits/default_kaggle/full_split.parquet"
-head_type = "triplet_focal"
 
 # [[experiment.runs]]
 # experiment_name = "backbone_dino_small"
@@ -65,7 +62,7 @@ head_type = "triplet_focal"
 # # s = 40
 # # m = 0.40
 # m = 0.7
-#random_resized_crop = true
+# random_resized_crop = true
 
 # [[experiment.runs]]
 # experiment_name = "backbone_swin_transformer"

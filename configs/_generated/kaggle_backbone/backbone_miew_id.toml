@@ -3,7 +3,6 @@ experiment_name = "backbone_miew_id"
 
 [model]
 backbone_name = "MiewID"
-head_type = "triplet_focal"
 
 [output]
 profile = "backbone"

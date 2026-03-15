@@ -3,7 +3,6 @@ experiment_name = "backbone_eva02"
 
 [model]
 backbone_name = "EVA-02"
-head_type = "triplet_focal"
 
 [output]
 profile = "backbone"

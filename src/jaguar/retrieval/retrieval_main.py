@@ -10,11 +10,14 @@ from jaguar.retrieval.retrieval_runner import (
     run_retrieval_experiment, 
     generate_retrieval_experiments
 )
-
+from jaguar.logging.wandb_logger import (
+    init_wandb_run,
+    finish_wandb_run,
+    log_wandb_table
+)
 
 def parse_args():
     parser = argparse.ArgumentParser()
-
     parser.add_argument(
         "--checkpoint_dir",
         type=str,
@@ -98,24 +101,53 @@ def main():
     for cfg_path in generated_paths:
 
         run_name = cfg_path.stem
+        experiment_group = experiment_meta["name"]
 
         print(f"\nRunning retrieval experiment: {run_name}")
 
         with open(cfg_path, "rb") as f:
             run_cfg = tomllib.load(f)
+        
+        #wandb config usually present in config/base and absent in the experiments one 
+        # overwriting as merge here is safe
+        run_cfg.setdefault("logging", {})
+        run_cfg["logging"]["enabled"] = True
+        run_cfg["logging"]["project"] = "jaguar-reid"
+        run_cfg["logging"]["online"] = True
 
         output_dir = checkpoint_dir / "retrieval_eval" / run_name
         output_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(run_cfg)
+        
+        # Initialize wandb
+        wandb_run = init_wandb_run(
+            config=run_cfg,
+            run_dir=output_dir,
+            exp_name=run_name,
+            experiment_group=experiment_group,
+        )
 
         # Save generated config for reproducibility
         with open(output_dir / "retrieval_config_used.toml", "wb") as f:
             tomli_w.dump(run_cfg, f)
 
-        run_retrieval_experiment(
+        df = run_retrieval_experiment(
             model=model,
             config=config,
             run_cfg=run_cfg["evaluation"],
-            checkpoint_dir=output_dir
+            checkpoint_dir=output_dir,
+            wandb_run=wandb_run
+        )
+        
+        finish_wandb_run(
+            run=wandb_run,
+            best_epoch=None,
+            best_score=df.iloc[0]["mAP"],
+            monitor_metric="mAP",
+            best_metrics=df.iloc[0].to_dict(),
+            epochs_completed=len(df),
+            total_train_time_sec=0
         )
 
 if __name__ == "__main__":

@@ -6,7 +6,6 @@ epochs = 30
 
 [model]
 backbone_name = "ConvNeXt-V2"
-head_type = "triplet_focal"
 m = 0.7
 
 [progressive_resizing]

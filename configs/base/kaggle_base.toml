@@ -99,7 +99,7 @@ threshold = 50
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]
 apply_tta = true
-tta_modality = flip   # Options: "tta", "multiscale" only compatible with backbone_name in ["ConvNeXt-V2", "EfficientNet-B4"]
+tta_modality = "flip"   # Options: "flip", "multiscale" only compatible with backbone_name in ["ConvNeXt-V2", "EfficientNet-B4"]
 apply_qe = true
 top_k_expansion = 3
 apply_rerank = false 

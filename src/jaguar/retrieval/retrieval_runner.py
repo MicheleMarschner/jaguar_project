@@ -54,7 +54,6 @@ def build_retrieval_override(run_cfg, experiment_meta):
     override = {}
 
     field_to_section = {
-
         "apply_tta": ("evaluation", "apply_tta"),
         "tta_modality": ("evaluation", "tta_modality"),
 
@@ -65,6 +64,7 @@ def build_retrieval_override(run_cfg, experiment_meta):
         "k1": ("evaluation", "k1"),
         "k2": ("evaluation", "k2"),
         "lambda_value": ("evaluation", "lambda_value"),
+        
     }
 
     for key, value in run_cfg.items():
@@ -82,16 +82,12 @@ def build_retrieval_override(run_cfg, experiment_meta):
 
     override.setdefault("evaluation", {})
     override["evaluation"]["experiment_group"] = experiment_meta["name"]
-
     return override
 
 
 def generate_retrieval_experiments(experiment_cfg, output_root):
-
     meta = experiment_cfg["experiment"]
-
     experiment_name = meta["name"]
-
     runs = meta["runs"]
 
     output_dir = output_root / experiment_name
@@ -116,7 +112,8 @@ def run_retrieval_experiment(
     model,
     config,
     run_cfg,
-    checkpoint_dir
+    checkpoint_dir,
+    wandb_run
 ):
 
     checkpoint_dir = Path(checkpoint_dir)
@@ -129,10 +126,12 @@ def run_retrieval_experiment(
 
     print("Starting retrieval sweep")
 
-    run_retrieval_sweep(
+    df = run_retrieval_sweep(
         model=model,
         val_loader=val_loader,
         labels=labels,
         run_cfg=run_cfg,
-        output_dir=checkpoint_dir
+        output_dir=checkpoint_dir,
+        wandb_run=wandb_run
     )
+    return df 

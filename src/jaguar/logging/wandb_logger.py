@@ -77,6 +77,7 @@ def init_wandb_run(
     run.define_metric("epoch")
     run.define_metric("train/*", step_metric="epoch")
     run.define_metric("val/*", step_metric="epoch")
+    run.define_metric("inference/*", step_metric="epoch")
     run.define_metric("timing/*", step_metric="epoch")
     run.define_metric("meta/*", step_metric="epoch")
     run.define_metric("val_rare/*", step_metric="epoch")

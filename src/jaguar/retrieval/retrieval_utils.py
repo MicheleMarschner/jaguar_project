@@ -1,6 +1,7 @@
 import json
 import numpy as np
 import pandas as pd
+import wandb
 from itertools import product
 from pathlib import Path
 
@@ -9,8 +10,36 @@ from jaguar.utils.utils_evaluate import (
     query_expansion,
     k_reciprocal_rerank
 )
-
+from jaguar.logging.wandb_logger import (
+    log_wandb_table
+)
+from jaguar.config import DATA_ROOT
 from jaguar.evaluation.metrics import ReIDEvalBundle
+
+# ------------------Log the top retrieval errors------------------
+
+def build_error_table(sim, labels, dataset, top_k=50):
+    errors = []
+    for i in range(len(labels)):
+
+        sim_i = sim[i].copy()
+        sim_i[i] = -1
+
+        pred = sim_i.argmax()
+
+        if labels[pred] != labels[i]:
+
+            errors.append({
+                "query_idx": i,
+                "pred_idx": pred,
+                "query_label": labels[i],
+                "pred_label": labels[pred],
+                "similarity": sim_i[pred],
+                "query_path": str(dataset.samples[i][dataset.filepath_key]),
+                "pred_path": str(dataset.samples[pred][dataset.filepath_key]),
+            })
+    errors = sorted(errors, key=lambda x: -x["similarity"])
+    return pd.DataFrame(errors[:top_k])
 
 # ------------------Embedding Cache------------------
 
@@ -130,7 +159,7 @@ def evaluate_retrieval(
         labels=labels
     )
 
-    metrics = bundle.compute_all()
+    metrics = bundle.compute_all(include_silhouette=True)
 
     return metrics, sim
 
@@ -142,7 +171,8 @@ def run_retrieval_sweep(
     val_loader,
     labels,
     run_cfg,
-    output_dir
+    output_dir,
+    wandb_run=None
 ):
 
     output_dir = Path(output_dir)
@@ -193,12 +223,55 @@ def run_retrieval_sweep(
         leaderboard.append({**params, **metrics})
 
         print(f"{run_name} | pairAP={metrics['pairwise_AP']:.4f}")
+        
+        if wandb_run:
+            wandb_run.log({
+                "inference/mAP": metrics["mAP"],
+                "inference/pairwise_AP": metrics["pairwise_AP"],
+                "inference/rank1": metrics["rank1"],
+                "inference/sim_gap": metrics["sim_gap"],
+                "inference/silhouette": metrics["silhouette"],
+
+                "meta/tta": params["tta"],
+                "meta/qe": params.get("qe", False),
+                "meta/qe_k": params.get("qe_k"),
+                "meta/rerank": params.get("rerank", False),
+                "meta/k1": params.get("k1"),
+                "meta/k2": params.get("k2"),
+                "meta/lambda": params.get("lambda_value"),
+            })
+        
+            error_df = build_error_table(sim, labels, val_loader.dataset)
+            table = wandb.Table(
+                columns=["query", "pred", "true_label", "pred_label", "similarity"]
+            )
+            for _, row in error_df.iterrows():
+                table.add_data(
+                    wandb.Image(f"{DATA_ROOT}/{row['query_path']}"),
+                    wandb.Image(f"{DATA_ROOT}/{row['pred_path']}"),
+                    row["query_label"],
+                    row["pred_label"],
+                    row["similarity"],
+                )
+                
+            wandb_run.log({"retrieval/top_errors": table})
+            
+            # log_wandb_table(
+            #     run=wandb_run,
+            #     name="retrieval/top_errors",
+            #     dataframe=error_df
+            # )
 
     df = pd.DataFrame(leaderboard)
-
-    df = df.sort_values("pairwise_AP", ascending=False)
-
+    df = df.sort_values("mAP", ascending=False)
     df.to_csv(output_dir / "leaderboard.csv", index=False)
+    
+    log_wandb_table(
+        run=wandb_run,
+        name="retrieval/leaderboard",
+        dataframe=df
+    )
 
     print("\nTOP CONFIGS")
     print(df.head(10))
+    return df 

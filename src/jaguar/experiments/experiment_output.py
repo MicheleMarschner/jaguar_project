@@ -1,5 +1,4 @@
 from typing import Any
-
 from jaguar.utils.utils import write_json
 
 

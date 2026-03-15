@@ -17,11 +17,11 @@ from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
  
-from jaguar.config import DATA_ROOT, PATHS
+from jaguar.config import DATA_ROOT, PATHS, IMGNET_MEAN, IMGNET_STD
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
-from jaguar.config import IMGNET_MEAN, IMGNET_STD
+from jaguar.utils.utils import resolve_path
 
 # --------------------Progressive resizing utilities--------------------
 def round_to_patch(size, patch):
@@ -201,8 +201,8 @@ def build_processing_fn(config, split: str):
     processor = PROCESSORS[processor_name]
 
     kwargs = {
-        "base_root": PATHS.data_export / "init",
-        "bg_dir": pre_cfg.get("bg_dir"),
+        "base_root": resolve_path("fiftyone/init", DATA_STORE),
+        "bg_dir": resolve_path(pre_cfg.get("bg_dir"), DATA_STORE),
         "edge_softness": pre_cfg.get("edge_softness", 0),
         "blur_radius": pre_cfg.get("blur_radius", 10),
         "p_original": pre_cfg.get("p_original", 0.5),
@@ -227,8 +227,8 @@ def build_eval_processing_fn(
     pre_cfg = config.get("preprocessing", {})
 
     kwargs = {
-        "base_root": PATHS.data_export / "init",
-        "bg_dir": pre_cfg.get("bg_dir"),
+        "base_root": resolve_path("fiftyone/init", DATA_STORE),
+        "bg_dir": resolve_path(pre_cfg.get("bg_dir"), DATA_STORE),
         "edge_softness": pre_cfg.get("edge_softness", 0),
         "blur_radius": pre_cfg.get("blur_radius", 10),
         "p_original": pre_cfg.get("p_original", 0.5),

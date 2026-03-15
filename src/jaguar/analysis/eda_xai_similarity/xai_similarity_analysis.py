@@ -572,11 +572,14 @@ def run(
     summary_fail_display[["median_easy_rank_in_failures","median_sim_gap_wrong_minus_right"]].fillna("—")
     summary_fail.to_csv(save_root / "failure_summary_all_models.csv", index=False)
 
+    use_fiftyone = config["data"].get("use_fiftyone", False)
+
     _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=dataset_name,
         processing_fn=None,
         overwrite_db=False, 
+        use_fiftyone=use_fiftyone
     )
 
     save_failure_panels(refs_all, torch_ds, save_root / "failure_panels", n_per_model=n_samples)

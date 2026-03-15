@@ -1,11 +1,13 @@
+import os
 from pathlib import Path
 from typing import Any
 import pandas as pd
 from matplotlib.figure import Figure
-
+from dotenv import load_dotenv
 import wandb
 from wandb.sdk.wandb_run import Run
 
+load_dotenv()
 
 def _build_wandb_tags(
     config: dict[str, Any],
@@ -60,14 +62,23 @@ def init_wandb_run(
     """Initialize a W&B run for one training experiment."""
     if not is_wandb_enabled(config):
         return None
+    
+    WANDB_API_KEY = os.getenv("WANDB_API_KEY")
+    if WANDB_API_KEY is None:
+        raise ValueError(
+            "W&B API key is not set. Define WANDB_API_KEY in your .env file."
+        )
+    
+    WANDB_ENTITY = os.getenv("WANDB_ENTITY")
+    WANDB_PROJECT = os.getenv("WANDB_PROJECT")
 
-    logging_cfg = config.get("logging", {})
-    project = logging_cfg.get("project", "jaguar-reid")
+    project = (WANDB_PROJECT or "jaguar-reid")
+    entity = WANDB_ENTITY
 
     tags = _build_wandb_tags(config, experiment_group, job_type=job_type)
 
     run = wandb.init(
-        entity="michele-marschner-university-of-potsdam",
+        entity=entity,
         project=project,  
         group=experiment_group,
         job_type=job_type,
@@ -375,6 +386,8 @@ def log_wandb_checkpoint_artifact(
     aliases: list[str] | None = None,
 ) -> None:
     """Log one checkpoint file as a W&B model artifact."""
+
+    print(f"[DEBUG] WANDB run: {run} and checkpoint path: {checkpoint_path}")
     if run is None or not checkpoint_path.exists():
         return
 

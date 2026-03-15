@@ -3,7 +3,6 @@ name = "eda_xai_metrics"
 mode = "explain"
 base_config = "base/xai_base"
 explain_type = "pair_similarity_metrics"
-setup_name = "eda_base"
 output_profile = "xai"
 
 [[experiment.runs]]

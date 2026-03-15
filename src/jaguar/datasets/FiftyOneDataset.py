@@ -39,11 +39,11 @@ class FODataset:
         if dataset_name in fo.list_datasets():
             if overwrite:
                 fo.delete_dataset(dataset_name)
-                self.dataset = "fo.Dataset"(dataset_name)
+                self.dataset = fo.Dataset(dataset_name)
             else:
                 self.dataset = fo.load_dataset(dataset_name)
         else:
-            self.dataset = "fo.Dataset"(dataset_name)
+            self.dataset = fo.Dataset(dataset_name)
 
         self.dataset.persistent = bool(persistent)
 
@@ -68,7 +68,7 @@ class FODataset:
     ) -> "fo.Sample":
         _require_fiftyone()
         abs_path = str(Path(filepath).absolute())
-        sample = "fo.Sample"(filepath=abs_path)
+        sample = fo.Sample(filepath=abs_path)
 
         if label is not None:
             sample["ground_truth"] = fo.Classification(label=str(label))

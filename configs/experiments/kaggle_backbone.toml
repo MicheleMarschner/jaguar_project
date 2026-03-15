@@ -4,7 +4,6 @@ description = "Backbone ablation for Kaggle-oriented training runs."
 base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
-setup_name = "kaggle_base"
 output_profile = "backbone"
 
 [[experiment.runs]]

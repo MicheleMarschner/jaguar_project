@@ -172,7 +172,5 @@ DATA_STORE = ArtifactStore(
 
 DEVICE = device = get_device(prefer_name="RTX")
 NUM_WORKERS = 0
-SEED = 51
 IMGNET_MEAN = [0.485, 0.456, 0.406]
 IMGNET_STD = [0.229, 0.224, 0.225]
-USE_FIFTYONE = False

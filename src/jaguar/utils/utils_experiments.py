@@ -400,3 +400,22 @@ def build_split_relpath(
     )
     return f"splits/{stem}/full_split.parquet"
 
+
+def build_override_for_mode(mode: str, run_cfg: dict, experiment_meta: dict, base_config: dict) -> dict:
+    if mode == "ensemble":
+        return build_ensemble_override(
+            run_cfg=run_cfg,
+            experiment_meta=experiment_meta,
+            base_config=base_config,
+        )
+    if mode in {"explain", "eval"}:
+        return build_xai_override(
+            run_cfg=run_cfg,
+            experiment_meta=experiment_meta,
+            base_config=base_config,
+        )
+    return build_standard_override(
+        run_cfg=run_cfg,
+        experiment_meta=experiment_meta,
+        base_config=base_config,
+    )

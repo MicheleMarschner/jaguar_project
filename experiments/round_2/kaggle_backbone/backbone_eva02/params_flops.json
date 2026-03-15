@@ -1,8 +1,0 @@
-{
-  "backbone_name": "EVA-02",
-  "head_type": "arcface",
-  "total_params": 305138624,
-  "trainable_params": 26283344,
-  "input_size": 448,
-  "flops": null
-}

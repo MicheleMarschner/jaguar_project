@@ -4,7 +4,6 @@ description = "Fixed resolution versus progressive resizing in pre-trained model
 base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
-setup_name = "kaggle_base"
 output_profile = "resizing"
 
 # [[experiment.runs]]

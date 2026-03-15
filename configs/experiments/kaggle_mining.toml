@@ -3,7 +3,6 @@ name = "kaggle_mining"
 description = "Hard- vs semi- negative mining analysis ablation on triplet loss, with fixed backbone and training setup."
 base_config = "base/kaggle_base"
 mode = "kaggle"
-setup_name = "kaggle_base"
 output_profile = "mining"
 
 [[experiment.runs]]

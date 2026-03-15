@@ -122,9 +122,6 @@ def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col=
         }
     }
     
-    with open('summary_config.json', 'w') as f:
-        json.dump(summary_config, f, indent=4)
-    
     return summary_config
 
 

@@ -41,7 +41,7 @@ except ImportError:
     fo = None
     HAS_FIFTYONE = False
 
-from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, ROUND, USE_FIFTYONE
+from jaguar.config import DATA_ROOT, DATA_STORE, PATHS, ROUND
 from jaguar.utils.utils import ensure_dir, json_default, save_parquet
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
@@ -593,6 +593,7 @@ def load_or_create_phash_diagnostics(
 
 
 def discover_bursts(
+    use_fiftyone,
     burst_min_cluster_size,
     burst_max_within,
     burst_max_cross,
@@ -622,7 +623,7 @@ def discover_bursts(
         PATHS.data_export / "init", 
         dataset_name=fo_dataset_name, 
         processing_fn=None,
-        use_fiftyone=USE_FIFTYONE
+        use_fiftyone=use_fiftyone
     )
     print(f"[Info] Dataset: {len(torch_ds)}")
 
@@ -700,7 +701,7 @@ def discover_bursts(
     )
 
     # 8. EXPORT TO FIFTYONE
-    if USE_FIFTYONE:
+    if use_fiftyone:
         apply_burst_groups_to_fiftyone(
             fo_wrapper.get_dataset(),
             pd.read_parquet(final_dir / "burst_assignments.parquet"),
@@ -709,4 +710,4 @@ def discover_bursts(
         fo_wrapper.export_manifest(export_dir)
         rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
     else:
-        print("[Burst] USE_FIFTYONE=False -> skipping FiftyOne sync/export")
+        print("[Burst] use_fiftyone=False -> skipping FiftyOne sync/export")

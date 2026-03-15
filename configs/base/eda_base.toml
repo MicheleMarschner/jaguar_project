@@ -13,7 +13,7 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size =  0.2  #0.05   #0.2
 include_duplicates = false
-seed = 42
+seed = 51
 
 [data]
 split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
@@ -25,7 +25,7 @@ use_fiftyone = false
 
 [curation]
 train_k = 1
-val_k = 30  #50
+val_k = 50
 phash_threshold = 4
 
 [preprocessing]
@@ -93,7 +93,7 @@ force_silhouette = false    # Set to true for the mining RQ study
 extra_val_backgrounds = ["original", "gray_bg"]
 
 [xai]
-seed = 42
+seed = 51
 n_samples = 100
 ig_steps = 10
 
@@ -103,5 +103,4 @@ stage_epochs = []       # [10, 10, 10]
 
 [logging]
 enabled = true
-project = "jaguar-reid" # "jaguar-reid-SpotItLikeItsHot"
 mode = "online"

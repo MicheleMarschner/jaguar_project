@@ -4,7 +4,6 @@ description = ""
 base_config = "base/xai_base"
 mode = "explain"
 explain_type = ""
-setup_name = "xai"
 output_profile = "xai"
 
 [[experiment.runs]]

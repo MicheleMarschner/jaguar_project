@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-from jaguar.config import USE_FIFTYONE
 from jaguar.utils.utils import ensure_dir, to_abs
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 
@@ -371,6 +370,7 @@ def run_split_diagnostics(
     img_root: Path,
     manifest_dir: Path,
     dataset_name: str = "jaguar_curated",
+    use_fiftyone: bool = True,
 ) -> dict[str, Path]:
     
     curated_dir = Path(curated_file_path).parent
@@ -388,7 +388,7 @@ def run_split_diagnostics(
         dataset_name=dataset_name,
         processing_fn=None,
         overwrite_db=False,
-        use_fiftyone=USE_FIFTYONE
+        use_fiftyone=use_fiftyone
     )
 
     with open(curated_dir / "config.json", "r") as f:

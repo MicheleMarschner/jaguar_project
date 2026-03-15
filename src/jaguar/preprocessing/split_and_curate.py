@@ -41,7 +41,7 @@ except ImportError:
     fo = None
     HAS_FIFTYONE = False
 
-from jaguar.config import DATA_ROOT, DEVICE, USE_FIFTYONE
+from jaguar.config import DATA_ROOT, DEVICE
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.datasets.FiftyOneDataset import rewrite_samples_json_to_data_relative
 from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
@@ -53,7 +53,6 @@ from jaguar.utils.utils_split_and_curate import (
     print_keep_drop_summary,
     save_split_bundle,
     summarize_splits,
-    
 )
 
 
@@ -464,6 +463,7 @@ def run_phash_sweep(
 
 
 def create_splits_and_curate(
+        use_fiftyone,
         split_strategy, 
         include_duplicates, 
         train_k_per_dedup, 
@@ -493,7 +493,7 @@ def create_splits_and_curate(
     fo_wrapper, torch_ds = load_full_jaguar_from_FO_export(
         manifest_dir, 
         dataset_name=fo_dataset_name,
-        use_fiftyone=USE_FIFTYONE
+        use_fiftyone=use_fiftyone
     ) 
     # Load Embeddings
     model_name = "MegaDescriptor-L"
@@ -583,13 +583,12 @@ def create_splits_and_curate(
     print(f"\nDone. Artifacts saved to {out_root}")
     
     # Change in FiftyOne and export
-    if USE_FIFTYONE:
+    if use_fiftyone:
         apply_curation_assignments_to_fiftyone(
             dataset=fo_wrapper.get_dataset(),
             final_df=final_df,
         )
-        print("Example FO filepath:", fo_wrapper.get_dataset().first().filepath)
         fo_wrapper.export_manifest(export_dir)
         rewrite_samples_json_to_data_relative(export_dir, DATA_ROOT)
     else:
-        print("[Split] USE_FIFTYONE=False -> skipping FiftyOne sync/export")
+        print("[Split] use_fiftyone=False -> skipping FiftyOne sync/export")

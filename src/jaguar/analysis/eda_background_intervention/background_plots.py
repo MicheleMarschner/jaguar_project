@@ -2,7 +2,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from PIL import Image
 
-from jaguar.config import DATA_STORE, USE_FIFTYONE
+from jaguar.config import DATA_STORE
 from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
@@ -119,13 +119,14 @@ def create_background_plots(
         ["raw_original", "gray_bg", "blur_bg", "random_bg"],
     )
     n_max = analysis_cfg.get("n_max", 4)
+    use_fiftyone = config["data"].get("use_fiftyone", False)
 
     _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/init", DATA_STORE),
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
-        use_fiftyone=USE_FIFTYONE,
+        use_fiftyone=use_fiftyone,
     )
 
     processor_kwargs = {

@@ -20,7 +20,7 @@ split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_spli
 # split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
 # split_data_path = "/splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
-use_balanced_sampler = true    # Set to true to handle class imbalance
+use_balanced_sampler = false    # Set to true to handle class imbalance
 num_workers = 4
 use_fiftyone = true
 

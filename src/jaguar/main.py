@@ -534,7 +534,7 @@ def main():
         best_metrics=best_metrics,
         epochs_completed=len(history),
         total_train_time_sec=sum(epoch_times),
-        best_epoch_rare=best_epoch_rare,
+        best_rare_epoch=best_epoch_rare,
         best_rare_metrics=best_rare_metrics,
     )       
 

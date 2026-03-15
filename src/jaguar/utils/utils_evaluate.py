@@ -44,36 +44,76 @@ def k_reciprocal_rerank(prob, k1=20, k2=6, lambda_value=0.3):
     """
     Apply k-reciprocal re-ranking to refine similarity scores
     using neighborhood consistency (Jaccard distance).
+    Pytorch implementation of https://github.com/zhunzhong07/person-re-ranking/blob/master/evaluation/utils/re_ranking.m 
+
+    Parameters
+        prob : np.ndarray; NxN similarity matrix (cosine similarity)
+        k1 : int; size of the k-reciprocal neighborhood
+        k2 : int; number of neighbors for local query expansion
+        lambda_value : float; weighting between original distance and Jaccard distance
+
+    Returns
+        final_dist : np.ndarray; NxN re-ranked distance matrix
     """
 
     print("Applying Re-ranking...")
 
-    q_g_dist = 1 - prob
-    original_dist = q_g_dist.copy()
+    # Step 0: convert similarity to distance
+    original_dist = 1 - prob
+    query_num = prob.shape[0]
+
+    # Step 1: normalize distances per row
+    original_dist = original_dist / np.max(original_dist, axis=1, keepdims=True)
+    
+    # Step 2: initial ranking
     initial_rank = np.argsort(original_dist, axis=1)
+    V = np.zeros_like(original_dist, dtype=np.float32)
 
-    nn_k1 = []
+    # Step 3: compute k-reciprocal neighbors
+    for i in range(query_num):
+        forward_k = initial_rank[i, :k1 + 1]
+        backward_k = initial_rank[forward_k, :k1 + 1]
+        fi = np.where(backward_k == i)[1]  # reciprocal neighbors
+        k_reciprocal_index = forward_k[fi]
 
-    for i in range(prob.shape[0]):
-        forward_k1 = initial_rank[i, :k1 + 1]
-        backward_k1 = initial_rank[forward_k1, :k1 + 1]
+        # Iterative k-reciprocal expansion
+        k_reciprocal_exp = list(k_reciprocal_index)
+        for candidate in k_reciprocal_index:
+            candidate_forward = initial_rank[candidate, :int((k1 + 1) / 2)]
+            candidate_backward = initial_rank[candidate_forward, :int((k1 + 1) / 2)]
+            fi_candidate = np.where(candidate_backward == candidate)[1]
+            candidate_k_reciprocal = candidate_forward[fi_candidate]
 
-        fi = np.where(backward_k1 == i)[0]
-        nn_k1.append(forward_k1[fi])
+            if len(np.intersect1d(k_reciprocal_index, candidate_k_reciprocal)) > 2/3 * len(candidate_k_reciprocal):
+                k_reciprocal_exp.extend(candidate_k_reciprocal)
 
-    jaccard_dist = np.zeros_like(original_dist)
+        k_reciprocal_exp = np.unique(k_reciprocal_exp)
+        # compute weights for this sample
+        weight = np.exp(-original_dist[i, k_reciprocal_exp])
+        V[i, k_reciprocal_exp] = weight / np.sum(weight)
 
-    for i in range(prob.shape[0]):
-        ind_non_zero = np.where(original_dist[i] < 0.6)[0]
+    # Step 4: local query expansion (k2 > 1)
+    if k2 > 1:
+        V_qe = np.zeros_like(V, dtype=np.float32)
+        for i in range(query_num):
+            neighbors = initial_rank[i, :k2]
+            V_qe[i, :] = np.mean(V[neighbors, :], axis=0)
+        V = V_qe
 
-        for j in ind_non_zero:
-            intersection = len(np.intersect1d(nn_k1[i], nn_k1[j]))
-            union = len(np.union1d(nn_k1[i], nn_k1[j]))
+    # Step 5: compute Jaccard distance via inverted index
+    gallery_num = prob.shape[0]
+    invIndex = [np.where(V[:, i] != 0)[0] for i in range(gallery_num)]
+    jaccard_dist = np.zeros_like(original_dist, dtype=np.float32)
 
-            if union > 0:
-                jaccard_dist[i, j] = 1 - intersection / union
+    for i in range(query_num):
+        temp_min = np.zeros(gallery_num, dtype=np.float32)
+        ind_nonzero = np.where(V[i, :] != 0)[0]
+        for j in ind_nonzero:
+            temp_min[invIndex[j]] += np.minimum(V[i, j], V[invIndex[j], j])
+        jaccard_dist[i, :] = 1 - temp_min / (2 - temp_min)
 
-    return 1 - (jaccard_dist * lambda_value + original_dist * (1 - lambda_value))
+    # Step 6: combine original distance and Jaccard distance
+    return jaccard_dist * (1 - lambda_value) + original_dist * lambda_value
 
 
 def query_expansion(emb, top_k=3):

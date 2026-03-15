@@ -1,14 +1,46 @@
+import json
+import os
 from datetime import datetime
+import tomllib
 import torch
 import numpy as np
+from dataclasses import fields
+from pathlib import Path
+import random
+import pandas as pd
+import matplotlib.pyplot as plt
 
-def ensure_dir(paths):
+from typing import Any, Literal, Optional, Sequence
+
+from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
+
+
+def read_json_if_exists(path: Path) -> Optional[dict[str, Any]] | Optional[list[dict[str, Any]]]:
+    if not path.exists():
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json(obj, path: Path):
+    with open(path, "w") as f:
+        json.dump(obj, f, indent=2)
+
+
+def ensure_dir(p: Path) -> None:
     """
     Ensures that the specified directories exist or creates it and any 
     missing parent directories.
     """
-    for p in paths:
-      p.mkdir(parents=True, exist_ok=True)
+    p.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_dirs(paths: Paths = PATHS) -> None:
+    """Create all directories in PATHS (dataclass fields that are Path)."""
+    for f in fields(paths):
+        val = getattr(paths, f.name)
+        if isinstance(val, Path):
+            ensure_dir(val)
 
 
 def get_timestamp():
@@ -23,3 +55,202 @@ def to_numpy(x):
     if torch.is_tensor(x):
         return x.detach().cpu().numpy()
     return np.asarray(x)
+
+
+def set_seeds(seed: int=51, deterministic: bool=True) -> None:
+    """Sets seeds for complete reproducibility across all libraries and operations"""
+
+    # Python hashing (affects iteration order in some cases)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+    # Python random module
+    random.seed(seed)
+
+    # NumPy
+    np.random.seed(seed)
+
+    # PyTorch CPU
+    torch.manual_seed(seed)
+
+    # PyTorch GPU (all devices)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+
+        # CUDA deterministic operations
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+
+        if deterministic:
+            # cuDNN determinism
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
+
+            # CUDA matmul determinism (PyTorch recommends setting this env var)
+            # Only needed for some CUDA versions/ops; harmless otherwise.
+            os.environ['CUBLAS_WORKSPACE_CONFIG'] = ":4096:8"
+
+    if deterministic:
+        # Force deterministic algorithms when available
+        try:
+            torch.use_deterministic_algorithms(True)
+        except Exception as e:
+            print(str(e))
+
+
+    print(f"All random seeds set to {seed} for reproducibility")
+
+
+def normalize_query_indices(query_indices: Sequence[int], dataset_len: int) -> np.ndarray:
+    """
+    Strict sequence-only API.
+    - Single sample must be [i], NOT i.
+    """
+    if query_indices is None:
+        raise ValueError("query_indices must be a list/array. For one sample use [i].")
+
+    q = np.asarray(query_indices, dtype=np.int64).reshape(-1)
+
+    if q.size == 0:
+        raise ValueError("query_indices is empty. For one sample use [i].")
+
+    if q.min() < 0 or q.max() >= dataset_len:
+        raise IndexError(f"query_indices out of range [0, {dataset_len-1}].")
+
+    return q
+
+
+def denormalize_image(x, mean=IMGNET_MEAN, std=IMGNET_STD):
+    """
+    x: torch.Tensor [3,H,W] normalized
+    returns: np.ndarray [H,W,3] in [0,1]
+    """
+    if isinstance(x, np.ndarray):
+        # assume already CHW or HWC
+        if x.ndim == 3 and x.shape[0] == 3:
+            x = np.transpose(x, (1, 2, 0))
+        x = x.astype(np.float32)
+        return np.clip(x, 0, 1)
+
+    x = x.detach().cpu().float().clone()
+    mean_t = torch.tensor(mean).view(3, 1, 1)
+    std_t = torch.tensor(std).view(3, 1, 1)
+    x = x * std_t + mean_t
+    x = x.clamp(0, 1)
+    return x.permute(1, 2, 0).numpy()
+
+
+def tensor_img_to_hwc01(x):
+    """
+    Converts image tensor/array to HWC float [0,1] for matplotlib.imshow.
+    Supports:
+      - torch.Tensor [C,H,W] or [H,W,C]
+      - np.ndarray   [C,H,W] or [H,W,C]
+    """
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().float().numpy()
+
+    x = np.asarray(x)
+
+    if x.ndim == 3 and x.shape[0] in (1, 3, 4):  # CHW -> HWC
+        x = np.transpose(x, (1, 2, 0))
+
+    if x.ndim == 3 and x.shape[-1] == 1:
+        x = x[..., 0]
+
+    # If values are in [0,255], scale down
+    if np.nanmax(x) > 1.0:
+        x = x / 255.0
+
+    return np.clip(x, 0.0, 1.0)
+
+
+def json_default(obj):
+    """Make numpy/path types JSON serializable."""
+    try:
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+    except Exception:
+        pass
+    if isinstance(obj, Path):
+        return str(obj)
+    return str(obj)
+
+
+def save_npy(path: Path, arr: np.ndarray) -> None:
+    ensure_dir(path.parent)
+    np.save(path, arr)
+
+
+def save_parquet(path: Path, df: pd.DataFrame) -> None:
+    ensure_dir(path.parent)
+    df.to_parquet(path, index=False)
+
+
+def load_parquet(path: Path) -> pd.DataFrame:
+    return pd.read_parquet(path)
+
+
+def resolve_path(rel: str, store) -> Path:
+    """
+    Cache-first Resolver.
+    """
+    rel = rel.replace("\\", "/").lstrip("/")
+
+    for r in getattr(store, "read_roots", ()):
+        cand = Path(r) / rel
+        if cand.exists():
+            return cand
+
+    return Path(store.write_root) / rel
+
+
+PathRoot = Literal["data", "runs", "results"]
+
+def to_abs(root: PathRoot, rel: str) -> Path:
+    rel = rel.replace("\\", "/").lstrip("/")
+    if root == "data":
+        return DATA_ROOT / rel
+    if root == "runs":
+        return PATHS.runs / rel
+    if root == "results":
+        return PATHS.results / rel
+    raise ValueError(root)
+
+
+def to_abs_path(obj: dict) -> Path:
+    return to_abs(obj["root"], obj["rel"])
+
+
+def to_rel_path(p: str | Path) -> dict:
+    p = Path(p)
+
+    if not p.is_absolute():
+        return {"root": "data", "rel": p.as_posix().lstrip("/")}
+
+    p = p.resolve()
+    for root_tag, root_path in [
+        ("data", DATA_ROOT.resolve()),
+        ("runs", PATHS.runs.resolve()),
+        ("results", PATHS.results.resolve()),
+    ]:
+        try:
+            rel = p.relative_to(root_path).as_posix()
+            return {"root": root_tag, "rel": rel}
+        except Exception:
+            pass
+
+    # fallback: store only filename (last resort)
+    return {"root": "data", "rel": p.name}
+
+
+def save_fig(fig: plt.Figure, save_path: str | Path, dpi: int = 200) -> None:
+    save_path = Path(save_path)
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+    plt.close(fig)

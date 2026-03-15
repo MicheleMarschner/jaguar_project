@@ -1,0 +1,13 @@
+[experiment]
+name = "kaggle_rounds_comparison"
+description = "Model comparison over Kaggle's data round 1 and round 2."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+output_profile = "rounds_comparison"
+
+[[experiment.runs]]
+experiment_name = "round1_comparison_current_best_baseline"
+backbone_name = "EVA-02"
+head_type = "triplet"
+split_data_path = "/splits/default_kaggle/full_split.parquet"
+m = 0.7

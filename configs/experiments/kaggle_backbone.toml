@@ -1,0 +1,23 @@
+[experiment]
+name = "kaggle_backbone"
+description = "Backbone ablation for Kaggle-oriented training runs."
+base_config = "base/kaggle_base"
+mode = "train"
+train_type = "kaggle"
+output_profile = "backbone"
+
+[[experiment.runs]]
+experiment_name = "backbone_eva02"
+backbone_name = "EVA-02"
+
+[[experiment.runs]]
+experiment_name = "backbone_megadescriptor_l"
+backbone_name = "MegaDescriptor-L"
+
+[[experiment.runs]]
+experiment_name = "backbone_miew_id"
+backbone_name = "MiewID"
+
+[[experiment.runs]]
+experiment_name = "backbone_dinov2_base"
+backbone_name = "DINOv2-Base"

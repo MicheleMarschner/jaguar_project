@@ -1,0 +1,100 @@
+[experiment]
+name = "kaggle_augmentation"
+description = "Augmentation ablation around current full augmentation setup."
+base_config = "base/kaggle_base"
+mode = "train"
+train_type = "kaggle"
+output_profile = "augmentation"
+
+[[experiment.runs]]
+experiment_name = "aug_none"
+apply_augmentations = false
+
+[[experiment.runs]]
+experiment_name = "aug_flip_only"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = false
+gaussian_blur = false
+affine_degrees = 0
+color_jitter_brightness = 0
+color_jitter_contrast = 0
+random_erasing_p = 0
+
+[[experiment.runs]]
+experiment_name = "aug_geom_noflip_nocol_noerase"
+apply_augmentations = true
+horizontal_flip = false
+random_resized_crop = true
+gaussian_blur = false
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0
+color_jitter_contrast = 0
+random_erasing_p = 0
+
+[[experiment.runs]]
+experiment_name = "aug_geom_nocol_noerase"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = true
+gaussian_blur = false
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0
+color_jitter_contrast = 0
+random_erasing_p = 0
+
+[[experiment.runs]]
+experiment_name = "aug_geom_noerase"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = true
+gaussian_blur = false
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0
+
+[[experiment.runs]]
+experiment_name = "aug_full_pipeline"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = true
+gaussian_blur = true
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0.1
+
+[[experiment.runs]]
+experiment_name = "aug_full_pipeline_erase025"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = true
+gaussian_blur = true
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0.25
+
+[[experiment.runs]]
+experiment_name = "aug_curr_baseline"
+apply_augmentations = true
+horizontal_flip = true
+random_resized_crop = false
+gaussian_blur = false
+affine_degrees = 15
+affine_translate = [0.15,0.15]
+affine_scale = [0.85,1.15]
+color_jitter_brightness = 0.2
+color_jitter_contrast = 0.2
+random_erasing_p = 0.25

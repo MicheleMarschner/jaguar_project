@@ -1,0 +1,6 @@
+[evaluation]
+experiment_name = "xai_"
+
+[output]
+profile = "xai"
+experiment_group = "eda_foreground_contribution"

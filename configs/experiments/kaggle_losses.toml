@@ -1,0 +1,42 @@
+[experiment]
+name = "kaggle_losses"
+description = "Classification loss/head ablation with fixed backbone and training setup."
+base_config = "base/kaggle_base"
+mode = "train"
+train_type = "kaggle"
+output_profile = "loss"
+
+# [[experiment.runs]]
+# experiment_name = "loss_arcface"
+# head_type = "arcface"
+# s = 30.0    # Default
+# m = 0.50    # Default
+
+# [[experiment.runs]]
+# experiment_name = "loss_cosface"
+# head_type = "cosface"
+# s = 30.0      # optional, only if you want to change from ArcFace default
+# m = 0.35      # CosFace-specific margin
+
+# [[experiment.runs]]
+# experiment_name = "loss_sphereface"
+# head_type = "sphereface"
+# s = 30.0    # optional, same as ArcFace default
+# m = 4       # must specify integer margin
+
+# [[experiment.runs]]
+# experiment_name = "loss_softmax"
+# head_type = "softmax"
+
+[[experiment.runs]]
+experiment_name = "loss_triplet_bot_hard"
+head_type = "triplet"
+m = 0.7
+mining_type = "hard"       
+force_silhouette = false
+early_stopping = false
+optimizer_lr = 3.5e-5
+backbone_lr = 3.5e-6
+scheduler_lr_start = 3.5e-5
+scheduler_lr_max = 3.5e-4
+batch_size = 128

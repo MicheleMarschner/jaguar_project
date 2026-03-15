@@ -1,0 +1,10 @@
+
+[experiment]
+name = "eda_foreground_contribution"
+mode = "eval"
+eval_type = "foreground_contribution"
+base_config = "base/xai_base"
+output_profile = "xai"
+
+[[experiment.runs]]
+experiment_name = "xai_"

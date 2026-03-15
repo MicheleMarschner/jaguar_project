@@ -1,0 +1,39 @@
+[experiment]
+name = "baseline"
+description = "Train one single model on the data"
+base_config = "base/kaggle_base"
+mode = "train"
+train_type = "kaggle"
+output_profile = "baseline"
+
+[[experiment.runs]]
+experiment_name = "baseline_init"
+head_type = "arcface"   # Options: "arcface"
+m = 0.50
+use_projection = true
+use_forward_features = false
+include_duplicates = true
+split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
+use_balanced_sampler = false    # Set to true to handle class imbalance
+save_dir = "checkpoints/round_2/"  
+# ---Fine-tuning Params---
+unfreeze_epoch = 0       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
+ema = false
+optimizer_type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
+optimizer_lr = 1e-3              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW
+optimizer_weight_decay = 1e-4
+optimizer_momentum = 0.9          # Only used for SGD
+optimizer_betas = [0.9, 0.999]    # Only used for Adam/AdamW
+backbone_lr = 2e-6       # Keep this very small (1/10th or 1/100th of head LR)
+factor = 0.1             # ReduceLROnPlateau
+patience = 2             # ReduceLROnPlateau
+scheduler_type = "CosineAnnealingLR"  # Options: "CosineAnnealingLR", "OneCycleLR", "ReduceLROnPlateau", "JaguardIdScheduler"
+scheduler_T_max = 30                  # CosineAnnealingLR
+scheduler_lr_start = 1e-5             # custom 
+scheduler_lr_min = 9e-6               # Cosine or custom or ReduceLROnPlateau
+scheduler_lr_max = 1e-3               # Custom or OneCycle
+apply_augmentations = false
+silhouette_freq = 5         # Compute Silhouette and refresh viz data every x epochs if force_silhouette true
+force_silhouette = false    # Set to true for the mining RQ study
+enabled = false
+

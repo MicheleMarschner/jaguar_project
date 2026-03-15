@@ -1,0 +1,11 @@
+[experiment]
+name = "eda_xai_class_attribution"
+description = ""
+base_config = "base/xai_base"
+mode = "explain"
+explain_type = ""
+output_profile = "xai"
+
+[[experiment.runs]]
+experiment_name = "eva02_easy_hard"
+

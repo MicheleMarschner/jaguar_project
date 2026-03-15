@@ -1,0 +1,10 @@
+[experiment]
+name = "eda_background_intervention"
+mode = "eval"
+base_config = "base/xai_base"
+eval_type = "background_intervention"
+output_profile = "xai"
+
+[[experiment.runs]]
+experiment_name = "eva02"
+

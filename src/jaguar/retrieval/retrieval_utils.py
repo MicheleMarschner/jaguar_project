@@ -44,7 +44,6 @@ def build_error_table(sim, labels, dataset, top_k=50):
 # ------------------Embedding Cache------------------
 
 def get_cached_embeddings(model, loader, tta_mode, cache_dir):
-
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -61,7 +60,6 @@ def get_cached_embeddings(model, loader, tta_mode, cache_dir):
     np.save(path, emb)
 
     return emb
-
 
 # ------------------Parameter grid------------------
 

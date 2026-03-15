@@ -13,7 +13,7 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
 include_duplicates = false
-seed = 42
+seed = [42]
 
 [data]
 split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
@@ -45,7 +45,8 @@ experiment_name = "kaggle_base"
 epochs = 30
 batch_size = 32  # 16
 samples_per_class = 4
-seed = 42
+seed = [42]
+multiple_seeds = false      # True if multiple seeds are provided as list or if the experiments suite is kaggle_stability.toml
 early_stopping = true
 early_stopping_patience = 5
 # ---Fine-tuning Params---

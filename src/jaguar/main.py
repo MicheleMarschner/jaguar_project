@@ -93,19 +93,39 @@ def main():
         config.setdefault("training", {})
         config["training"]["experiment_name"] = args.experiment_name
 
-
     checkpoints_dir = Path(config["training"]["save_dir"])
     exp_name = config["training"]["experiment_name"]
+    seed = config["training"]["seed"]
     experiment_group = config.get("output", {}).get("experiment_group")
     print(checkpoints_dir, experiment_group)
 
-    # run artifact directory
+    # run artifact director; default convention: experiment_name/model_name
     if experiment_group:
-        run_dir = PATHS.runs / experiment_group / exp_name
-        config["training"]["save_dir"] = str(checkpoints_dir / experiment_group / exp_name)
+        default_dir = str(checkpoints_dir / experiment_group / exp_name)
+        print(f"[MULTIPLE SEEDS INFO]: {config['training']['multiple_seeds']}")
+        
+        if not config["training"]["multiple_seeds"]:
+            run_dir = PATHS.runs / experiment_group / exp_name 
+            config["training"]["save_dir"] = default_dir
+            
+        elif config["training"]["multiple_seeds"]: 
+            
+            backbone_name = config['model']['backbone_name']
+            optim_name = config['optimizer']['type']
+            sched_name = config['scheduler']['type']
+            
+            exp_name_first = f"{backbone_name}_{optim_name}_{sched_name}"
+            if "seed" not in exp_name.lower(): 
+                exp_name = f"{exp_name}_seed_{seed}_{exp_name_first}"
+            else:
+                exp_name = f"{exp_name}_seed_{seed}_{exp_name_first}"
+                
+            run_dir = PATHS.runs / experiment_group / exp_name 
+            config["training"]["save_dir"] = str(checkpoints_dir / experiment_group / exp_name)
     else:
         run_dir = PATHS.runs / exp_name
         config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
+        
     ensure_dir(run_dir)
 
     wandb_run = init_wandb_run(
@@ -305,8 +325,8 @@ def main():
             num_workers=config['data']['num_workers'],
             pin_memory=True
         )
-        print(f"[RARE VAL] identities <= {rare_threshold} images")
-        print(f"[RARE VAL] samples: {len(rare_val_ds)}")
+        print(f"[RARE VAL Info] identities <= {rare_threshold} images")
+        print(f"[RARE VAL Info] samples: {len(rare_val_ds)}")
     
     # # Setup train/val splits  
     # full_ds.transform = model.backbone_wrapper.transform 

@@ -1,5 +1,7 @@
 [training]
 experiment_name = "adam__cosine"
+seed = 1024
+multiple_seeds = true
 
 [optimizer]
 type = "Adam"

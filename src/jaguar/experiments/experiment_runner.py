@@ -263,84 +263,22 @@ def run_experiments():
 
     # Overrides
     for i, run_cfg in enumerate(runs, start=1):
-        experiment_name = run_cfg["experiment_name"]
-        override = build_experiment_override(run_cfg, experiment_meta=experiment_meta, base_config=base_config)
-        override_text = dict_to_toml(override)
+        run_name = run_cfg["experiment_name"]
+        seeds = run_cfg.get("seed", [run_cfg.get("seed", 42)])  # support multiple seeds
+        for seed in seeds:
+            override = build_experiment_override(run_cfg, experiment_meta=experiment_meta, base_config=base_config)
+            override.setdefault("training", {})["seed"] = seed
+            override["training"]["multiple_seeds"] = len(seeds) > 1 or "stability" in experiment_meta['name'].lower()
 
-        override_path = generated_dir / f"{experiment_name}.toml"
-        override_path.write_text(override_text, encoding="utf-8")
-        rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
-        config_paths.append(str(rel_path))
-        
-        print(f"[{i}/{len(runs)}] Generated override: {override_path.name}")
+            override_text = dict_to_toml(override)
 
-    #     cmd = [
-    #         "python",
-    #         args.main_script,
-    #         "--base_config",
-    #         args.base_config,
-    #         "--experiment_config",
-    #         str(rel_path),
-    #         "--experiment_name",
-    #         experiment_name,
-    #     ]
-
-    #     print("Generated override config:")
-    #     print(override_text)
-    #     print("Command:")
-    #     print(" ".join(cmd))
-
-    #     if setup_name:
-    #         setup_cmd = [
-    #             "python",
-    #             "src/jaguar/experiments/experiment_setup.py",
-    #             "--setup_name",
-    #             setup_name,
-    #             "--base_config",
-    #             args.base_config,
-    #             "--experiment_config",
-    #             str(rel_path),
-    #         ]
-    #         print("Running setup:", " ".join(setup_cmd))
-    #         setup_result = subprocess.run(setup_cmd)
-
-    #         if setup_result.returncode != 0:
-    #             raise RuntimeError(f"Setup failed: {experiment_name}")
-
-    #     print("Running:", " ".join(cmd))
-    #     result = subprocess.run(cmd)
-
-    #     if result.returncode != 0:
-    #         raise RuntimeError(f"Run failed: {experiment_name}")
-
-    #     run_lines = []
-    #     if setup_name:
-    #         run_lines.append(" ".join(setup_cmd))
-    #     run_lines.append(" ".join(cmd))
-    #     all_cmds.extend(run_lines)
-    #     all_cmds.append("")
-
-    #     print("Generated override config:")
-    #     print(override_text)
-    #     print("Command:")
-    #     print(" ".join(cmd))
-
-
-    # run_script_path = generated_dir / "run_all.sh"
-
-    # script_lines = [
-    #     "#!/usr/bin/env bash",
-    #     "set -e",
-    #     "",
-    # ]
-
-    # script_lines.extend(all_cmds)
-    # script_lines.append("")
-
-    # run_script_path.write_text("\n".join(script_lines), encoding="utf-8")
-
-    # print(f"\nSaved run script: {run_script_path}")
-    # print("\nAll runs finished.")
+            generated_name = f"{run_name}.toml" if "seed" in run_name.lower() else f"{run_name}_seed_{seed}.toml"
+            override_path = generated_dir / generated_name
+            override_path.write_text(override_text, encoding="utf-8")
+            rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
+            config_paths.append(str(rel_path))
+            
+            print(f"[{i}/{len(runs)}] Generated override: {override_path.name} | seed={seed}")
     
     # Generate SLURM array script
     slurm_lines = [

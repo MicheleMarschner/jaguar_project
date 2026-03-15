@@ -4,6 +4,7 @@ description = "Model comparison over Kaggle's data round 1 and round 2."
 base_config = "base/kaggle_base"
 mode = "kaggle"
 output_profile = "rounds_comparison"
+setup_name = "base"
 
 [[experiment.runs]]
 experiment_name = "round1_comparison_current_best_baseline"

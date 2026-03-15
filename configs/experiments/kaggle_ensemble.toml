@@ -4,6 +4,7 @@ description = "Fusion sweeps for 3-model ensemble"
 base_config = "base/ensemble_base"
 mode = "ensemble"
 output_profile = "ensemble"
+setup_name = "base"
 
 [[experiment.runs]]
 experiment_name = "eva_miew_convnext_equal_globalminmax_sq"

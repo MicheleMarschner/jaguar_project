@@ -5,6 +5,7 @@ base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
 output_profile = "resizing"
+setup_name = "base"
 
 # [[experiment.runs]]
 # experiment_name = "fixed_cnv2_unfreeze_4"

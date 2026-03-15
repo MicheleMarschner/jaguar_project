@@ -4,50 +4,17 @@ description = "Train one single model on the data"
 base_config = "base/kaggle_base"
 mode = "kaggle"
 train_type = "kaggle"
-<<<<<<< HEAD
-setup_name = "kaggle_base"
-output_profile = "base"
-
-[[experiment.runs]]
-experiment_name = "baseline_init"
-
-head_type = "arcface"
-m = 0.50
-
-include_duplicates = true
-
-# optional: only if you really want to set split by hand
-split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
-
-optimizer_type = "Adam"
-optimizer_lr = 1e-3
-optimizer_weight_decay = 1e-4
-optimizer_momentum = 0.9
-optimizer_betas = [0.9, 0.999]
-
-scheduler_type = "CosineAnnealingLR"
-scheduler_T_max = 30
-scheduler_lr_start = 1e-5
-scheduler_lr_min = 9e-6
-scheduler_lr_max = 1e-3
-scheduler_lr_ramp_ep = 15
-scheduler_lr_sus_ep = 0
-scheduler_lr_decay = 0.8
-
-apply_augmentations = false
-
-enabled = false
-=======
 output_profile = "baseline"
+setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "baseline_init"
+experiment_name = "baseline_init_round1"
 head_type = "arcface"   # Options: "arcface"
 m = 0.50
 use_projection = true
 use_forward_features = false
 include_duplicates = true
-split_data_path = "/default_kaggle/full_split.parquet"
+split_data_path = "splits/default_kaggle/full_split.parquet"
 use_balanced_sampler = false    # Set to true to handle class imbalance
 save_dir = "checkpoints/round_1/"  
 # ---Fine-tuning Params---
@@ -71,4 +38,3 @@ silhouette_freq = 5         # Compute Silhouette and refresh viz data every x ep
 force_silhouette = false    # Set to true for the mining RQ study
 enabled = false
 
->>>>>>> 42713125df6a726593b00200ae9d7cb507c15ca6

@@ -4,6 +4,7 @@ description = "Hard- vs semi- negative mining analysis ablation on triplet loss,
 base_config = "base/kaggle_base"
 mode = "kaggle"
 output_profile = "mining"
+setup_name = "base"
 
 [[experiment.runs]]
 experiment_name = "loss_triplet_bot_hard"

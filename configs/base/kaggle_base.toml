@@ -12,7 +12,7 @@ mining_type = "hard"
 [split]
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
-include_duplicates = false
+include_duplicates = true
 seed = 51
 
 [data]
@@ -22,7 +22,7 @@ split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_spli
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
 num_workers = 4
-use_fiftyone = false
+use_fiftyone = true
 
 [curation]
 train_k = 1

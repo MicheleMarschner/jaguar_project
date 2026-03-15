@@ -1,8 +1,0 @@
-{
-  "backbone_name": "DINOv2-Base",
-  "head_type": "arcface",
-  "total_params": 87401728,
-  "trainable_params": 15000064,
-  "input_size": 224,
-  "flops": null
-}

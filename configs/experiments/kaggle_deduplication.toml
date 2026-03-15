@@ -5,6 +5,7 @@ base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
 output_profile = "deduplication"
+setup_name = "deduplication"
 
 [[experiment.runs]]
 experiment_name = "closed_keep_all"

@@ -1,8 +1,0 @@
-{
-  "backbone_name": "MegaDescriptor-L",
-  "head_type": "arcface",
-  "total_params": 196806196,
-  "trainable_params": 58321504,
-  "input_size": 384,
-  "flops": null
-}

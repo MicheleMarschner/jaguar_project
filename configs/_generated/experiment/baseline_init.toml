@@ -1,8 +1,0 @@
-[training]
-experiment_name = "baseline_init"
-
-[model]
-backbone_name = "EVA-02"
-
-[data]
-split_data_path = "splits/strclosed_set__dupFalse__kTrain4__kVal4__p4/full_split.parquet"

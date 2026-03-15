@@ -1,5 +1,3 @@
-# src/jaguar/retrieval/retrieval_experiments.py
-
 import tomli_w
 from pathlib import Path
 from torch.utils.data import DataLoader

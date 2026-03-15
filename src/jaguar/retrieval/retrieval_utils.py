@@ -12,7 +12,6 @@ from jaguar.utils.utils_evaluate import (
 
 from jaguar.evaluation.metrics import ReIDEvalBundle
 
-
 # ------------------Embedding Cache------------------
 
 def get_cached_embeddings(model, loader, tta_mode, cache_dir):

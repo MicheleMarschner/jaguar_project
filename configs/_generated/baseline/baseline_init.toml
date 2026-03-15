@@ -30,4 +30,4 @@ profile = "baseline"
 experiment_group = "baseline"
 
 [data]
-split_data_path = "splits/strclosed_set__dupTrue__kTrain1__kVal30__p4/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"

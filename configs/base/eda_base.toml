@@ -30,7 +30,7 @@ phash_threshold = 4
 [preprocessing]
 train_background = "original" #"random_bg"
 val_background = "original" #"blur_bg"
-bg_dir = "data/round_2/backgrounds"
+bg_dir = "backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10

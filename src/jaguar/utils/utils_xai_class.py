@@ -126,7 +126,13 @@ class ClassTarget:
         self.class_idx = int(class_idx)
 
     def __call__(self, model_output: torch.Tensor) -> torch.Tensor:
-        return model_output[:, self.class_idx]
+        if model_output.ndim == 1:
+            return model_output[self.class_idx]
+        if model_output.ndim == 2:
+            return model_output[:, self.class_idx]
+        raise ValueError(
+            f"Unexpected model_output shape in ClassTarget: {tuple(model_output.shape)}"
+        )
 
 
 def get_class_gradcam_config(model):

@@ -32,10 +32,10 @@ cache_prefix = "backbone_convnext_v2"
 
 
 [[experiment.runs]]
-experiment_name = "eva_miew_convnext_equal_globalminmax_nosq"
-weights = [1.0, 1.0, 1.0]
+experiment_name = "eva_miew_convnext_weighted_globalminmax_sq"
+weights = [0.4, 0.4, 0.2]
 normalize_mode = "global_minmax"
-square_before_fusion = false
+square_before_fusion = true
 
 [[experiment.runs.members]]
 name = "EVA-02"
@@ -82,7 +82,7 @@ cache_prefix = "backbone_convnext_v2"
 
 
 [[experiment.runs]]
-experiment_name = "eva_miew_convnext_evaheavy_globalminmax_sq"
+experiment_name = "eva_mega_convnext_evaheavy_globalminmax_sq"
 weights = [2.0, 1.0, 1.0]
 normalize_mode = "global_minmax"
 square_before_fusion = true
@@ -131,9 +131,10 @@ config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
 cache_prefix = "backbone_convnext_v2"
 
 
+
 [[experiment.runs]]
-experiment_name = "eva_miew_convnext_convnextheavy_globalminmax_sq"
-weights = [1.0, 1.0, 2.0]
+experiment_name = "eva_miew_dinov2base_equal_globalminmax_sq"
+weights = [1.0, 1.0, 1.0]
 normalize_mode = "global_minmax"
 square_before_fusion = true
 
@@ -150,35 +151,11 @@ config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
 cache_prefix = "backbone_miew_id"
 
 [[experiment.runs.members]]
-name = "ConvNeXt-V2"
-checkpoint_path = "kaggle_backbone/backbone_convnext_v2"
-config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
-cache_prefix = "backbone_convnext_v2"
+name = "DINOv2-Base"
+checkpoint_path = "kaggle_backbone/backbone_dinov2_base"
+config_path = "kaggle_backbone/backbone_dinov2_base/config_leaderboard_exp.toml"
+cache_prefix = "backbone_dinov2_base"
 
-
-[[experiment.runs]]
-experiment_name = "eva_miew_convnext_eva_miew_favored_globalminmax_sq"
-weights = [1.5, 1.5, 1.0]
-normalize_mode = "global_minmax"
-square_before_fusion = true
-
-[[experiment.runs.members]]
-name = "EVA-02"
-checkpoint_path = "kaggle_backbone/backbone_eva02"
-config_path = "kaggle_backbone/backbone_eva02/config_leaderboard_exp.toml"
-cache_prefix = "backbone_eva02"
-
-[[experiment.runs.members]]
-name = "MiewID"
-checkpoint_path = "kaggle_backbone/backbone_miew_id"
-config_path = "kaggle_backbone/backbone_miew_id/config_leaderboard_exp.toml"
-cache_prefix = "backbone_miew_id"
-
-[[experiment.runs.members]]
-name = "ConvNeXt-V2"
-checkpoint_path = "kaggle_backbone/backbone_convnext_v2"
-config_path = "kaggle_backbone/backbone_convnext_v2/config_leaderboard_exp.toml"
-cache_prefix = "backbone_convnext_v2"
 
 # [[experiment.runs]]
 # experiment_name = "single_eva02"

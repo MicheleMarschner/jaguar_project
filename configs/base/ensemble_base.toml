@@ -3,7 +3,7 @@ name = "single_eva02"
 gallery_protocol = "both"       # "valonly_gallery"
 
 [output]
-experiment_group = "ensemble_singles"
+experiment_group = "ensemble"
 
 [fusion]
 weights = [1.0]

@@ -401,7 +401,6 @@ def log_wandb_checkpoint_artifact(
     print(f"[DEBUG] checkpoint_path: {checkpoint_path}")
     artifact.add_file(local_path=str(checkpoint_path), name=checkpoint_path.name)
     run.log_artifact(artifact, aliases=aliases or ["best"])
-    artifact.wait()
 
 
 def log_wandb_background_intervention_results(

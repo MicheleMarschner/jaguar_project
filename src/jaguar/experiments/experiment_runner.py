@@ -153,10 +153,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        result = subprocess.run(cmd)
+        #result = subprocess.run(cmd)
 
-        if result.returncode != 0:
-            raise RuntimeError(f"Run failed: {experiment_name}")
+        #if result.returncode != 0:
+        #    raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

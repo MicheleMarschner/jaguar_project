@@ -6,16 +6,16 @@ mode = "kaggle"
 setup_name = "kaggle_base"
 output_profile = "optim_sched"
 
-# [[experiment.runs]]
-# experiment_name = "adam__cosine"
-# optimizer_type = "Adam"
-# optimizer_lr = 1e-3     #1e-3, 1e-4 
-# optimizer_weight_decay = 1e-4
-# optimizer_betas = [0.9, 0.999]
-# scheduler_type = "CosineAnnealingLR"
-# scheduler_T_max = 30
-# scheduler_lr_min = 1e-6
-# seed = [42,123,256,512,1024]
+[[experiment.runs]]
+experiment_name = "adam__cosine"
+optimizer_type = "Adam"
+optimizer_lr = 1e-3     #1e-3, 1e-4 
+optimizer_weight_decay = 1e-4
+optimizer_betas = [0.9, 0.999]
+scheduler_type = "CosineAnnealingLR"
+scheduler_T_max = 30
+scheduler_lr_min = 1e-6
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adam__onecycle"
@@ -24,7 +24,8 @@ optimizer_lr = 1e-3     #1e-3, 1e-4
 optimizer_weight_decay = 1e-4
 optimizer_betas = [0.9, 0.999]
 scheduler_type = "OneCycleLR"
-scheduler_lr_max = 1e-3
+# scheduler_lr_max = 1e-3
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adamw__reduced"
@@ -36,6 +37,7 @@ scheduler_type = "ReduceLROnPlateau"
 scheduler_factor = 0.1
 scheduler_patience = 3
 scheduler_lr_min = 1e-7
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adamw__cosine"
@@ -46,6 +48,7 @@ optimizer_betas = [0.9, 0.999]
 scheduler_type = "CosineAnnealingLR"
 scheduler_T_max = 30
 scheduler_lr_min = 1e-6
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adamw__onecycle"
@@ -55,6 +58,7 @@ optimizer_weight_decay = 1e-4
 optimizer_betas = [0.9, 0.999]
 scheduler_type = "OneCycleLR"
 # scheduler_lr_max = 1e-3
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adamw__reduced"
@@ -66,6 +70,7 @@ scheduler_type = "ReduceLROnPlateau"
 scheduler_factor = 0.1
 scheduler_patience = 3
 scheduler_lr_min = 1e-7
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "adamw__JaguardIdScheduler"
@@ -75,6 +80,7 @@ optimizer_weight_decay = 1e-3
 optimizer_betas = [0.9, 0.999]
 scheduler_type = "JaguardIdScheduler"
 scheduler_lr_max = 1e-3
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "muon__cosine"
@@ -86,6 +92,7 @@ optimizer_betas = [0.9, 0.95]
 scheduler_type = "CosineAnnealingLR"
 scheduler_T_max = 30
 scheduler_lr_min = 1e-6
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "muon__onecycle"
@@ -95,6 +102,7 @@ optimizer_weight_decay = 2e-3
 optimizer_betas = [0.9, 0.95]
 scheduler_type = "OneCycleLR"
 # scheduler_lr_max = 1e-3
+seed = [42,123,256,512,1024]
 
 [[experiment.runs]]
 experiment_name = "muon__JaguardIdScheduler" 
@@ -104,3 +112,4 @@ optimizer_weight_decay = 2e-3
 optimizer_betas = [0.9, 0.95]
 scheduler_type = "JaguardIdScheduler"
 scheduler_lr_max = 2e-3
+seed = [42,123,256,512,1024]

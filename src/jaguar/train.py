@@ -284,16 +284,26 @@ class JaguarTrainer:
             
         all_embeddings = []
         all_labels = []
+        running_loss = 0.0
+        num_batches = 0
         
         eval_loader = loader if loader is not None else self.val_loader
         print("[Info] Validating and computing ReID metrics...")
         for batch in tqdm(eval_loader, desc="Extracting Val Embeds"):
             imgs = batch["img"].to(self.device)
+            labels = batch["label_idx"].to(self.device)
+
             # Use the model utility to get normalized embeddings
+            loss, _ = eval_model(imgs, labels)
             emb = eval_model.get_embeddings(imgs) #self.model.get_embeddings(imgs)
+
+            running_loss += loss.item()
+            num_batches += 1
             
             all_embeddings.append(emb.cpu())
             all_labels.append(batch["label_idx"])
+        
+        val_loss = running_loss / max(num_batches, 1)
 
         full_embeddings = torch.cat(all_embeddings, dim=0)
         full_labels = torch.cat(all_labels, dim=0)
@@ -314,6 +324,7 @@ class JaguarTrainer:
             device="cpu"
         )
         metrics = bundle.compute_all(include_silhouette=do_heavy_metrics)
+        metrics["val_loss"] = val_loss
         return metrics, full_embeddings, full_labels, do_heavy_metrics
         # return bundle.compute_all()
 

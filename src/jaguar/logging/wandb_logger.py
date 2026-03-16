@@ -148,6 +148,7 @@ def log_wandb_epoch_metrics(
     log_dict = {
             "epoch": int(epoch),
             "train/loss": float(avg_loss),
+            "val/loss": float(metrics["val_loss"]),
             "val/mAP": float(metrics["mAP"]),
             "val/pairwise_AP": float(metrics["pairwise_AP"]),
             "val/rank1": float(metrics["rank1"]),

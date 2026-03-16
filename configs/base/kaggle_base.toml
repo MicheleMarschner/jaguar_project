@@ -39,7 +39,7 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
-save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_1/" 
+save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
 # save_dir = "checkpoints/round_2/"  
 experiment_name = "kaggle_base"
 epochs = 30

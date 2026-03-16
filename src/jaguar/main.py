@@ -417,6 +417,7 @@ def main():
         print(f"\nEpoch {epoch} Summary:")
         print(
             f"Train Loss: {avg_loss:.4f} | "
+            f"Val Loss: {metrics['val_loss']:.4f} | "
             f"Val mAP: {metrics['mAP']:.4f} | "
             f"Val pairAP: {metrics['pairwise_AP']:.4f} | "
             f"Val Rank1: {metrics['rank1']:.4f} | "
@@ -479,6 +480,7 @@ def main():
         history.append({
             "epoch": epoch,
             "train_loss": float(avg_loss),
+            "val_loss": float(metrics["val_loss"]),
             "val_mAP": float(metrics["mAP"]),
             "val_pairwise_AP": float(metrics["pairwise_AP"]),
             "val_rank1": float(metrics["rank1"]),

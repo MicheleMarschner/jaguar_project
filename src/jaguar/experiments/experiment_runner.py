@@ -271,8 +271,8 @@ def run_experiments():
             override["training"]["multiple_seeds"] = len(seeds) > 1 or "stability" in experiment_meta['name'].lower()
 
             override_text = dict_to_toml(override)
-
-            generated_name = f"{run_name}.toml" if "seed" in run_name.lower() else f"{run_name}_seed_{seed}.toml"
+            
+            generated_name = f"{run_name}_seed_{seed}.toml" if "optim" in experiment_meta['name'].lower() else f"{run_name}.toml"
             override_path = generated_dir / generated_name
             override_path.write_text(override_text, encoding="utf-8")
             rel_path = override_path.relative_to(PATHS.configs).with_suffix("")

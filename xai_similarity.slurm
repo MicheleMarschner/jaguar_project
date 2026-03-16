@@ -28,4 +28,4 @@ python -c "import torch; print('cuda available:', torch.cuda.is_available()); pr
 
 PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
   --base_config base/xai_base \
-  --experiment_config experiments/eda_xai_similarity
+  --experiment_config experiments/eda_xai_class_attribution

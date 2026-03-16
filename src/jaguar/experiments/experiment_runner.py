@@ -51,6 +51,8 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
         explain_type = experiment_meta.get("explain_type")
         if explain_type == "pair_similarity":
             return "src/jaguar/experiments/run_xai_similarity.py"
+        if explain_type == "class_attribution":
+            return "src/jaguar/experiments/run_class_attribution_generation.py"
         if explain_type == "pair_similarity_metrics":
             return "src/jaguar/experiments/run_xai_metrics.py"
         if explain_type == "background_sensitivity":
@@ -156,10 +158,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        #result = subprocess.run(cmd)
+        result = subprocess.run(cmd)
 
-        #if result.returncode != 0:
-        #    raise RuntimeError(f"Run failed: {experiment_name}")
+        if result.returncode != 0:
+            raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

@@ -3,11 +3,11 @@ name = "eda_xai_class_attribution"
 description = ""
 base_config = "base/xai_base"
 mode = "explain"
-explain_type = ""
+explain_type = "class_attribution"
 output_profile = "xai"
 setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "eva02_val_n332"
+experiment_name = "eva02_val_n332_all_groups"
 source_run_dir = "eda_foreground_contribution/fg_contribution_eva02_base"
 

@@ -60,8 +60,8 @@ class XAIConfig:
     ig_internal_bs: int = 32
     ig_batch_size: int = 32
 
-    # Retrieval pair taxonomy
     pair_types: Tuple[str, ...] = ("easy_pos", "hard_neg", "hard_pos")
+    groups: tuple[str, ...] = ()
 
     # Output root; each run creates its own subfolder under here
     out_root: Path = Path()

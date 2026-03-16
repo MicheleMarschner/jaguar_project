@@ -8,5 +8,6 @@ output_profile = "xai"
 setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "eva02_easy_hard"
+experiment_name = "eva02_val_n332"
+source_run_dir = "eda_foreground_contribution/fg_contribution_eva02_base"
 

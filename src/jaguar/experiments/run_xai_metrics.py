@@ -15,7 +15,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_similarity_cfg(config: dict) -> XAIConfig:
+def build_xai_cfg(config: dict) -> XAIConfig:
     """Build the shared XAI configuration object from the experiment config."""
     return XAIConfig(
         dataset_name=config["xai"]["dataset_name"],
@@ -27,6 +27,7 @@ def build_similarity_cfg(config: dict) -> XAIConfig:
         ig_internal_bs=config["xai"]["ig_internal_bs"],
         ig_batch_size=config["xai"]["ig_batch_size"],
         pair_types=tuple(config["xai"]["pair_types"]),
+        groups=tuple(config["xai"].get("groups", [])),
     )
 
 
@@ -39,7 +40,7 @@ def main():
     config = deep_update(base_config, experiment_config)
 
     config.setdefault("evaluation", {})
-    cfg = build_similarity_cfg(config)
+    cfg = build_xai_cfg(config)
     source_type = config["xai_metrics"]["source_type"]
 
     if source_type == "similarity":

@@ -107,7 +107,7 @@ PROJECT_ROOT = find_project_root(Path(__file__).parent)
 
 IN_COLAB = is_colab()
 IN_KAGGLE = is_kaggle()
-ROUND = "round_1"
+ROUND = "round_2"
 
 DATA_PATH = PROJECT_ROOT
 DATA_ROOT = Path(

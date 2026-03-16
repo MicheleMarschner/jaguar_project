@@ -148,7 +148,4 @@ A three-stage pipeline addresses this effectively:(1) conservative pHash-based b
 
 The main practical result is that **moderate duplicate-aware curation is preferable to both keeping all images and deduplicating too aggressively**. In this study, **train\_k=3, val\_k=3** provides the best overall trade-off between redundancy reduction and preservation of useful within-identity variation. This makes the dataset not only cleaner from an evaluation perspective, but also stronger for downstream Jaguar Re-ID.
 
-Optional short concluding sentence
-----------------------------------
-
 _Overall, duplicate-aware curation should be treated as part of the dataset design, because moderate redundancy reduction improves both evaluation quality and retrieval performance._

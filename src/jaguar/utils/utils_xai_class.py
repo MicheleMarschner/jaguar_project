@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 import numpy as np
 import torch
 from tqdm import tqdm
+import torch.nn.functional as F
 from captum.attr import IntegratedGradients
 from pytorch_grad_cam import GradCAM
 
@@ -222,3 +223,62 @@ def compute_saliency_gradcam_class(
         "is_correct_orig": torch.tensor(correct_out, dtype=torch.bool),
         "saliency": torch.stack(saliency_out, dim=0),   # [N,H,W]
     }
+
+
+def manual_gradcam_class(model, target_layer, x, class_idx, reshape_transform=None):
+    """
+    Compute a class-specific Grad-CAM map manually from one target layer and one input image.
+    """
+    acts = []
+    grads = []
+
+    def fwd_hook(m, inp, out):
+        acts.append(out)
+
+    def bwd_hook(m, gin, gout):
+        grads.append(gout[0])
+
+    h1 = target_layer.register_forward_hook(fwd_hook)
+    h2 = target_layer.register_full_backward_hook(bwd_hook)
+
+    try:
+        x = x.clone().detach().requires_grad_(True)
+        model.zero_grad(set_to_none=True)
+
+        logits = model(x)              # [1, C]
+        score = logits[0, class_idx]   # scalar
+        score.backward()
+
+        A = acts[0]
+        dA = grads[0]
+
+        # Transformer-style token outputs -> convert to spatial feature maps
+        if A.ndim == 3:
+            if reshape_transform is None:
+                raise ValueError(
+                    f"Got 3D activations {tuple(A.shape)} but no reshape_transform was provided."
+                )
+            A = reshape_transform(A)
+            dA = reshape_transform(dA)
+
+        # CNN-style outputs should already be [B, C, H, W]
+        if A.ndim != 4 or dA.ndim != 4:
+            raise ValueError(
+                f"Grad-CAM expects 4D tensors after optional reshape, got "
+                f"A={tuple(A.shape)}, dA={tuple(dA.shape)}"
+            )
+
+        w = dA.mean(dim=(2, 3), keepdim=True)      # [1, C, 1, 1]
+        cam = (w * A).sum(dim=1, keepdim=True)     # [1, 1, H, W]
+        cam = F.relu(cam)
+
+        cam = cam[0, 0]
+        cam = cam - cam.min()
+        cam = cam / (cam.max() + 1e-12)
+
+        return cam.detach().cpu().numpy()
+
+    finally:
+        h1.remove()
+        h2.remove()
+

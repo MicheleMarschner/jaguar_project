@@ -40,7 +40,6 @@ def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
     return df
 
 
-
 def print_keep_drop_summary(df: pd.DataFrame, split_col="split_tmp", keep_col="keep_curated"):
     """
     Print and return a per-split summary of kept versus dropped samples.
@@ -82,14 +81,6 @@ def build_burst_delta_table(
     out["keep_rate"] = (out["n_kept"] / out["n_total"]).round(4)
     return out.sort_values(["split_tmp", "n_total"], ascending=[True, False]).reset_index(drop=True)
 
-def print_top_changed_bursts(df: pd.DataFrame, top_n: int = 20):
-    """
-    Print the burst groups with the largest number of dropped samples.
-    """
-    burst_delta = build_burst_delta_table(df)
-    print("\n[Bursts] Top bursts by #dropped")
-    print(burst_delta.sort_values("n_dropped", ascending=False).head(top_n))
-    
 
 def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col="identity_id"):
     """

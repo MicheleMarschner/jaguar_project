@@ -1,7 +1,8 @@
-from typing import Any
-
 import numpy as np
 import pandas as pd
+from typing import Any
+
+from jaguar.utils.utils_evaluation import l2_normalize
 
 
 def compute_query_confidences(
@@ -82,12 +83,6 @@ def fuse_similarity_matrices_query_weighted(
         fused += sim * w[:, None]
 
     return fused
-
-
-def _l2_normalize(emb: np.ndarray, eps: float = 1e-12) -> np.ndarray:
-    """Row-wise L2 normalization."""
-    return emb / (np.linalg.norm(emb, axis=1, keepdims=True) + eps)
-
 
 def _build_member_dicts(out: dict[str, Any]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Collect per-member query embeddings, gallery embeddings, and similarity matrices."""
@@ -209,11 +204,11 @@ def fuse_embeddings_concat(
     parts = []
     for emb, w in zip(embeddings_list, weights):
         emb = np.asarray(emb, dtype=np.float64)
-        emb = _l2_normalize(emb)
+        emb = l2_normalize(emb)
         parts.append(emb * w)
 
     fused_emb = np.concatenate(parts, axis=1)
-    fused_emb = _l2_normalize(fused_emb)
+    fused_emb = l2_normalize(fused_emb)
     return fused_emb
 
 
@@ -276,11 +271,11 @@ def run_same_dim_mean_embedding_fusion(
             f"{method_name} requires same-dimensional embeddings, got query dims {query_dims} and gallery dims {gallery_dims}"
         )
 
-    query_stack = np.stack([_l2_normalize(query_embs[name]) for name in member_names], axis=0)
-    gallery_stack = np.stack([_l2_normalize(gallery_embs[name]) for name in member_names], axis=0)
+    query_stack = np.stack([l2_normalize(query_embs[name]) for name in member_names], axis=0)
+    gallery_stack = np.stack([l2_normalize(gallery_embs[name]) for name in member_names], axis=0)
 
-    fused_query = _l2_normalize(query_stack.mean(axis=0))
-    fused_gallery = _l2_normalize(gallery_stack.mean(axis=0))
+    fused_query = l2_normalize(query_stack.mean(axis=0))
+    fused_gallery = l2_normalize(gallery_stack.mean(axis=0))
     fused_sim = fused_query @ fused_gallery.T
 
     return {

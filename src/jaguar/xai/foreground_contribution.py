@@ -19,7 +19,6 @@ Purpose:
 """
 
 import json
-from jaguar.utils.utils_evaluation import build_query_gallery_retrieval_state, build_retrieval_diagnostics_per_query
 import torch
 import numpy as np
 import pandas as pd
@@ -32,7 +31,9 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, DEVICE
 from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
-from jaguar.utils.utils_xai_similarity import manual_gradcam_class
+from jaguar.utils.utils_xai_class import manual_gradcam_class
+from jaguar.utils.utils_evaluation import build_query_gallery_retrieval_state, build_retrieval_diagnostics_per_query
+
 
 def extract_query_variant_embeddings(model, dataloader, device):
     """Extracts embeddings for original, jaguar-only, and background-only query views."""

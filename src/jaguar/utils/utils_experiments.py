@@ -42,7 +42,6 @@ def deep_update(base: dict, override: dict) -> dict:
     return result
 
 
-
 def to_toml_value(value):
     """
     Convert a supported Python value into its TOML string representation.
@@ -96,7 +95,6 @@ def dict_to_toml(data: dict) -> str:
             lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
-
 
 
 def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
@@ -175,7 +173,6 @@ def build_ensemble_override(
         override["fusion_suite"] = fusion_suite_cfg
 
     return override
-
 
 
 def resolve_xai_metrics_paths(config: dict):

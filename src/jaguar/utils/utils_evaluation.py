@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -15,6 +14,7 @@ from jaguar.utils.utils_datasets import (
     get_transforms,
     load_split_jaguar_from_FO_export,
 )
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 
 
 @dataclass
@@ -183,7 +183,7 @@ class RetrievalState:
     burst_g: np.ndarray
 
 
-def _l2_normalize(emb: np.ndarray) -> np.ndarray:
+def l2_normalize(emb: np.ndarray) -> np.ndarray:
     """
     L2-normalize embedding vectors so cosine-style similarity is computed on a common scale.
     """
@@ -232,7 +232,6 @@ def build_query_gallery_retrieval_state(
     )
 
 
-
 def build_query_gallery_retrieval_state_from_sim(
     sim_matrix: np.ndarray,
     query_global_indices: np.ndarray,
@@ -260,6 +259,8 @@ def build_query_gallery_retrieval_state_from_sim(
         burst_q=burst_q,
         burst_g=burst_g,
     )
+
+
 # ============================================================
 # Ranking / evaluation
 # ============================================================

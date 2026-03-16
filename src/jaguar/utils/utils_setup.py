@@ -1,11 +1,13 @@
 from pathlib import Path
 import random
 from PIL import Image
+import numpy as np
+import pandas as pd
+
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE
 from jaguar.datasets.FiftyOneDataset import FODataset, get_or_create_manifest_dataset
-import pandas as pd
 from jaguar.utils.utils import resolve_path
-import numpy as np
+
 
 
 def build_habitat_backgrounds(
@@ -142,7 +144,6 @@ def init_fiftyone_dataset(
 
 
 def build_split_stem(
-    *,
     split_strategy: str,
     include_duplicates: bool,
     train_k_per_dedup: int,
@@ -162,7 +163,6 @@ def build_split_stem(
 
 
 def get_split_paths(
-    *,
     split_strategy: str,
     include_duplicates: bool,
     train_k: int,

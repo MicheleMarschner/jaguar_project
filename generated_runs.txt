@@ -1,3 +1,0 @@
-configs/_generated/eda_foreground_contribution/fg_contribution_eva02_base.toml
-configs/_generated/eda_foreground_contribution/fg_contribution_megadescriptor_base.toml
-configs/_generated/eda_foreground_contribution/fg_contribution_miewid_base.toml

@@ -24,20 +24,20 @@ from jaguar.datasets.JaguarDataset import JaguarDataset
 from jaguar.utils.utils import resolve_path
 
 # --------------------Progressive resizing utilities--------------------
-def round_to_patch(size, patch):
+def _round_to_patch(size, patch):
     """Round an image size down to the nearest multiple of the patch size."""
     if patch is None:
         return int(size)
     return int(size // patch * patch)
 
-def build_progressive_sizes(base_size, patch=None):
+def _build_progressive_sizes(base_size, patch=None):
     """Create the staged image sizes used for progressive resizing."""
     sizes = [
         int(base_size * 0.6),
         int(base_size * 0.85),
         base_size
     ]
-    return [round_to_patch(s, patch) for s in sizes]
+    return [_round_to_patch(s, patch) for s in sizes]
 
 def auto_generate_pr_sizes(model):
     """Generate progressive resizing stages from the model input size."""
@@ -48,18 +48,9 @@ def auto_generate_pr_sizes(model):
             f"{model.backbone_wrapper.name} (fixed input size)"
         )
         return [base_size]
-    sizes = build_progressive_sizes(base_size)
+    sizes = _build_progressive_sizes(base_size)
     print(f"[ProgressiveResizing] Auto-generated sizes: {sizes}")
     return sizes
-
-def get_resize_for_epoch(epoch, sizes, stage_epochs):
-    """Return the resize value assigned to a given training epoch."""
-    cumulative = 0
-    for size, stage_len in zip(sizes, stage_epochs):
-        cumulative += stage_len
-        if epoch <= cumulative:
-            return size
-    return sizes[-1]
 
 
 def get_resize_for_epoch(epoch: int, sizes: list[int], stage_epochs: list[int]) -> int:

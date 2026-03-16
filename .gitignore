@@ -17,8 +17,8 @@ wandb.md
 comments.md
 
 /experiments/
-/experiments_new/
-/data/round_1/
+/data/round_1/raw/
+/data/round_1/embeddings/
 /data/round_2/raw/
 /data/round_2/fiftyone/
 /data/round_2/embeddings/

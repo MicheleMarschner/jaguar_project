@@ -35,7 +35,6 @@ def build_timing_stats(epoch_times: list[float]) -> dict[str, Any]:
 
 
 def build_output_artifacts(
-    *,
     run_dir: Path,
     config: dict,
     final_results: dict,

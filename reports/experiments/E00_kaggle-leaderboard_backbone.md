@@ -39,45 +39,23 @@ Only one of these options is enabled at a time.
 The full Re-ID pipeline implemented in our codebase is summarized in the diagram below. Most of the ablation experiments performed during benchmarking are conducted with respect to this modular architecture, where we systematically vary backbone models, pooling strategies, embedding projections, and loss functions.
 
 ```mermaid
-flowchart TD
-%% Styling
-classDef backbone fill:#f9f,stroke:#333,stroke-width:2px;
-classDef feature fill:#e1f5fe,stroke:#01579b;
-classDef head fill:#fff9c4,stroke:#fbc02d;
-classDef loss fill:#ffebee,stroke:#c62828;
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '11px'}}}%%
+flowchart LR
+A[Input Image] --> B[Backbone]
+B --> C{Feature Map}
 
-A[Input Image] --> B[Pretrained Backbone<br/>timm / FoundationWrapper]:::backbone
-B --> C{Feature Map}:::feature
+C --> D[Pooling<br/>GAP/GeM]
+D --> E[Feat. Vector]
 
-subgraph Pooling [Pooling Strategy]
-    direction LR
-    D1[Global Average] --- D2[GeM Pooling]
-end
+E --> F{Projection?}
+F -->|Yes| G[Linear+BN]
+F -->|No| H[BN Only]
 
-C --> Pooling --> E[Feature Vector]:::feature
+G & H --> I[Embedding]
 
-subgraph Neck [Projection Neck]
-    F{use_projection?}
-    G[Linear + BN]
-    H[BN Only]
-    F -- True --> G
-    F -- False --> H
-end
-
-E --> Neck --> I[Embedding Vector]:::feature
-
-subgraph Heads [Loss Heads]
-    direction LR
-    J1[Linear Head]
-    J2[Margin Head]
-    J3[Triplet Head]
-end
-
-I --> J1 & J2 & J3
-
-J1 --> K[Cross Entropy]:::loss
-J2 --> L[ArcFace / CosFace]:::loss
-J3 --> M[Triplet + CE/Focal]:::loss
+I --> J1[Softmax] --> L1[CE Loss]
+I --> J2[Margin] --> L2[Margin Loss]
+I --> J3[Triplet] --> L3[Triplet+CE]
 ```
 
 Hence, in this first experiment we aim to answer the following **Research Question**: *How do different pretrained backbones perform when integrated into a species-specific re-identification pipeline? In particular, which backbone achieves the best performance for the jaguar re-identification task?*

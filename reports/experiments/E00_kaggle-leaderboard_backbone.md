@@ -39,22 +39,21 @@ Only one of these options is enabled at a time.
 The full Re-ID pipeline implemented in our codebase is summarized in the diagram below. Most of the ablation experiments performed during benchmarking are conducted with respect to this modular architecture, where we systematically vary backbone models, pooling strategies, embedding projections, and loss functions.
 
 ```mermaid
-%%{init: {'nodePadding': 0}}%%
 flowchart LR
-A[Input Image] --> B[Backbone]
-B --> C{Feature Map}
+A[Input] --> B[Backb.]
+B --> C{Feat.}
 
 C --> D[Pooling<br/>GAP/GeM]
-D --> E[Feat. Vector]
+D --> E[Feat.]
 
-E --> F{Projection?}
-F -->|Yes| G[Linear+BN]
-F -->|No| H[BN Only]
+E --> F{Proj?}
+F -->|Y| G[Lin.+BN]
+F -->|N| H[BN Only]
 
-G & H --> I[Embedding]
+G & H --> I[Emb.]
 
-I --> J1[Softmax] --> L1[CE Loss]
-I --> J2[Margin] --> L2[Margin Loss]
+I --> J1[Soft.] --> L1[CE]
+I --> J2[Marg.] --> L2[Loss]
 I --> J3[Triplet] --> L3[Triplet+CE]
 ```
 

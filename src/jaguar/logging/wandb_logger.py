@@ -429,6 +429,41 @@ def log_wandb_xai_metrics_results(run, summary_df: pd.DataFrame) -> None:
         if payload:
             run.log(payload)
 
+
+def log_wandb_xai_class_attribution_results(
+    run: Run | None,
+    manifest: pd.DataFrame,
+    artifacts_saved: list[dict[str, Any]],
+    groups: tuple[str, ...],
+    explainer_names: tuple[str, ...],
+) -> None:
+    """Log compact summaries for Stage-2 class attribution generation."""
+    if run is None:
+        return
+
+    run.summary["groups"] = list(groups)
+    run.summary["explainer_names"] = list(explainer_names)
+    run.summary["n_manifest_rows"] = int(len(manifest))
+    run.summary["n_saved_artifacts"] = int(len(artifacts_saved))
+
+    if not manifest.empty:
+        run.log({"xai_class/manifest_rows": int(len(manifest))})
+        log_wandb_table(run, "xai_class/source_manifest", manifest)
+
+    if artifacts_saved:
+        artifacts_df = pd.DataFrame(artifacts_saved)
+
+        for _, row in artifacts_df.iterrows():
+            run.log(
+                {
+                    f"xai_class/{row['group']}/{row['explainer']}/n_samples": int(row["n_samples"])
+                }
+            )
+
+        log_wandb_table(run, "xai_class/artifacts_saved", artifacts_df)
+
+        
+
 def log_wandb_table(
     run: Run | None,
     name: str,

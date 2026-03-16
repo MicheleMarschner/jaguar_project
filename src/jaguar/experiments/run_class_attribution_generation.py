@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_class_attribution_results
 import torch
 from tqdm import tqdm
 
@@ -180,6 +181,14 @@ def run_class_attribution_generation(
     manifest = load_stage1_source_manifest(stage1_run_dir)
     manifest_path = save_group_manifest(run_dir, manifest)
 
+    run = init_wandb_run(
+        config=config,
+        run_dir=run_dir,
+        exp_name=config["evaluation"]["experiment_name"],
+        experiment_group=config.get("output", {}).get("experiment_group"),
+        job_type="explain",
+    )
+
     groups = {}
     artifacts_saved = []
 
@@ -233,17 +242,28 @@ def run_class_attribution_generation(
         "manifest_path": to_rel_path(manifest_path),
         "groups": list(cfg.groups),
         "explainers": list(cfg.explainer_names),
-        "group_files": group_paths,
+        "group_files": str(group_paths),
     }
 
     with open(run_dir / "class_attr_generation_meta.json", "w") as f:
         json.dump(meta, f, indent=2)
+
+    log_wandb_xai_class_attribution_results(
+        run=run,
+        manifest=manifest,
+        artifacts_saved=artifacts_saved,
+        groups=cfg.groups,
+        explainer_names=cfg.explainer_names,
+    )
+    if run is not None:
+        run.finish()
 
     return {
         "manifest": manifest,
         "artifacts_saved": artifacts_saved,
         "meta": meta,
     }
+
 
 
 def main():

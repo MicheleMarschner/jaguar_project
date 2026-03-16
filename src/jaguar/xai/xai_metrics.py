@@ -834,7 +834,7 @@ def run_xai_class_metrics(config: dict, cfg) -> pd.DataFrame:
         metrics_path=metrics_path,
         randomized_root=randomized_root,
         run_sanity_fn=run_sanity_metric_class,          # class-specific wrapper
-        run_faithfulness_fn=faithfulness_topk_vs_random_class,  # class-specific wrapper
+        run_faithfulness_fn=run_faithfulness_metric_class,  # class-specific wrapper
         run_complexity_fn=run_complexity_metric,
         build_sanity_kwargs_fn=lambda item: dict(
             explainer_name=item["explainer"],

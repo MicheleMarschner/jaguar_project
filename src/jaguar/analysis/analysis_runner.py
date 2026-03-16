@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from pathlib import Path
 
 from jaguar.config import PATHS
@@ -31,16 +30,6 @@ REGISTRY = {
     "eda_xai_class_attribution": xai_class_attribution_analysis.run,
     "eda_xai_similarity": xai_similarity_analysis.run,
 }
-
-"""
-"kaggle_backbone":,
-"kaggle_augmentation": ,
-"kaggle_losses": ,
-"kaggle_optim_and_sched":,
-"kaggle_resizing":,
-"kaggle_stat_stability":,
-"""
-
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()

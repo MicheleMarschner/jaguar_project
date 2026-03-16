@@ -7,6 +7,7 @@ from jaguar.utils.utils_experiments import build_ensemble_override, build_standa
 
 
 def parse_args():
+    """Parse CLI arguments for batch experiment execution."""
     parser = argparse.ArgumentParser(description="Run experiments")
     parser.add_argument(
         "--base_config",
@@ -31,6 +32,7 @@ def parse_args():
 
 
 def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) -> str:
+    """Resolve which experiment entry script to run for the given mode and experiment metadata."""
     if mode == "train":
         return main_script
 
@@ -59,6 +61,7 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
 
 
 def run_experiments():
+    """Generate per-run override configs, optionally run setup, and write a shell script for all commands."""
     args = parse_args()
     experiment_config = load_toml_config(args.experiment_config)
     base_config = load_toml_config(args.base_config)
@@ -153,10 +156,10 @@ def run_experiments():
                 raise RuntimeError(f"Setup failed: {experiment_name}")
 
         print("Running:", " ".join(cmd))
-        result = subprocess.run(cmd)
+        #result = subprocess.run(cmd)
 
-        if result.returncode != 0:
-            raise RuntimeError(f"Run failed: {experiment_name}")
+        #if result.returncode != 0:
+        #    raise RuntimeError(f"Run failed: {experiment_name}")
 
         run_lines = []
         if setup_name:

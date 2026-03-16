@@ -403,26 +403,32 @@ def log_wandb_xai_similarity_results(
     log_wandb_table(run, "xai/reference_pairs", ref_df)
 
 
-def log_wandb_xai_metrics_results(
-    run: Run | None,
-    summary_df: pd.DataFrame,
-) -> None:
-    """Log aggregated XAI metric tables and summary values."""
-    if run is None:
+def log_wandb_xai_metrics_results(run, summary_df: pd.DataFrame) -> None:
+    """Log XAI metric summary rows to W&B."""
+    if run is None or summary_df is None or summary_df.empty:
         return
 
-    log_wandb_table(run, "xai_metrics/summary", summary_df)
+    slice_col = "pair_type" if "pair_type" in summary_df.columns else "group"
+
+    metric_cols = [
+        "sanity_mean", "sanity_median", "sanity_std",
+        "faith_topk_mean", "faith_topk_median", "faith_topk_std",
+        "faith_random_mean", "faith_random_median", "faith_random_std",
+        "faith_gap_mean", "faith_gap_median", "faith_gap_std",
+        "complexity_mean", "complexity_median", "complexity_std",
+    ]
 
     for _, row in summary_df.iterrows():
         expl = row["explainer"]
-        pair = row["pair_type"]
-        run.log({
-            f"xai_metrics/{expl}/{pair}/sanity_mean": float(row["sanity_mean"]),
-            f"xai_metrics/{expl}/{pair}/faith_mean": float(row["faith_mean"]),
-            f"xai_metrics/{expl}/{pair}/complexity_mean": float(row["complexity_mean"]),
-        })
+        slice_value = row[slice_col]
 
+        payload = {}
+        for col in metric_cols:
+            if col in row.index and pd.notna(row[col]):
+                payload[f"xai_metrics/{expl}/{slice_value}/{col}"] = float(row[col])
 
+        if payload:
+            run.log(payload)
 
 def log_wandb_table(
     run: Run | None,

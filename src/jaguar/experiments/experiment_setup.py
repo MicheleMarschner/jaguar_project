@@ -22,6 +22,7 @@ SETUP_STEPS = {
 }
 
 def parse_args():
+    """Parse CLI arguments for running a predefined experiment setup routine."""
     parser = argparse.ArgumentParser(description="Run setup steps for an experiment")
     parser.add_argument(
         "--setup_name",
@@ -45,12 +46,14 @@ def parse_args():
 
 
 def ensure_output_dirs():
+    """Create the configured project output directories if they do not already exist."""
     print("[SETUP] ensure_output_dirs")
     ensure_dirs(PATHS)
     print(f"  -> created all directories")
 
 
 def ensure_fiftyone_init_dataset(current_setup_config: dict):
+    """Ensure that the initial FiftyOne dataset manifest exists when FiftyOne is enabled."""
     print("[SETUP] ensure_fiftyone_init_dataset")
 
     use_fiftyone = current_setup_config["data"].get("use_fiftyone", False)
@@ -79,6 +82,7 @@ def ensure_fiftyone_init_dataset(current_setup_config: dict):
 
 
 def ensure_background_pool():
+    """Ensure that the reusable background patch pool exists for background-based analyses."""
     print("[SETUP] ensure_background_pool")
 
     out_dir = resolve_path("backgrounds", DATA_STORE)
@@ -106,6 +110,7 @@ def ensure_background_pool():
 
 
 def ensure_burst_artifacts(config):
+    """Ensure that burst-discovery artifacts for the current round exist, creating them if needed."""
 
     from jaguar.preprocessing.burst_discovery import discover_bursts
     bursts_root = get_burst_paths()["write_root"]
@@ -140,6 +145,7 @@ def ensure_burst_artifacts(config):
 
 
 def ensure_split_artifacts(config) -> Path:
+    """Ensure that split and curation artifacts matching the current config exist, creating them if needed."""
     split_cfg = config.get("split", {})
     curation_cfg = config.get("curation", {})
     use_fiftyone = config["data"].get("use_fiftyone", False)
@@ -200,6 +206,7 @@ def ensure_split_artifacts(config) -> Path:
 
 
 def run_step(step_name: str, config: dict):
+    """Dispatch and execute one named setup step."""
 
     if step_name == "ensure_output_dirs":
         ensure_output_dirs()
@@ -216,6 +223,7 @@ def run_step(step_name: str, config: dict):
 
 
 def main():
+    """Load configs, resolve the requested setup routine, and run all configured setup steps."""
     args = parse_args()
 
     if args.setup_name not in SETUP_STEPS:

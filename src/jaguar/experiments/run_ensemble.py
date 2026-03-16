@@ -114,33 +114,78 @@ def compute_oracle_from_query_dfs(
 
     return base, summary
 
-
-def rank1_overlap_from_query_dfs(
-    query_df_a: pd.DataFrame,
-    query_df_b: pd.DataFrame,
-    name_a: str,
-    name_b: str,
+def build_per_identity_gain_df(
+    query_df_base: pd.DataFrame,
+    query_df_target: pd.DataFrame,
+    identity_col: str = "query_label",
+    base_name: str = "best_single",
+    target_name: str = "ensemble",
 ) -> pd.DataFrame:
-    df = query_df_a[["query_idx", "rank1_correct"]].rename(
-        columns={"rank1_correct": f"{name_a}_correct"}
+    """Aggregate per-query gains to per-identity comparison."""
+    base = query_df_base[[identity_col, "ap", "rank1_correct"]].rename(
+        columns={
+            "ap": f"ap__{base_name}",
+            "rank1_correct": f"rank1__{base_name}",
+        }
     )
-    df = df.merge(
-        query_df_b[["query_idx", "rank1_correct"]].rename(
-            columns={"rank1_correct": f"{name_b}_correct"}
-        ),
-        on="query_idx",
-        how="inner",
+    target = query_df_target[[identity_col, "ap", "rank1_correct"]].rename(
+        columns={
+            "ap": f"ap__{target_name}",
+            "rank1_correct": f"rank1__{target_name}",
+        }
     )
 
-    a = df[f"{name_a}_correct"]
-    b = df[f"{name_b}_correct"]
+    df = pd.concat([base, target.drop(columns=[identity_col])], axis=1)
+    grouped = df.groupby(identity_col, dropna=False).agg(
+        queries=(identity_col, "size"),
+        base_ap_mean=(f"ap__{base_name}", "mean"),
+        target_ap_mean=(f"ap__{target_name}", "mean"),
+        base_rank1_mean=(f"rank1__{base_name}", "mean"),
+        target_rank1_mean=(f"rank1__{target_name}", "mean"),
+    ).reset_index()
 
-    return pd.DataFrame([
-        {"case": "both_correct", "count": int((a & b).sum()), "fraction": float((a & b).mean())},
-        {"case": f"only_{name_a}", "count": int((a & ~b).sum()), "fraction": float((a & ~b).mean())},
-        {"case": f"only_{name_b}", "count": int((~a & b).sum()), "fraction": float((~a & b).mean())},
-        {"case": "both_wrong", "count": int((~a & ~b).sum()), "fraction": float((~a & ~b).mean())},
-    ])
+    grouped["delta_ap"] = grouped["target_ap_mean"] - grouped["base_ap_mean"]
+    grouped["delta_rank1"] = grouped["target_rank1_mean"] - grouped["base_rank1_mean"]
+    return grouped.sort_values("delta_ap", ascending=False)
+
+
+def build_compute_summary_df(
+    out: dict,
+    fusion_results: list[dict[str, any]],
+    members_cfg: list[dict],
+) -> pd.DataFrame:
+    """Save simple compute/latency proxy information for later reporting."""
+    member_rows = []
+    for member_cfg in members_cfg:
+        name = member_cfg["name"]
+        member_out = out["member_outputs"][name]
+        member_rows.append(
+            {
+                "kind": "member",
+                "method_name": name,
+                "family": "single_model",
+                "n_members_used": 1,
+                "embedding_dim": int(member_out["query_embeddings"].shape[1]),
+                "query_count": int(member_out["query_embeddings"].shape[0]),
+                "gallery_count": int(member_out["gallery_embeddings"].shape[0]),
+            }
+        )
+
+    fusion_rows = []
+    for res in fusion_results:
+        fusion_rows.append(
+            {
+                "kind": "fusion",
+                "method_name": res["name"],
+                "family": res["meta"].get("family"),
+                "n_members_used": int(res["meta"].get("n_members_used", len(out["member_outputs"]))),
+                "embedding_dim": res["meta"].get("embedding_dim"),
+                "query_count": int(out["query_labels"].shape[0]),
+                "gallery_count": int(out["gallery_labels"].shape[0]),
+            }
+        )
+
+    return pd.DataFrame(member_rows + fusion_rows)
 
 
 def parse_args():
@@ -258,15 +303,46 @@ def run_one_ensemble_protocol(
         )
 
     fusion_summary_df = pd.DataFrame(fusion_summary_rows)
-    print(fusion_summary_df)
+    
+    fusion_summary_df.to_csv(
+        run_dir / f"fusion_summary__{gallery_protocol}.csv",
+        index=False,
+    )
+
+    for method_name, topk_df in method_topk_dfs.items():
+        topk_df.to_csv(
+            run_dir / f"topk_candidates__{method_name}__{gallery_protocol}.csv",
+            index=False,
+        )
+
+    for fusion_name, artifacts in fusion_artifacts.items():
+        for artifact_name, artifact_value in artifacts.items():
+            if isinstance(artifact_value, pd.DataFrame):
+                artifact_value.to_csv(
+                    run_dir / f"{artifact_name}__{fusion_name}__{gallery_protocol}.csv",
+                    index=False,
+                )
 
     per_query_comparison_df = build_per_query_comparison_df(
         per_model_query_dfs=per_model_query_dfs,
         fusion_query_dfs=fusion_query_dfs,
     )
 
-    print("\nPer-query comparison head:")
-    print(per_query_comparison_df.head())
+    best_single_name = max(per_model_metrics.items(), key=lambda x: x[1]["mAP"])[0]
+    best_single_query_df = per_model_query_dfs[best_single_name]
+
+    for fusion_name, fusion_query_df in fusion_query_dfs.items():
+        per_identity_gain_df = build_per_identity_gain_df(
+            query_df_base=best_single_query_df,
+            query_df_target=fusion_query_df,
+            identity_col="query_label",
+            base_name=best_single_name,
+            target_name=fusion_name,
+        )
+        per_identity_gain_df.to_csv(
+            run_dir / f"per_identity_gain__{fusion_name}__vs__{best_single_name}__{gallery_protocol}.csv",
+            index=False,
+        )
 
     method_query_dfs = {
         **per_model_query_dfs,
@@ -333,9 +409,20 @@ def run_one_ensemble_protocol(
     )
     results_long_df.to_csv(run_dir / f"results_long__{gallery_protocol}.csv", index=False)
 
+    compute_summary_df = build_compute_summary_df(
+        out=out,
+        fusion_results=fusion_results,
+        members_cfg=config["members"],
+    )
+    compute_summary_df.to_csv(
+        run_dir / f"compute_summary__{gallery_protocol}.csv",
+        index=False,
+    )
+
     return {
         "gallery_protocol": gallery_protocol,
         "out": out,
+        "compute_summary_df": compute_summary_df,
         "per_model_query_dfs": per_model_query_dfs,
         "per_model_metrics": per_model_metrics,
         "fusion_query_dfs": fusion_query_dfs,
@@ -457,8 +544,10 @@ def main():
                 name_a=member_names[0],
                 name_b=member_names[1],
             )
-            print("\nRank1 overlap:")
-            print(overlap_summary.to_string(index=False))
+            overlap_summary.to_csv(
+                run_dir / f"rank1_overlap__{member_names[0]}__vs__{member_names[1]}__{gallery_protocols[0]}.csv",
+                index=False,
+            )
 
         print(
             f"{exp_name:24s} "

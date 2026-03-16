@@ -4,7 +4,7 @@ description = "Train one single model on the data"
 base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
-output_profile = "baseline"
+output_profile = "base"
 setup_name = "base"
 
 [[experiment.runs]]

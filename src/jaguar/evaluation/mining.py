@@ -32,9 +32,7 @@ def best_quality_from_top_m_imposters(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float, Dict[str, float]]:
     """
-    Among *already retrieval-relevant* imposters (closest different-ID neighbors), prefer the visually cleaner image.
-    This improves interpretability of CAM/XAI examples without changing the pair type.
-    Returns: (j, sim_ij, {"quality":..., "sharpness":..., "brightness":...})
+    Select the highest-quality hard-negative candidate from the top ranked different-identity imposters.
     """
     pool = []
     for j in ranked[i]:
@@ -64,9 +62,7 @@ def best_quality_from_top_m_positives(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float, Dict[str, float]]:
     """
-    Same idea for positives: keep retrieval relevance, then choose a cleaner reference image
-    for more reliable qualitative inspection.
-    Returns: (j, sim_ij, quality_dict)
+    Select the highest-quality positive candidate from the top ranked same-identity neighbors.
     """
     pool = []
     for j in ranked[i]:
@@ -94,7 +90,7 @@ def _allow_pair(
     cluster_id: Optional[np.ndarray],
     same_id_required: Optional[bool],
 ) -> bool:
-    """Internal filter for candidate pairs."""
+    """Check whether a candidate pair satisfies identity and duplicate-filtering constraints."""
     if j == i:
         return False
 
@@ -122,8 +118,7 @@ def easy_positive(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float]:
     """
-    Easiest positive = highest-sim same-ID neighbor (first same-ID in ranked list).
-    Returns: (j, sim_ij)
+    Return the highest-similarity valid same-identity neighbor for a query image.
     """
     for j in ranked[i]:
         j = int(j)
@@ -142,12 +137,7 @@ def hard_positive(
     within_top_k: Optional[int] = None,
 ) -> Tuple[int, float]:
     """
-    Hard positive = same-ID neighbor with LOWEST similarity.
-
-    within_top_k:
-      - If None: consider all same-ID occurrences present in ranked[i]
-      - If set (e.g., 200): only consider first K retrievals (faster)
-    Returns: (j, sim_ij)
+    Return the lowest-similarity valid same-identity neighbor for a query image.
     """
     order = ranked[i] if within_top_k is None else ranked[i][:within_top_k]
 
@@ -173,8 +163,7 @@ def hard_negative(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Optional[Tuple[int, float]]:
     """
-    Return the k-th valid hard negative (imposter) in ranked order. 
-    Returns None if fewer than `imposter_rank` valid imposters exist.
+    Return the k-th valid different-identity imposter in ranked retrieval order.
     """
     count = 0
     for j in ranked[i]:
@@ -196,8 +185,7 @@ def easy_negative(
     cluster_id: Optional[np.ndarray] = None,
 ) -> Tuple[int, float]:
     """
-    Easy negative = farthest different-ID among ranked list (reverse scan).
-    Returns: (j, sim_ij)
+    Return the lowest-similarity valid different-identity neighbor for a query image.
     """
     for j in ranked[i][::-1]:
         j = int(j)
@@ -206,7 +194,6 @@ def easy_negative(
     raise ValueError(f"No easy negative found for i={i}.")
 
 
-## TODO Kann man das generischer machen?
 # Batch helper used when we need one deterministic reference pair per query
 # (e.g., precomputing pair lists/artifacts for later analysis runs).
 def build_easy_positive_pairs(
@@ -217,9 +204,7 @@ def build_easy_positive_pairs(
     easy_positive_fn,   # pass your jaguar.evaluation.mining.easy_positive
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Returns:
-      ref_indices [N]
-      pair_sims   [N]
+    Build one easy-positive reference index and similarity score for each query index.
     """
     q = np.asarray(query_indices, dtype=np.int64).reshape(-1)
     ref_indices = []
@@ -247,8 +232,7 @@ def mining_pack_for_query(
     neg_ranks: Tuple[int, ...] = (1, 5, 10),
 ) -> Dict[str, Any]:
     """
-    One-stop mining output for a query image: standardized pair set for visualization/CAM pipelines 
-    (easy positive, hard positive, and selected hard negatives).
+    Build a standardized set of positive and negative mined pairs for one query image.
     """
     pos_e_i, pos_e_sim = easy_positive(i, sim, ranked, labels, cluster_id)
     pos_h_i, pos_h_sim = hard_positive(i, sim, ranked, labels, cluster_id)

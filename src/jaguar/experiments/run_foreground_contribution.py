@@ -94,16 +94,6 @@ def main():
         query_emb_rows=query_emb_rows,
     )
 
-    """
-    # load model weights
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    tmp_state = ckpt["model_state_dict"]
-    state = {k.replace("module.", "", 1): v for k, v in tmp_state.items()}
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    print("full model missing:", len(missing), "unexpected:", len(unexpected))
-    model = model.to(DEVICE).eval()
-    """
-
     query_ds = MaskAwareJaguarDataset(
         jaguar_model=ctx_orig.model,
         base_root=PATHS.data_train,

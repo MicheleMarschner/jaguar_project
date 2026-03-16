@@ -207,8 +207,9 @@ PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
 ```
 
 This command generates an executable configuration for each run defined in the experiment configuration under `configs/_generated/<experiment_group>` and executes them sequentially.
+The commands need to be started from the project root directory
 
-In practice, the base config defines the common defaults for training, model setup, preprocessing, and evaluation, while the experiment config specifies the actual intervention to be tested.
+The base config defines the common defaults for training, model setup, preprocessing, and evaluation, while the experiment config specifies the actual intervention to be tested.
 
 ---
 
@@ -222,6 +223,8 @@ PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_
 
 !TODO Anpassung!
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_foreground_contribution
+
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group baseline
 
 ---
 

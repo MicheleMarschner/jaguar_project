@@ -39,38 +39,22 @@ Only one of these options is enabled at a time.
 The full Re-ID pipeline implemented in our codebase is summarized in the diagram below. Most of the ablation experiments performed during benchmarking are conducted with respect to this modular architecture, where we systematically vary backbone models, pooling strategies, embedding projections, and loss functions.
 
 ```mermaid
-flowchart TD
-
-A[Input Image] --> B[Pretrained Backbone<br>timm / FoundationModelWrapper]
-
+flowchart LR
+A[Input Image] --> B[Backbone]
 B --> C{Feature Map}
 
-C --> D1[Global Average Pooling]
-C --> D2[GeM Pooling]
+C --> D[Pooling<br/>GAP or GeM]
+D --> E[Feature Vector]
 
-D1 --> E[Feature Vector]
-D2 --> E
+E --> F{Projection?}
+F -->|Yes| G[Linear+BN]
+F -->|No| H[BN Only]
 
-E --> F{Projection Neck}
+G & H --> I[Embedding]
 
-F -->|use_projection=True| G[EmbeddingHead<br>Linear + BatchNorm]
-F -->|use_projection=False| H[BatchNorm]
-
-G --> I[Embedding Vector]
-H --> I
-
-I --> J{Head Type}
-
-J --> K[Linear Head<br>Softmax]
-J --> L[Margin Head<br>ArcFace / CosFace / SphereFace]
-J --> M[Triplet Head<br>Embedding + Classifier]
-
-K --> N[Cross Entropy Loss]
-
-L --> O[Margin Loss<br>ArcFace / CosFace / SphereFace]
-
-M --> P[Triplet Loss]
-M --> Q[Cross Entropy / Focal Loss]
+I --> J1[Softmax] --> L1[CE Loss]
+I --> J2[Margin] --> L2[Margin Loss]
+I --> J3[Triplet] --> L3[Triplet + CE]
 ```
 
 Hence, in this first experiment we aim to answer the following **Research Question**: *How do different pretrained backbones perform when integrated into a species-specific re-identification pipeline? In particular, which backbone achieves the best performance for the jaguar re-identification task?*

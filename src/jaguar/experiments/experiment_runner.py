@@ -295,6 +295,12 @@ def run_experiments():
         "#SBATCH --error=/fast/AG_Kainmueller/vguarin/jaguar_project/logs/log_%j.err",
         "#SBATCH -pkainmueller",
         "",
+        "",
+        "export WANDB_DIR=/fast/AG_Kainmueller/data/jaguar_project/wandb/$SLURM_JOB_ID",
+        "export WANDB_CACHE_DIR=/fast/AG_Kainmueller/data/jaguar_project/wandb_cache",
+        "export WANDB_ARTIFACT_DIR=/fast/AG_Kainmueller/data/jaguar_project/wandb_artifacts",
+        "export WANDB_DATA_DIR=/fast/AG_Kainmueller/data/jaguar_project/wandb_data"
+        "",
         "CONFIGS=(",
     ]
     

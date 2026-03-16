@@ -1,13 +1,13 @@
 [training]
 experiment_name = "backbone_convnext_v2"
-unfreeze_epoch = 3
 unfreeze_blocks = 100
 epochs = 50
+seed = 42
+multiple_seeds = false
 
 [model]
 backbone_name = "ConvNeXt-V2"
-s = 40
-m = 0.4
+m = 0.7
 
 [augmentation]
 random_resized_crop = true

@@ -1,5 +1,7 @@
 [training]
 experiment_name = "backbone_swin_transformer"
+seed = 42
+multiple_seeds = false
 
 [model]
 backbone_name = "Swin-Transformer"

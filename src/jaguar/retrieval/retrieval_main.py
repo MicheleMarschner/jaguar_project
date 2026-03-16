@@ -13,7 +13,6 @@ from jaguar.retrieval.retrieval_runner import (
 from jaguar.logging.wandb_logger import (
     init_wandb_run,
     finish_wandb_run,
-    log_wandb_table
 )
 
 def parse_args():
@@ -81,7 +80,7 @@ def main():
 
     # Load checkpoint 
     config = load_checkpoint_config(checkpoint_dir)
-     #Load experiment config
+    # Load experiment config
     with open(args.retrieval_config, "rb") as f:
         retrieval_cfg = tomllib.load(f)
 

@@ -50,7 +50,6 @@ def build_val_loader(config, model):
 
 
 def build_retrieval_override(run_cfg, experiment_meta):
-
     override = {}
 
     field_to_section = {
@@ -117,7 +116,6 @@ def run_retrieval_experiment(
 ):
 
     checkpoint_dir = Path(checkpoint_dir)
-
     checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     print("Building validation loader")

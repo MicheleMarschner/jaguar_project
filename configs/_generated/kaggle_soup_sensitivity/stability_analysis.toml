@@ -1,0 +1,9 @@
+[evaluation]
+group_by = "training"
+build_model_soup = true
+apply_tta = true
+tta_modality = "flip"
+apply_qe = true
+top_k_expansion = 3
+apply_rerank = false
+experiment_group = "kaggle_soup_sensitivity"

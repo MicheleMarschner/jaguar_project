@@ -200,9 +200,9 @@ def run_retrieval_sweep(
         metrics, sim = evaluate_retrieval(
             emb,
             labels,
-            qe=params.get("qe", False),
-            qe_k=params.get("qe_k"),
-            rerank=params.get("rerank", False),
+            qe=params.get("apply_qe", False),
+            qe_k=params.get("top_k_expansion"),
+            rerank=params.get("apply_rerank", False),
             k1=params.get("k1", 20),
             k2=params.get("k2", 6),
             lambda_value=params.get("lambda_value", 0.3)

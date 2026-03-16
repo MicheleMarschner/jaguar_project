@@ -3,11 +3,12 @@ experiment_name = "backbone_efficientnet_b4"
 unfreeze_epoch = 3
 unfreeze_blocks = 100
 epochs = 50
+seed = 42
+multiple_seeds = false
 
 [model]
 backbone_name = "EfficientNet-B4"
-s = 40
-m = 0.4
+m = 0.7
 
 [augmentation]
 random_resized_crop = true

@@ -446,7 +446,7 @@ def build_query_for_setting(
     against the same fixed original gallery.
     """
     val_processing_fn = build_eval_processing_fn(setting, config)
-
+    
     _, _, val_ds = load_split_jaguar_from_FO_export(
         PATHS.data_export / "splits_curated",
         overwrite_db=False,
@@ -455,6 +455,7 @@ def build_query_for_setting(
         train_processing_fn=None,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     val_ds.transform = get_transforms(

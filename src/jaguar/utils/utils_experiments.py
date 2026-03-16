@@ -156,7 +156,7 @@ def build_ensemble_override(
 
 
 def resolve_xai_metrics_paths(config: dict):
-    source_run_dir = Path(config["xai_metrics"]["source_run_dir"])
+    source_run_dir = str(config["xai_metrics"]["source_run_dir"])
 
     run_root = resolve_path(source_run_dir, EXPERIMENTS_STORE)
     if not run_root.exists():

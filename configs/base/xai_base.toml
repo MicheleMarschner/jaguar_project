@@ -5,11 +5,20 @@ use_qe = false
 use_rerank = false
 
 [evaluation]
-checkpoint_dir = "inference_model"       
+checkpoint_dir = "inference_model"     
+
+[preprocessing]
+bg_dir = "backgrounds"
+train_background = "original"
+val_background = "original"
+p_original = 0.5
+edge_softness = 2
+blur_radius = 10
+key_for_seed = "filename"
 
 [data]
 num_workers = 4
-split_data_path = "splits/default_kaggle/full_split.parquet"
+split_data_path = "splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
 use_fiftyone = false
 
 [split]
@@ -19,7 +28,7 @@ seed = 51
 [xai]
 dataset_name = "jaguar_splits_curated"
 split_name = "val"
-n_samples = 50      # "full"
+n_samples = 150      # "full"
 seed = 51
 explainer_names = ["IG", "GradCAM"]
 pair_types = ["easy_pos", "hard_neg", "hard_pos"]

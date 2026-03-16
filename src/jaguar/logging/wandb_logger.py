@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import wandb
 from wandb.sdk.wandb_run import Run
 
+from jaguar.config import ROUND
+
 load_dotenv()
 
 def _build_wandb_tags(
@@ -83,7 +85,7 @@ def init_wandb_run(
         group=experiment_group,
         job_type=job_type,
         tags=tags,
-        name=exp_name,
+        name=f"{exp_name}_{ROUND}",
         config=config,
         dir=str(run_dir),
     )

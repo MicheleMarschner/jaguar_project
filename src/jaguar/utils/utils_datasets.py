@@ -17,7 +17,7 @@ from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
  
-from jaguar.config import DATA_ROOT, PATHS, IMGNET_MEAN, IMGNET_STD
+from jaguar.config import DATA_ROOT, PATHS, IMGNET_MEAN, IMGNET_STD, DATA_STORE
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 

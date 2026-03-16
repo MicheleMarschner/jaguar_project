@@ -11,6 +11,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run XAI metric evaluation")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
+    parser.add_argument("--experiment_name", type=str, required=True)
     return parser.parse_args()
 
 
@@ -36,18 +37,13 @@ def main():
     config = deep_update(base_config, experiment_config)
 
     config.setdefault("evaluation", {})
-    config["evaluation"]["experiment_name"] = config["xai_metrics"]["experiment_name"]
-
+    cfg = build_similarity_cfg(config)
     source_type = config["xai_metrics"]["source_type"]
 
     if source_type == "similarity":
-        cfg = build_similarity_cfg(config)
         summary_df = run_xai_similarity_metrics(config, cfg)
-
     elif source_type == "class_attribution":
-        cfg = build_similarity_cfg(config)   
         summary_df = run_xai_class_metrics(config, cfg)
-
     else:
         raise ValueError(f"Unknown xai_metrics.source_type: {source_type}")
 

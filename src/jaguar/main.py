@@ -69,17 +69,16 @@ def main():
         config.setdefault("training", {})
         config["training"]["experiment_name"] = args.experiment_name
 
-    checkpoints_dir = PATHS.checkpoints / config["training"]["save_dir"]
     exp_name = config["training"]["experiment_name"]
     experiment_group = config.get("output", {}).get("experiment_group")
 
     # run artifact directory
     if experiment_group:
         run_dir = PATHS.runs / experiment_group / exp_name
-        config["training"]["save_dir"] = str(checkpoints_dir / experiment_group / exp_name)
+        config["training"]["save_dir"] = str(PATHS.checkpoints / experiment_group / exp_name)
     else:
         run_dir = PATHS.runs / exp_name
-        config["training"]["save_dir"] = str(checkpoints_dir / exp_name)
+        config["training"]["save_dir"] = str(PATHS.checkpoints / exp_name)
     ensure_dir(run_dir)
 
     wandb_run = init_wandb_run(

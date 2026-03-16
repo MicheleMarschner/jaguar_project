@@ -37,7 +37,8 @@ from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_sal
 from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
-from jaguar.utils.utils_xai_similarity import SimilarityForward, format_n_samples_tag, save_vec
+from jaguar.utils.utils_xai_similarity import SimilarityForward
+from jaguar.utils.utils_xai import format_n_samples_tag, save_vec
 from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
 from jaguar.utils.utils_evaluation import build_eval_context
 from jaguar.utils.utils_experiments import load_toml_from_path, resolve_xai_metrics_paths

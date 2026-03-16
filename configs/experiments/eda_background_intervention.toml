@@ -7,5 +7,5 @@ setup_name = "base"
 output_profile = "xai"
 
 [[experiment.runs]]
-experiment_name = "eva02_triplet_bg[orig_gray_black_rdn_blur_mixed]"
+experiment_name = "eva02_triplet_bg_orig_gray_black_rdn_blur_mixed"
 

@@ -28,7 +28,7 @@ seed = 51
 [xai]
 dataset_name = "jaguar_splits_curated"
 split_name = "val"
-n_samples = 150      # "full"
+n_samples = 332      # "full" 150
 seed = 51
 explainer_names = ["IG", "GradCAM"]
 pair_types = ["easy_pos", "hard_neg", "hard_pos"]

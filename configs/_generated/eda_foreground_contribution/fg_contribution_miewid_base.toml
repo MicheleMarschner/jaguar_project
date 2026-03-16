@@ -1,0 +1,7 @@
+[evaluation]
+experiment_name = "fg_contribution_miewid_base"
+checkpoint_dir = "triplet_loss/backbone_miew_id"
+
+[output]
+profile = "xai"
+experiment_group = "eda_foreground_contribution"

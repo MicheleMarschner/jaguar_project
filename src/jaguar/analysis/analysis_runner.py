@@ -75,10 +75,9 @@ def load_run_config(run_dir: Path, config_name: str = "experiment_config.json") 
 
 def find_run_dirs(root_dir: Path, config_name: str) -> list[Path]:
     return sorted(
-        [
-            p for p in root_dir.iterdir()
-            if p.is_dir() and (p / config_name).exists()
-        ]
+        config_path.parent
+        for config_path in root_dir.rglob(config_name)
+        if config_path.is_file()
     )
 
 

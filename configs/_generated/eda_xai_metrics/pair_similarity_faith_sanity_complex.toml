@@ -1,0 +1,10 @@
+[evaluation]
+experiment_name = "pair_similarity_faith_sanity_complex"
+
+[xai_metrics]
+source_type = "similarity"
+source_run_dir = "eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/EVA-02__val__n150__seed51"
+
+[output]
+profile = "xai"
+experiment_group = "eda_xai_metrics"

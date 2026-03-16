@@ -10,14 +10,14 @@ from typing import Iterable
 
 
 def print_section(title: str) -> None:
+    """Print a formatted section header for console output."""
     print("\n" + "=" * 80)
     print(title)
     print("=" * 80)
 
 
-# Fast "first-pass" sanity report before any expensive image scanning.
-# Goal: catch schema/missing-value issues immediately.
 def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
+    """Print basic schema and missing-value checks for train and test tables."""
     report = {
         "train_shape": tuple(train_df.shape),
         "test_shape": tuple(test_df.shape),
@@ -47,13 +47,8 @@ def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dic
     return report
 
 
-# ----------------------------
-# EDA: class distribution
-# ----------------------------
-
-# Identity frequency distribution drives almost every downstream decision:
-# split protocol, rebalancing, filtering thresholds, and evaluation interpretation.
 def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
+    """Summarize the number of images per identity in the training set."""
     counts = train_df["ground_truth"].value_counts().sort_values(ascending=False)
     desc = counts.describe()
 
@@ -69,11 +64,10 @@ def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
     for k, v in summary.items():
         print(f"{k}: {v}")
 
-    # Identify identities that may need careful handling (few samples)
-    min_samples_for_split = 2  
+    min_samples_for_split = 2
     low_sample_identities = counts[counts < min_samples_for_split]
 
-    if len(low_sample_identities) > 0:   
+    if len(low_sample_identities) > 0:
         print(f"\nWarning: {len(low_sample_identities)} identities have fewer than {min_samples_for_split} images")
 
     print("\nTop-10 IDs by count:")
@@ -81,14 +75,13 @@ def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
 
     return counts, summary
 
-# Scenario analysis only: summarizes consequences of minimum-images-per-identity rules
-# without modifying the dataset yet.
+
 def identity_filter_summary(
     identity_counts: pd.Series,
     thresholds: Iterable[int],
     out_dir: Path,
 ) -> pd.DataFrame:
-    # ---- summary table ----
+    """Create a summary table for different minimum-images-per-identity thresholds."""
     rows = []
     for x in thresholds:
         keep = identity_counts[identity_counts >= x]
@@ -136,14 +129,12 @@ def identity_filter_summary(
     return summary
 
 
-
-# Reads image headers (and mode) to build a lightweight technical profile of the dataset.
-# Failed loads are tracked to surface corrupted/missing files.
 def analyze_images(
     df: pd.DataFrame,
     img_dir: Path,
     img_col: str = "filename",
 ) -> pd.DataFrame:
+    """Read image size and mode metadata for all files listed in the dataframe."""
     widths: list[int] = []
     heights: list[int] = []
     modes: list[str] = []
@@ -181,13 +172,13 @@ def analyze_images(
 
     return stats_df
 
-# Protects against silent train/CSV mismatches that would later break EDA, dedup, or training.
+
 def check_filename_and_folder_consistency(
     train_df: pd.DataFrame,
     data_path: Path,
     filename_col: str = "filename",
 ) -> None:
-    # filename format + index coverage
+    """Check filename format, index continuity, and CSV-to-folder consistency."""
     pat = re.compile(r"^train_(\d{4})\.png$", re.IGNORECASE)
     ok = train_df[filename_col].astype(str).apply(lambda s: bool(pat.match(s)))
     print("filename format train_####.png valid:", f"{ok.mean()*100:.1f}%")
@@ -210,7 +201,6 @@ def check_filename_and_folder_consistency(
     else:
         print("index coverage: no valid indices extracted")
 
-    # --- CSV vs folder check ---
     print("\n=== CSV ↔ TRAIN FOLDER CONSISTENCY ===")
     if not data_path.exists():
         print("TRAIN_DIR does not exist:", data_path)
@@ -230,18 +220,14 @@ def check_filename_and_folder_consistency(
         if extra_on_disk[:10]:
             print("example extra:", extra_on_disk[:10])
 
-# Joins upstream feature artifacts (sharpness) with freshly computed image metadata
-# so we can analyze quality signals together with size/resolution.
+
 def merge_sharpness_with_image_stats(
     df_sharp: pd.DataFrame,
     img_stats_df: pd.DataFrame,
     key: str = "filename",
     validate: str = "one_to_one",
 ) -> pd.DataFrame:
-    """
-    Merge sharpness/features table with image stats (width/height/mode),
-    then add derived size columns.
-    """
+    """Merge sharpness features with image metadata and add derived size columns."""
     merged = df_sharp.merge(
         img_stats_df,
         on=key,
@@ -255,15 +241,13 @@ def merge_sharpness_with_image_stats(
 
     return merged
 
-# Utility for qualitative spot checks of extremes (useful for debugging dataset artifacts).
+
 def get_top_bottom_by_column(
     df: pd.DataFrame,
     col: str,
     n: int = 10,
 ):
-    """
-    Returns (top_n_df, bottom_n_df) sorted by column.
-    """
+    """Return the top-n and bottom-n rows sorted by a given column."""
     tmp = df.copy()
     tmp = tmp.dropna(subset=[col])
 
@@ -272,15 +256,15 @@ def get_top_bottom_by_column(
     return top_n, bottom_n
 
 
-
 def alpha_background_table_scene(
     train_df: pd.DataFrame,
     img_dir: Path,
     filename_col: str = "filename",
-    alpha0_thresh: float = 0.01,      # >1% transparent => cutout
-    min_bg_mean: float = 5.0,         # bg not black
-    min_bg_std: float = 10.0,         # bg has texture/variation
+    alpha0_thresh: float = 0.01,
+    min_bg_mean: float = 5.0,
+    min_bg_std: float = 10.0,
 ) -> pd.DataFrame:
+    """Classify images by alpha cutout presence and visible background content."""
     rows = []
     for _, r in tqdm(train_df.iterrows(), total=len(train_df), desc="EDA alpha/bg scene"):
         fp = img_dir / str(r[filename_col])
@@ -288,20 +272,20 @@ def alpha_background_table_scene(
             rgba = Image.open(fp).convert("RGBA")
             arr = np.array(rgba)
             rgb = arr[..., :3].astype(np.float32)
-            a   = arr[..., 3]
+            a = arr[..., 3]
 
             alpha0_frac = float((a == 0).mean())
             is_cutout = alpha0_frac > alpha0_thresh
 
             bg_present_scene = False
             bg_mean = np.nan
-            bg_std  = np.nan
+            bg_std = np.nan
 
             if is_cutout:
-                bg = rgb[a == 0]  # Nx3
+                bg = rgb[a == 0]
                 if bg.size:
                     bg_mean = float(bg.mean())
-                    bg_std  = float(bg.std())  # variation across bg pixels/channels
+                    bg_std = float(bg.std())
                     bg_present_scene = (bg_mean >= min_bg_mean) and (bg_std >= min_bg_std)
 
             label = (
@@ -329,16 +313,8 @@ def alpha_background_table_scene(
     return pd.DataFrame(rows)
 
 
-
 def plot_bg_label_counts(alpha_df, save_path):
-    """
-    Bar chart for alpha/background categories.
-    Expects alpha_df to have a 'label' column like:
-      - 'no_cutout'
-      - 'cutout_bg_present'
-      - 'cutout_bg_missing'
-      - (optional) 'error'
-    """
+    """Plot the number of images in each alpha/background label category."""
     counts = alpha_df["label"].value_counts()
 
     plt.figure(figsize=(7, 4))

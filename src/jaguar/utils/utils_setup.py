@@ -19,10 +19,7 @@ def build_habitat_backgrounds(
     seed: int = 51,
 ):
     """
-    Create a reusable pool of mostly-foreground-free habitat patches from the raw training images.
-
-    These patches are later used as realistic random backgrounds for cutout compositing
-    (background-ablation experiments).
+    Build a pool of mostly jaguar-free background patches from raw images and cutout masks.
     """
     random.seed(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -81,12 +78,7 @@ def _build_from_csv_labels(
     overwrite_db: bool = True,
 ) -> FODataset:
     """
-    Build a FiftyOne dataset from the raw training CSV.
-
-    Project role:
-    - creates a labeled visual dataset for inspection/EDA in FiftyOne
-    - stores train split tag + filename metadata on each sample
-    - acts as a bridge from Kaggle-style CSV labels to project-internal dataset tooling
+    Build a FiftyOne dataset from the training CSV and attach labels and split metadata.
     """
     df = pd.read_csv(csv_path)
     
@@ -128,6 +120,9 @@ def init_fiftyone_dataset(
         csv_file: Path,
         train_dir: Path
 ) -> None:
+    """
+    Create or load the project FiftyOne dataset and persist its manifest-backed version.
+    """
     
     ### add labels to fiftyOne
     def build_fn():
@@ -154,6 +149,9 @@ def build_split_stem(
     val_k_per_dedup: int,
     phash_thresh_dedup: int,
 ) -> str:
+    """
+    Build the canonical filename stem that identifies one split configuration.
+    """
     return (
         f"str{split_strategy}"
         f"__dup{include_duplicates}"
@@ -171,6 +169,9 @@ def get_split_paths(
     val_k: int,
     phash_threshold: int,
 ) -> dict[str, Path | str]:
+    """
+    Return all key paths and relative locations for one configured split bundle.
+    """
     stem = build_split_stem(
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,
@@ -195,6 +196,9 @@ def get_split_paths(
 
 
 def get_burst_paths() -> dict[str, Path]:
+    """
+    Return the standard project paths used for burst-analysis artifacts.
+    """
     write_root = EXPERIMENTS_STORE.write_root / "bursts"
     return {
         "write_root": write_root,

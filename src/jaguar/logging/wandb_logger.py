@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import wandb
 from wandb.sdk.wandb_run import Run
 
+from jaguar.config import ROUND
+
 load_dotenv()
 
 def _build_wandb_tags(
@@ -14,7 +16,7 @@ def _build_wandb_tags(
     experiment_group: str | None,
     job_type: str | None = None,
 ) -> list[str]:
-    """Build a small set of tags for filtering runs in W&B."""
+    """Build a compact list of W&B tags from the experiment configuration."""
     tags: list[str] = [str(job_type or "run")]
 
     output_profile = (
@@ -48,7 +50,7 @@ def _build_wandb_tags(
 
 
 def is_wandb_enabled(config: dict[str, Any]) -> bool:
-    """Return whether W&B logging is enabled in config."""
+    """Return whether W&B logging is enabled in the configuration."""
     return bool(config.get("logging", {}).get("enabled", False))
 
 
@@ -59,7 +61,7 @@ def init_wandb_run(
     experiment_group: str | None = None,
     job_type: str | None = "train",
 ) -> Run | None:
-    """Initialize a W&B run for one training experiment."""
+    """Initialize a W&B run for a single experiment."""
     if not is_wandb_enabled(config):
         return None
     
@@ -83,7 +85,7 @@ def init_wandb_run(
         group=experiment_group,
         job_type=job_type,
         tags=tags,
-        name=exp_name,
+        name=f"{exp_name}_{ROUND}",
         config=config,
         dir=str(run_dir),
     )
@@ -112,27 +114,6 @@ def init_wandb_run(
 
     return run
 
-
-def log_wandb_ensemble_config(
-    run: Run | None,
-    config: dict[str, Any],
-) -> None:
-    """Log ensemble-specific config fields once per ensemble run."""
-    if run is None:
-        return
-
-    run.config.update(
-        {
-            "fusion_method": config.get("fusion", {}).get("method", "score"),
-            "fusion_weights": config.get("fusion", {}).get("weights"),
-            "normalize_mode": config.get("fusion", {}).get("normalize_mode"),
-            "square_before_fusion": config.get("fusion", {}).get("square_before_fusion"),
-            "n_members": len(config.get("members", [])),
-            "member_names": [m.get("name") for m in config.get("members", [])],
-        },
-        allow_val_change=True,
-    )
-
 def log_wandb_dataset_info(
     run: Run | None,
     run_dir: Path,
@@ -142,7 +123,7 @@ def log_wandb_dataset_info(
     num_classes: int,
     device: Any,
 ) -> None:
-    """Log resolved dataset and runtime metadata once per run."""
+    """Log dataset and runtime metadata for a run."""
     if run is None:
         return
 
@@ -163,7 +144,7 @@ def log_wandb_model_info(
     run: Run | None,
     model: Any,
 ) -> None:
-    """Log static model information once per run."""
+    """Log static model parameter counts to W&B."""
     if run is None:
         return
 
@@ -188,7 +169,7 @@ def log_wandb_epoch_metrics(
     epoch_time_sec: float,
     input_size: int | tuple[int, int] | list[int],
 ) -> None:
-    """Log one epoch of train/validation metrics."""
+    """Log one epoch of training and validation metrics."""
     if run is None:
         return
 
@@ -210,59 +191,12 @@ def log_wandb_epoch_metrics(
         log_dict["val/silhouette"] = float(metrics["silhouette"])
     run.log(log_dict)
 
-def log_wandb_ensemble_results(
-    run: Run | None,
-    config: dict[str, Any],
-    exp_name: str,
-    score_metrics: dict[str, Any],
-    emb_metrics: dict[str, Any],
-    oracle_summary: dict[str, Any],
-    oracle_df: pd.DataFrame,
-    score_query_df: pd.DataFrame,
-    emb_query_df: pd.DataFrame,
-    per_model_query_dfs: dict[str, pd.DataFrame],
-) -> None:
-    """Log ensemble metrics, summaries, and per-query tables."""
-    if run is None:
-        return
-
-    run.log(
-        {
-            "ensemble/score_mAP": float(score_metrics["mAP"]),
-            "ensemble/score_rank1": float(score_metrics["rank1"]),
-            "ensemble/emb_mAP": float(emb_metrics["mAP"]),
-            "ensemble/emb_rank1": float(emb_metrics["rank1"]),
-            "ensemble/oracle_mAP": float(oracle_summary["oracle_mAP"]),
-            "ensemble/oracle_rank1": float(oracle_summary["oracle_rank1"]),
-        }
-    )
-
-    run.summary["experiment_name"] = exp_name
-    run.summary["n_members"] = len(config.get("members", []))
-    run.summary["member_names"] = [m.get("name") for m in config.get("members", [])]
-    run.summary["weights"] = config.get("fusion", {}).get("weights")
-    run.summary["normalize_mode"] = config.get("fusion", {}).get("normalize_mode", "global_minmax")
-    run.summary["square_before_fusion"] = config.get("fusion", {}).get("square_before_fusion", True)
-    run.summary["score_mAP"] = float(score_metrics["mAP"])
-    run.summary["score_rank1"] = float(score_metrics["rank1"])
-    run.summary["emb_mAP"] = float(emb_metrics["mAP"])
-    run.summary["emb_rank1"] = float(emb_metrics["rank1"])
-    run.summary["oracle_mAP"] = float(oracle_summary["oracle_mAP"])
-    run.summary["oracle_rank1"] = float(oracle_summary["oracle_rank1"])
-
-    log_wandb_table(run, "oracle/per_query", oracle_df)
-    log_wandb_table(run, "score_fusion/per_query", score_query_df)
-    log_wandb_table(run, "embedding_fusion/per_query", emb_query_df)
-
-    for name, query_df in per_model_query_dfs.items():
-        log_wandb_table(run, f"{name}/per_query", query_df)
-
 
 def log_wandb_ensemble_config(
     run: Run | None,
     config: dict[str, Any],
 ) -> None:
-    """Log ensemble-specific config fields once per ensemble run."""
+    """Log ensemble-specific configuration fields to W&B."""
     if run is None:
         return
 
@@ -385,7 +319,7 @@ def log_wandb_checkpoint_artifact(
     metadata: dict[str, Any] | None = None,
     aliases: list[str] | None = None,
 ) -> None:
-    """Log one checkpoint file as a W&B model artifact."""
+    """Log a checkpoint file as a W&B model artifact."""
 
     if run is None or not checkpoint_path.exists():
         return
@@ -404,6 +338,7 @@ def log_wandb_background_intervention_results(
     run: Run | None,
     result: dict,
 ) -> None:
+    """Log summary tables and metrics for background intervention experiments."""
     if run is None:
         return
 
@@ -435,6 +370,7 @@ def log_wandb_background_sensitivity_results(
     similarity_summary: dict,
     analysis_df: pd.DataFrame,
 ) -> None:
+    """Log background sensitivity summaries and analysis tables."""
     if run is None:
         return
 
@@ -453,6 +389,7 @@ def log_wandb_xai_similarity_results(
     explainer_names: list[str],
     pair_types: tuple[str, ...],
 ) -> None:
+    """Log reference-pair counts and metadata for XAI similarity experiments."""
     if run is None:
         return
 
@@ -470,6 +407,7 @@ def log_wandb_xai_metrics_results(
     run: Run | None,
     summary_df: pd.DataFrame,
 ) -> None:
+    """Log aggregated XAI metric tables and summary values."""
     if run is None:
         return
 

@@ -428,10 +428,7 @@ def run(
     **kwargs
 ) -> None:
     
-    print(f"[DEBUG] run {root_dir}")
-    print(f"[DEBUG] run {run_dir}")
     runs = load_runs(root_dir)
-
     ensure_dir(save_dir)
 
     global_master_df = save_global_master_summary(runs)

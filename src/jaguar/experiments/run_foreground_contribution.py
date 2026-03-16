@@ -22,6 +22,7 @@ from jaguar.utils.utils_xai import get_val_query_indices
 
 
 def parse_args():
+    """Parse command-line arguments for the background sensitivity runner."""
     parser = argparse.ArgumentParser(description="Run background sensitivity analysis")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
@@ -29,6 +30,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    """Load configuration, run background sensitivity analysis, and save all outputs."""
     args = parse_args()
 
     base_config = load_toml_config(args.base_config)

@@ -25,10 +25,12 @@ from jaguar.utils.utils_models import (
 )
 
 class PadToSquare:
+    """Pad an image to a square canvas while preserving its original content."""
     def __init__(self, fill=0):
         self.fill = fill
 
     def __call__(self, img):
+        """Return a square-padded version of the input image."""
         w, h = img.size
         max_side = max(w, h)
         new_img = Image.new("RGB", (max_side, max_side), self.fill)
@@ -36,6 +38,7 @@ class PadToSquare:
         return new_img
 
 class FoundationModelWrapper:
+    """Wrap a foundation model with standardized loading, preprocessing, and embedding utilities."""
     MODEL_REGISTRY = {
         "MegaDescriptor-L": {
             "loader": lambda: load_megadescriptor_model("L"),
@@ -210,6 +213,7 @@ class FoundationModelWrapper:
     }
 
     def __init__(self, model_name: str, device=None):
+        """Load the selected model and initialize its preprocessing pipeline."""
         assert model_name in self.MODEL_REGISTRY, f"Unknown model {model_name}"
         self.name = model_name
         self.device = device
@@ -227,36 +231,31 @@ class FoundationModelWrapper:
         self.transform = self.MODEL_REGISTRY[model_name]["transform"]
 
     def preprocess(self, image: Image.Image):
+        """Apply the model-specific preprocessing transform to an image."""
         return self.transform(image)
     
     def eval(self):
-        """Delegate eval() to the underlying PyTorch model."""
+        """Set the wrapped model to evaluation mode."""
         self.model.eval()
         return self
 
     def train(self, mode=True):
-        """Delegate train() to the underlying PyTorch model."""
+        """Set the wrapped model to training or evaluation mode."""
         self.model.train(mode)
         return self
 
     def to(self, device):
-        """Delegate to() to the underlying PyTorch model."""
+        """Move the wrapped model to the specified device."""
         self.device = device
         self.model.to(device)
         return self
 
     def __call__(self, x):
-        """
-        Allows the wrapper to be called like a function: output = wrapper(x)
-        This is often what evaluation scripts expect.
-        """
+        """Forward inputs through the wrapped model."""
         return self.model(x)
 
     def extract_embeddings(self, images):
-        """
-        images: list of PIL.Image or torch.Tensor
-        Returns np.ndarray of shape (N, D)
-        """
+        """Extract embeddings for a list of images or tensors."""
         tensors = []
         for img in images:
             if isinstance(img, Image.Image):
@@ -265,15 +264,14 @@ class FoundationModelWrapper:
                 tensors.append(img)
         batch = torch.stack(tensors).to(self.device)
         
-        #!TODO: re-check whether we need the part commented out 
         with torch.no_grad():
-            # Process the batch in one go
-            emb = self.model(batch)  # Direct call for embedding extraction
+            emb = self.model(batch)
         emb_np = emb.cpu().numpy()
         print(f"[Info] Extracted embeddings shape: {emb_np.shape}")
         return emb_np
 
     def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
+        """Save embeddings to disk for a given data split."""
         if folder is None:
             folder = resolve_path("embeddings", DATA_STORE)
         os.makedirs(folder, exist_ok=True)
@@ -284,6 +282,7 @@ class FoundationModelWrapper:
         return path
 
     def load_embeddings(self, split="training", folder=None):
+        """Load embeddings for a given data split from disk."""
         if folder is None:
             folder = resolve_path("embeddings", DATA_STORE)
         filename = f"embeddings_{self.name}_{split}.npy"
@@ -293,10 +292,7 @@ class FoundationModelWrapper:
         return emb
     
     def get_embeddings_tensor(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        x: [B,3,H,W] already preprocessed tensor on self.device
-        returns: [B,D] torch tensor (keeps graph if x.requires_grad=True)
-        """
+        """Return embeddings as a tensor for a preprocessed input batch."""
         out = self.model.get_embeddings(x) if hasattr(self.model, "get_embeddings") else self.model(x)
 
         if isinstance(out, dict):
@@ -309,9 +305,7 @@ class FoundationModelWrapper:
         return out
     
     def get_grad_cam_config(self):
-        """
-        Returns the resolved target layers and reshape function for GradCAM.
-        """
+        """Return the target layers and reshape function used for Grad-CAM."""
         if "grad_cam" not in self.registry_entry:
             raise NotImplementedError(f"GradCAM not configured for {self.name}")
 

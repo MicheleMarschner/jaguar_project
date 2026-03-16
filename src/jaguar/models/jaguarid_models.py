@@ -20,47 +20,51 @@ from jaguar.utils.utils_losses import (
 # ---------------------------
 
 class GeM(nn.Module):
-    """Generalized Mean Pooling"""
+    """Apply generalized mean pooling over spatial feature maps."""
     def __init__(self, p=3.0, eps=1e-6):
         super().__init__()
         self.p = nn.Parameter(torch.ones(1) * p)
         self.eps = eps
 
     def forward(self, x):
+        """Pool a feature map using the learned GeM exponent."""
         return F.avg_pool2d(
             x.clamp(min=self.eps).pow(self.p),
             (x.size(-2), x.size(-1))
         ).pow(1.0 / self.p)
 
 class BaseMarginHead(nn.Module):
-    """Base class for margin-based heads like ArcFace, CosFace, SphereFace."""
+    """Compute normalized class logits for margin-based classification heads."""
     def __init__(self, in_features: int, num_classes: int):
         super().__init__()
         self.weight = nn.Parameter(torch.randn(num_classes, in_features))
         nn.init.xavier_uniform_(self.weight)
 
     def forward(self, features: torch.Tensor):
+        """Project normalized features onto normalized class weights."""
         features = F.normalize(features, dim=1)
         weights = F.normalize(self.weight, dim=1)
         return F.linear(features, weights)
 
 class LinearHead(nn.Module):
-    """Simple linear classification head (Softmax)"""
+    """Apply a linear classification layer to feature embeddings."""
     def __init__(self, in_features: int, num_classes: int):
         super().__init__()
         self.fc = nn.Linear(in_features, num_classes)
 
     def forward(self, x):
+        """Return class logits from the input features."""
         return self.fc(x)
 
 class EmbeddingHead(nn.Module):
-    """Projection head (Neck) for ReID features"""
+    """Project backbone features into the embedding space and normalize them with batch norm."""
     def __init__(self, in_features: int, emb_dim: int = 512):
         super().__init__()
         self.proj = nn.Linear(in_features, emb_dim)
         self.bn = nn.BatchNorm1d(emb_dim)  #Added BN
 
     def forward(self, x):
+        """Project features to the embedding dimension."""
         x = self.proj(x)
         x = self.bn(x) 
         return x # Return raw for Head, Normalize in get_embeddings
@@ -70,6 +74,7 @@ class EmbeddingHead(nn.Module):
 # ---------------------------
     
 class JaguarIDModel(nn.Module):
+    """Build a Jaguar re-identification model from a foundation backbone and task-specific head."""
     def __init__(
         self,
         backbone_name: str,
@@ -166,7 +171,7 @@ class JaguarIDModel(nn.Module):
         self.to(device)
     
     def _infer_feature_dim(self):
-        """Infer backbone output feature dimension."""
+        """Infer the backbone output dimension from a dummy input."""
         with torch.no_grad():
             dummy = torch.randn(1, 3, self.input_size, self.input_size)
 
@@ -181,10 +186,7 @@ class JaguarIDModel(nn.Module):
             return features.shape[1]
         
     def unfreeze_backbone_layers(self, num_blocks: int):
-        """
-        Unfreezes the last 'num_blocks' of the backbone.
-        Handles both ViT-style (blocks) and CNN-style (stages/layers) backbones.
-        """
+        """Unfreeze the last backbone blocks or stages for fine-tuning."""
         if num_blocks <= 0:
             return
         #Identify the list of modules to choose from
@@ -246,7 +248,7 @@ class JaguarIDModel(nn.Module):
         print(f"[JaguarID] Unfroze the last {num_to_unfreeze} blocks of the backbone.")
     
     def _extract_features(self, x):
-        """Handles backbone feature extraction with optional forward_features."""
+        """Extract backbone features with optional forward_features support."""
         if self.use_forward_features and hasattr(self.backbone, "forward_features"):
             features = self.backbone.forward_features(x)
             # Handle ViT-style token -> spatial map
@@ -262,7 +264,7 @@ class JaguarIDModel(nn.Module):
         return features
     
     def get_embeddings(self, x):
-        """Utility method to extract normalized embeddings for ReID evaluation."""
+        """Return normalized embeddings for re-identification evaluation."""
         features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]
@@ -278,6 +280,7 @@ class JaguarIDModel(nn.Module):
         return F.normalize(embeddings, dim=1)
     
     def save_embeddings(self, embeddings: np.ndarray, split="training", folder=None):
+        """Save embeddings to disk for a given split."""
         if folder is None:
             folder = resolve_path("embeddings", DATA_STORE)
         os.makedirs(folder, exist_ok=True)
@@ -288,6 +291,7 @@ class JaguarIDModel(nn.Module):
         return path
     
     def load_embeddings(self, split="training", folder=None):
+        """Load saved embeddings for a given split from disk."""
         if folder is None:
             folder = resolve_path("embeddings", DATA_STORE)
         filename = f"embeddings_{self.backbone_wrapper.name}_{self.head_type}_{split}.npy"
@@ -297,6 +301,7 @@ class JaguarIDModel(nn.Module):
         return emb
 
     def forward(self, x, labels=None):
+        """Run the model forward pass and return loss/logits or inference embeddings."""
         features = self._extract_features(x)
         if isinstance(features, (tuple, list)):
             features = features[0]

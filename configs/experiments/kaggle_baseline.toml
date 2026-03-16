@@ -8,14 +8,14 @@ output_profile = "baseline"
 setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "baseline_init_round2"
+experiment_name = "baseline_init"
 head_type = "arcface"   # Options: "arcface"
 m = 0.50
 use_projection = true
 use_forward_features = false
 use_balanced_sampler = false    # Set to true to handle class imbalance
 # ---Fine-tuning Params---
-unfreeze_epoch = 0       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
+unfreeze_epoch = 5       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 ema = false
 optimizer_type = "Adam"         # Options: "Adam", "AdamW", "SGD", "Lion", "Muon" etc.
 optimizer_lr = 1e-3              # lr_start = 1e-5 for custom scheduler; 2e-5 for AdamW

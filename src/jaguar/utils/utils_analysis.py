@@ -8,6 +8,7 @@ def resolve_analysis_paths(
     root_dir: Path | None = None,
     run_dir: Path | None = None,
 ) -> tuple[Path, Path]:
+    """Resolve the analysis input root and corresponding output directory."""
     if run_dir is not None:
         run_root = run_dir
         save_root = PATHS.results / "analysis" / run_dir.parent.name / run_dir.name

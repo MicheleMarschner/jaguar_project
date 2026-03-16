@@ -7,7 +7,7 @@ import torch
 import cv2
 from PIL import Image
 
-from jaguar.utils.utils_xai import load_all_refs, load_all_vectors
+from jaguar.utils.utils_xai import _RUN_RE, load_all_refs, load_all_vectors
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, RESULTS_STORE
 from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
@@ -277,14 +277,19 @@ def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) ->
 
 def idx_to_imgpath(torch_ds, idx: int) -> Path:
     s = torch_ds.samples[int(idx)]
-    # prefer absolute path if stored
-    if "filepath" in s:
-        return Path(s["filepath"])
-    if "path" in s:
-        return Path(s["path"])
-    # if only filename stored, resolve using dataset helper if available
-    # fall back: assume it's already absolute
-    return Path(s.get("filename", ""))
+
+    if "filepath" in s and s["filepath"]:
+        p = Path(s["filepath"])
+        return p if p.is_absolute() else PATHS.data.parent / p
+
+    if "path" in s and s["path"]:
+        p = Path(s["path"])
+        return p if p.is_absolute() else PATHS.data.parent / p
+
+    if "filename" in s and s["filename"]:
+        return PATHS.data.parent / s["filename"]
+
+    raise ValueError(f"No usable image path for sample idx={idx}: {s}")
 
 
 def build_saliency_lookup(artifact: dict) -> dict:
@@ -427,12 +432,24 @@ def save_pairtype_trained_vs_randomized_panels(
         print(f"[OK] Saved {len(chosen)} panels for {pair_type} to {pair_dir}")
 
 
-def overlay_heatmap(img_rgb: np.ndarray, saliency_2d: np.ndarray, alpha: float = 0.45) -> np.ndarray:
-    s = np.abs(saliency_2d)
-    s = (s - s.min()) / (s.max() - s.min() + 1e-8)
+def overlay_heatmap(
+    img_rgb: np.ndarray,
+    saliency_2d: np.ndarray,
+    alpha: float = 0.45,
+    percentile: float = 99.0,
+    threshold: float = 0.25,
+) -> np.ndarray:
+    s = np.abs(saliency_2d).astype(np.float32)
 
     if s.shape != img_rgb.shape[:2]:
         s = cv2.resize(s, (img_rgb.shape[1], img_rgb.shape[0]))
+
+    hi = np.percentile(s, percentile)
+    if hi <= 1e-8:
+        hi = float(s.max())
+
+    s = np.clip(s / (hi + 1e-8), 0, 1)
+    s[s < threshold] = 0.0
 
     heat = cv2.applyColorMap(np.uint8(255 * s), cv2.COLORMAP_JET)
     heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB)
@@ -537,27 +554,44 @@ def run(
     exemplar_run_dir: Path | None = None,
     **kwargs,
 ) -> None:
+    
     if run_dir is not None:
         rel_path = run_dir.relative_to(PATHS.runs)
-        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        run_root = resolve_path(str(rel_path), EXPERIMENTS_STORE)
         save_root = Path(RESULTS_STORE.write_root) / rel_path
     elif root_dir is not None:
         rel_path = root_dir.relative_to(PATHS.runs)
-        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        run_root = resolve_path(str(rel_path), EXPERIMENTS_STORE)
         save_root = Path(RESULTS_STORE.write_root) / rel_path
     else:
         raise ValueError("Expected either run_dir or root_dir")
-
+    
+    child_dirs = [
+        p for p in run_root.iterdir()
+        if p.is_dir() and _RUN_RE.match(p.name)
+    ]
+    if len(child_dirs) == 1:
+        run_root = child_dirs[0]
+    else:
+        raise RuntimeError(f"Expected exactly one run dir under {run_root}, found: {child_dirs}")
     ensure_dir(save_root)
 
     if root_dir is not None and run_dir is None:
         raise NotImplementedError("Group-mode analysis not implemented yet.")
+    
+    print(f"[DEBUG] {run_dir}")
+    print(f"[DEBUG] {root_dir}")
 
+    
     dataset_name = config["xai"]["dataset_name"]
     n_samples = config["xai"]["n_samples"]
     explainer = config["xai"]["explainer_names"][0]
 
     df_vec = load_all_vectors(run_root)
+
+    print("[DEBUG] df_vec columns:", df_vec.columns.tolist())
+    print("[DEBUG] df_vec shape:", df_vec.shape)
+    print(df_vec.head())
     refs_all = load_all_refs(run_root)
     print(refs_all.head())
 
@@ -621,4 +655,5 @@ def run(
     )
 
     print(f"\nAnalysis complete. Results saved to {save_root}")
+    
     

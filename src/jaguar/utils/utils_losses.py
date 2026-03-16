@@ -5,14 +5,11 @@ import torch.nn.functional as F
 
 class ArcFaceLoss(nn.Module):
     """
-    Additive Angular Margin Loss (ArcFace)
-    Paper: https://arxiv.org/abs/1801.07698
+    Margin-based classification loss that adds an angular margin to the target class.
     """
     def __init__(self, s:float = 30.0, m:float = 0.50):
         """
-        Args:
-            m: multiplicative margin 
-            s: scalar scale 
+        Set the ArcFace scale and angular margin parameters.
         """
         super().__init__()
         self.s = s
@@ -23,8 +20,7 @@ class ArcFaceLoss(nn.Module):
 
     def forward(self, cosine_logits: torch.Tensor, labels: torch.Tensor):
         """
-        cosine_logits: (B, C) cosine similarity between features and class weights
-        labels: (B,)
+        Replace the target cosine logit with its ArcFace-margin version and compute cross-entropy loss.
         """
         one_hot = F.one_hot(labels, num_classes=cosine_logits.size(1)).float()
 
@@ -42,20 +38,20 @@ class ArcFaceLoss(nn.Module):
 
 class CosFaceLoss(nn.Module):
     """
-    Additive Margin Softmax (CosFace): differently from Arcface, 
-    margin is subtracted directly from cosine logits, not angles.
+    Margin-based classification loss that subtracts a cosine margin from the target class.
     """
     def __init__(self, s:float = 30.0, m:float = 0.35):
         """
-        Args:
-            m: multiplicative margin 
-            s: scalar scale 
+        Set the CosFace scale and cosine-margin parameters.
         """
         super().__init__()
         self.s = s
         self.m = m
 
     def forward(self, cosine_logits: torch.Tensor, labels: torch.Tensor):
+        """
+        Apply the CosFace target-class margin and compute cross-entropy loss.
+        """
         one_hot = F.one_hot(labels, num_classes=cosine_logits.size(1)).float()
         logits = cosine_logits - one_hot * self.m
         logits = logits * self.s
@@ -63,14 +59,11 @@ class CosFaceLoss(nn.Module):
 
 class SphereFaceLoss(nn.Module):
     """
-    Multiplicative Angular Margin (SphereFace)
+    Margin-based classification loss that applies a multiplicative angular margin to the target class.
     """
     def __init__(self, s:float=30.0, m:int=4):
         """
-        Args:
-            m: multiplicative margin 
-            s: scalar scale (SphereFace usually uses ||x||, but modern ReID 
-               implementations use a fixed scale s for better convergence)
+        Set the SphereFace scale and multiplicative angular-margin parameters.
         """
         super().__init__()
         self.s = s
@@ -87,6 +80,9 @@ class SphereFaceLoss(nn.Module):
         ]
 
     def forward(self, cosine_logits: torch.Tensor, labels: torch.Tensor):
+        """
+        Replace the target cosine logit with its SphereFace-margin version and compute cross-entropy loss.
+        """
         one_hot = F.one_hot(labels, num_classes=cosine_logits.size(1)).float()
         cosine = cosine_logits.clamp(-1 + 1e-7, 1 - 1e-7)
         
@@ -103,8 +99,13 @@ class SphereFaceLoss(nn.Module):
         return F.cross_entropy(logits, labels), logits
   
 class TripletLoss(nn.Module):
-    """Works directly with embeddings rather than with positives, negatives and anchors."""
+    """
+    Metric-learning loss that separates embeddings of different identities and pulls same-identity embeddings together.
+    """
     def __init__(self, margin=0.3, mining="hard", norm_feat=True, debug=False):
+        """
+        Configure the triplet margin, mining strategy, distance type, and optional debug logging.
+        """
         super().__init__()
         self.margin = margin
         self.mining = mining.lower()
@@ -112,12 +113,18 @@ class TripletLoss(nn.Module):
         self.debug = debug 
         
     def softmax_weights(self, dist, mask):
+        """
+        Compute masked softmax weights used for weighted positive or negative mining.
+        """
         max_v = torch.max(dist * mask, dim=1, keepdim=True)[0]
         diff = dist - max_v
         Z = torch.sum(torch.exp(diff) * mask, dim=1, keepdim=True) + 1e-6
         return torch.exp(diff) * mask / Z
 
     def forward(self, embedding, targets):
+        """
+        Build the pairwise distance matrix, mine positives and negatives, and compute triplet loss.
+        """
         # Distance Matrix
         if self.norm_feat:
             # Cosine distance

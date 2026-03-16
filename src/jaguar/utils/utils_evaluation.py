@@ -20,8 +20,7 @@ from jaguar.utils.utils_datasets import (
 @dataclass
 class EvalContext:
     """
-    Shared evaluation context for trained JaguarID runs. Bundles everything needed 
-    to evaluate one trained Jaguar Re-ID run consistently.
+    Shared evaluation bundle for one trained JaguarID run, including model, splits, and index mappings.
     """
     model: JaguarIDModel
     train_ds: object
@@ -41,8 +40,7 @@ def build_local_to_emb_row(
     split_filename_col: str = "filename",
 ) -> np.ndarray:
     """
-    Links dataset samples to their global embedding-row ids so evaluation results can
-    be aligned back to the curated Jaguar split metadata.
+    Map dataset-local sample order to the global emb_row ids stored in the split table.
     """
     split_sub = split_df[split_df["split_final"] == split].copy()
     split_sub[split_filename_col] = split_sub[split_filename_col].astype(str)
@@ -86,8 +84,7 @@ def map_emb_rows_to_local_indices(
     local_to_emb_row: np.ndarray,
 ) -> np.ndarray:
     """
-    Converts global embedding-row ids into dataset-local indices so selected Jaguar samples
-    can be retrieved from the current split.
+    Convert global emb_row ids back into dataset-local indices for the current split dataset.
     """
     emb_rows = np.asarray(emb_rows, dtype=np.int64)
 
@@ -111,8 +108,7 @@ def build_eval_context(
     eval_val_setting: str | None = None,
 ) -> EvalContext:
     """
-    Prepares the shared evaluation setup for one Jaguar Re-ID experiment, including
-    the trained model, curated splits, and metadata needed for later analysis.
+    Build the shared evaluation context for one trained run, including datasets, model, and split metadata.
     """
 
     parquet_root = resolve_path(config["data"]["split_data_path"], EXPERIMENTS_STORE)
@@ -176,8 +172,7 @@ def build_eval_context(
 @dataclass
 class RetrievalState:
     """
-    Prepared query-gallery retrieval state. Stores everything needed to 
-    evaluate Jaguar query-gallery retrieval consistently.
+    Prepared retrieval state containing embeddings, labels, similarities, and burst metadata for query-gallery evaluation.
     """
     q_global: np.ndarray
     g_global: np.ndarray
@@ -189,7 +184,9 @@ class RetrievalState:
 
 
 def _l2_normalize(emb: np.ndarray) -> np.ndarray:
-    """Normalizes embeddings so Jaguar image similarity can be compared on a common scale."""
+    """
+    L2-normalize embedding vectors so cosine-style similarity is computed on a common scale.
+    """
     emb = np.asarray(emb, dtype=np.float32)
     return emb / (np.linalg.norm(emb, axis=1, keepdims=True) + 1e-12)
 
@@ -204,8 +201,7 @@ def build_query_gallery_retrieval_state(
     split_df: pd.DataFrame,
 ) -> RetrievalState:
     """
-    Build rectangular query-gallery retrieval state from already extracted embeddings. It includes 
-    burst metadata so trivial same-burst matches can be excluded during evaluation.
+    Build the full query-gallery retrieval state from embeddings, labels, indices, and burst metadata.
     """
     q_global = np.asarray(query_global_indices, dtype=np.int64)
     g_global = np.asarray(gallery_global_indices, dtype=np.int64)
@@ -245,6 +241,9 @@ def build_query_gallery_retrieval_state_from_sim(
     gallery_labels: np.ndarray,
     split_df: pd.DataFrame,
 ) -> RetrievalState:
+    """
+    Build the same retrieval state structure when a similarity matrix is already available.
+    """
     q_global = np.asarray(query_global_indices, dtype=np.int64)
     g_global = np.asarray(gallery_global_indices, dtype=np.int64)
 
@@ -267,8 +266,7 @@ def build_query_gallery_retrieval_state_from_sim(
 
 def get_ranked_candidates_for_query(retrieval: RetrievalState, i: int):
     """
-    Builds the valid ranked gallery list for one Jaguar query after excluding
-    trivial self-matches and same-burst images.
+    Build the valid ranked gallery list for one query after removing self-matches and same-burst items.
     """
     # Get ranks for specific query (descending similarity); processes row i of sim_matrix
     sims_i = retrieval.sim_matrix[i]
@@ -310,8 +308,7 @@ def evaluate_query_gallery_retrieval(
     retrieval: RetrievalState,
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Computes per-query and overall Jaguar retrieval performance from a prepared
-    query-gallery retrieval setup.
+    Compute per-query retrieval metrics and aggregate summary statistics from a prepared retrieval state.
     """
     query_rows = []
     ap_list = []
@@ -367,8 +364,7 @@ def evaluate_query_gallery_retrieval(
 
 def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir: Path):
     """
-    Builds the shared original gallery used as the fixed reference for background-reliance
-    comparisons across query settings.
+    Build the fixed original gallery state used as the shared reference across query-setting comparisons.
     """
 
     ctx_orig = build_eval_context(
@@ -442,11 +438,10 @@ def build_query_for_setting(
     setting: str,
 ) -> dict:
     """
-    Builds the query side for one background setting so retrieval can be compared
-    against the same fixed original gallery.
+    Build the query-side embeddings and metadata for one evaluation setting against the same fixed gallery.
     """
     val_processing_fn = build_eval_processing_fn(setting, config)
-
+    
     _, _, val_ds = load_split_jaguar_from_FO_export(
         PATHS.data_export / "splits_curated",
         overwrite_db=False,
@@ -455,6 +450,7 @@ def build_query_for_setting(
         train_processing_fn=None,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     val_ds.transform = get_transforms(
@@ -507,8 +503,7 @@ def build_val_gallery_base(
     eval_val_setting: str = "original",
 ) -> dict:
     """
-    Builds a pure val-vs-val retrieval base:
-    the same val split provides both query and gallery candidates.
+    Build a val-only retrieval base where the validation split provides both queries and gallery candidates.
     """
     ctx_val = build_eval_context(
         config=config,
@@ -548,7 +543,7 @@ def save_retrieval_results_per_id(
     identity_df: pd.DataFrame | None = None,
 ) -> dict:
     """
-    Saves retrieval results for one evaluation setting.
+    Save per-query, optional per-identity, and summary retrieval results for one evaluation setting.
     """
     out_dir = save_dir / setting
     ensure_dir(out_dir)
@@ -569,7 +564,7 @@ def save_retrieval_results_per_id(
 
 def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> list[dict]:
     """
-    Resolve global val emb_row ids to the corresponding val dataset samples.
+    Resolve selected global validation emb_row ids back to the corresponding validation dataset samples.
     """
     val_local_idx = map_emb_rows_to_local_indices(
         query_emb_rows,
@@ -578,10 +573,10 @@ def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> li
     return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]
 
 
-
-
 def load_checkpoint_into_model(model: JaguarIDModel, checkpoint_path: Path) -> None:
-    """Load checkpoint weights into a JaguarIDModel."""
+    """
+    Load checkpoint weights into a JaguarIDModel and switch it to eval mode on the configured device.
+    """
     checkpoint = torch.load(
         checkpoint_path,
         map_location=DEVICE,

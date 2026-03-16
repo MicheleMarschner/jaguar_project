@@ -1,7 +1,4 @@
 import os
-from jaguar.config import DATA_STORE
-from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
-from jaguar.utils.utils_datasets import PreprocessedDataset
 import torch
 import numpy as np
 import timm
@@ -14,8 +11,9 @@ from torchvision.models import (
     efficientnet_b4, EfficientNet_B4_Weights,
     swin_b, Swin_B_Weights
 )
-
-hf_api_token = os.getenv("HF_TOKEN")
+from jaguar.config import DATA_STORE
+from jaguar.utils.utils import ensure_dir, resolve_path, save_npy
+from jaguar.utils.utils_datasets import PreprocessedDataset
 
 # ----------------------------
 # MegaDescriptor

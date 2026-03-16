@@ -196,8 +196,13 @@ def compute_retrieval_bg_vs_jaguar(
 
     return df
 
-
 def compute_logit_sensitivity(model, dataloader, device):
+    """
+    Compare gold-class classification scores across original, jaguar-only, and background-only queries.
+
+    Runs the classifier on all three query variants and records how much the gold-class
+    logit and log-probability drop when foreground or background information is removed.
+    """
     results = []
     model.eval()
     
@@ -272,6 +277,12 @@ def compute_logit_sensitivity(model, dataloader, device):
 
 
 def compute_embedding_stability(model, dataloader, device):
+    """
+    Measure how much masked-query embeddings stay aligned with the original query embedding.
+
+    Extracts ReID embeddings for original, jaguar-only, and background-only inputs and
+    compares each masked variant to the original with cosine similarity.
+    """
     results = []
     model.eval()
     
@@ -307,8 +318,11 @@ def compute_embedding_stability(model, dataloader, device):
 
 
 def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
-    """"
-    Generates GradCam overlays for spurious cases
+    """
+    Create CAM comparison grids for the most background-dominant classification cases.
+
+    For selected samples, saves side-by-side original, EigenCAM, and GradCAM views for
+    original, jaguar-only, and background-only query variants.
     """
     output_dir = Path(output_dir) / "heatmaps"
     ensure_dir(output_dir)
@@ -388,6 +402,12 @@ def run_foreground_contribution_analysis(
     query_loader,
     results_path: Path,
 ) -> dict:
+    """
+    Run foreground-vs-background diagnostics on classification and embedding behavior.
+
+    Produces per-sample classification sensitivity scores, embedding stability scores,
+    and qualitative CAM visualizations for representative cases.
+    """
     
     # Run Sensitivity Analysis on classification (logits)
     logits_res = compute_logit_sensitivity(model, query_loader, DEVICE)
@@ -409,6 +429,12 @@ def run_bg_vs_jaguar_stress_analysis(
     gallery_ids,
     gallery_files,
 ) -> dict:
+    """
+    Evaluate retrieval changes when queries keep only jaguar content or only background.
+
+    Extracts embeddings for all query variants and compares retrieval outcomes against a
+    fixed gallery to quantify foreground-versus-background dependence in ranking behavior.
+    """
     query_emb_orig, query_emb_jag, query_emb_bg, query_ids, query_files = extract_query_variant_embeddings(
         model,
         query_loader,
@@ -447,6 +473,12 @@ def save_bg_sensitivity_outputs(
     retrieval_summary: dict,
     similarity_summary: dict,
 ) -> None:
+    """
+    Persist all foreground-vs-background analysis artifacts and a run-level config record.
+
+    Saves the core per-sample tables, summary JSON files, and a compact metadata file
+    that documents which data, model, masking setup, and output paths belong to the run.
+    """
     backbone_name = train_config["model"]["backbone_name"]
     head_type = train_config["model"]["head_type"]
     n_samples = config["xai"]["n_samples"]
@@ -521,4 +553,3 @@ def save_bg_sensitivity_outputs(
 
     with open(save_path / f"run_config__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
         json.dump(run_config, f, indent=2)
-

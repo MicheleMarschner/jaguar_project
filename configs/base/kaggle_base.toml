@@ -17,8 +17,8 @@ seed = 51
 
 [data]
 # split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
-# split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
-split_data_path = "/splits/default_kaggle/full_split.parquet"
+split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
+# split_data_path = "/splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
 num_workers = 4
@@ -40,9 +40,7 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
-# save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-save_dir = "checkpoints/round_2/"  
-experiment_name = "kaggle_base"
+# save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/"  
 epochs = 30
 batch_size = 32  # 16
 samples_per_class = 4

@@ -8,4 +8,13 @@ output_profile = "xai"
 setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "xai_"
+experiment_name = "fg_contribution_eva02_base"
+checkpoint_dir = "triplet_loss/backbone_eva02"
+
+[[experiment.runs]]
+experiment_name = "fg_contribution_megadescriptor_base"
+checkpoint_dir = "triplet_loss/backbone_megadescriptor_l"
+
+[[experiment.runs]]
+experiment_name = "fg_contribution_miewid_base"
+checkpoint_dir = "triplet_loss/backbone_miew_id"

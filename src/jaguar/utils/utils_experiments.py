@@ -7,21 +7,32 @@ from jaguar.utils.utils_setup import build_split_stem
 
 
 def load_toml_config(config_name: str) -> dict:
+    """
+    Load a named project TOML config from the central configs directory.
+    """
     with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
         return tomllib.load(f)
     
 def load_toml_from_path(path: str | Path) -> dict:
-    """Load a TOML file from an arbitrary path."""
+    """
+    Load a TOML file from any given filesystem path.
+    """
     path = Path(path)
     with open(path, "rb") as f:
         return tomllib.load(f)
     
 def read_toml_from_path(path: Path) -> dict:
+    """
+    Read a TOML file from a Path object and return its parsed contents.
+    """
     with open(path, "rb") as f:
         return tomllib.load(f)
 
 
 def deep_update(base: dict, override: dict) -> dict:
+    """
+    Recursively merge an override dictionary into a base dictionary.
+    """
     result = dict(base)
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
@@ -33,6 +44,9 @@ def deep_update(base: dict, override: dict) -> dict:
 
 
 def to_toml_value(value):
+    """
+    Convert a supported Python value into its TOML string representation.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
@@ -45,6 +59,9 @@ def to_toml_value(value):
 
 
 def dict_to_toml(data: dict) -> str:
+    """
+    Serialize a nested config dictionary into a TOML string.
+    """
     lines: list[str] = []
 
     scalar_items: list[tuple[str, object]] = []
@@ -83,6 +100,9 @@ def dict_to_toml(data: dict) -> str:
 
 
 def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
+    """
+    Pick a config value with precedence run config, then experiment metadata, then base config.
+    """
     key = path[-1]
 
     if key in run_cfg:
@@ -103,6 +123,9 @@ def build_ensemble_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one ensemble experiment run.
+    """
     override = {
         "ensemble": {
             "name": run_cfg["experiment_name"],
@@ -156,7 +179,10 @@ def build_ensemble_override(
 
 
 def resolve_xai_metrics_paths(config: dict):
-    source_run_dir = Path(config["xai_metrics"]["source_run_dir"])
+    """
+    Resolve and create the key output directories used for XAI metric computation.
+    """
+    source_run_dir = str(config["xai_metrics"]["source_run_dir"])
 
     run_root = resolve_path(source_run_dir, EXPERIMENTS_STORE)
     if not run_root.exists():
@@ -178,6 +204,9 @@ def build_xai_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one XAI or XAI-metrics experiment run.
+    """
     override = {
         "evaluation": {
             "experiment_name": run_cfg["experiment_name"],
@@ -259,6 +288,9 @@ def build_standard_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one standard training or evaluation run.
+    """
     override = {
         "training": {
             "experiment_name": run_cfg["experiment_name"],
@@ -391,6 +423,9 @@ def build_split_relpath(
     val_k_per_dedup: int,
     phash_thresh_dedup: int,
 ) -> str:
+    """
+    Build the canonical relative path to the full split parquet for one split configuration.
+    """
     stem = build_split_stem(
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,
@@ -399,4 +434,3 @@ def build_split_relpath(
         phash_thresh_dedup=phash_thresh_dedup,
     )
     return f"splits/{stem}/full_split.parquet"
-

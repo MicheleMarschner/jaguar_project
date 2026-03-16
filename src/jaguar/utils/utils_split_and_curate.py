@@ -7,9 +7,7 @@ from jaguar.utils.utils import json_default, save_parquet, to_rel_path
 
 def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
     """
-    Build one-row-per-image table from JaguarDataset manifest (source of truth).
-    Flatten per-sample manifest entries into a tabular split table so later split logic works with explicit metadata 
-    columns (identity, dedup tags, file references).
+    Build a one-row-per-image split table from the dataset manifest and flatten key sample metadata.
     """
     rows = []
 
@@ -44,6 +42,9 @@ def build_split_table_from_torch_dataset(torch_ds) -> pd.DataFrame:
 
 
 def print_keep_drop_summary(df: pd.DataFrame, split_col="split_tmp", keep_col="keep_curated"):
+    """
+    Print and return a per-split summary of kept versus dropped samples.
+    """
     base = df.groupby(split_col).size().rename("n_total")
     
     kept = df[df[keep_col]].groupby(split_col).size().rename("n_kept")
@@ -64,6 +65,9 @@ def build_burst_delta_table(
     keep_col="keep_curated",
     role_col="burst_role",
 ) -> pd.DataFrame:
+    """
+    Build a per-burst table showing how many samples were kept or dropped in each split.
+    """
     # only burst rows (exclude singletons)
     burst_df = df[(df[role_col] != "singleton") & (df[burst_col].notna())].copy()
 
@@ -79,12 +83,18 @@ def build_burst_delta_table(
     return out.sort_values(["split_tmp", "n_total"], ascending=[True, False]).reset_index(drop=True)
 
 def print_top_changed_bursts(df: pd.DataFrame, top_n: int = 20):
+    """
+    Print the burst groups with the largest number of dropped samples.
+    """
     burst_delta = build_burst_delta_table(df)
     print("\n[Bursts] Top bursts by #dropped")
     print(burst_delta.sort_values("n_dropped", ascending=False).head(top_n))
     
 
 def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col="identity_id"):
+    """
+    Summarize raw and curated split composition as sample and identity counts.
+    """
     def get_stats(subset_df):
         total_samples = len(subset_df)
         total_ids = subset_df[id_col].nunique()
@@ -126,6 +136,9 @@ def summarize_splits(df, split_col="split_tmp", keep_col="keep_curated", id_col=
 
 
 def save_split_bundle(out_root: Path, final_df: pd.DataFrame, config: dict):
+    """
+    Save the full split audit table, curated subset, burst summary, and config bundle.
+    """
     out_root.mkdir(parents=True, exist_ok=True)
 
     # full audit table

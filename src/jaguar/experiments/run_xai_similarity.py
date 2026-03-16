@@ -8,6 +8,7 @@ from jaguar.utils.utils_experiments import load_toml_config, deep_update
 
 
 def parse_args():
+    """Parse command-line arguments for the XAI similarity runner."""
     parser = argparse.ArgumentParser(description="Run XAI pair-similarity artifacts")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
@@ -16,6 +17,7 @@ def parse_args():
 
 
 def main():
+    """Load configuration, run XAI similarity generation, and save requested outputs."""
     args = parse_args()
 
     base_config = load_toml_config(args.base_config)

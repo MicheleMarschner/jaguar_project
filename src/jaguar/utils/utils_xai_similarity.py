@@ -15,9 +15,7 @@ from captum.attr import IntegratedGradients
 
 class SimilarityForward(torch.nn.Module):
     """
-    Returns scalar similarity per sample:
-        s(x) = cosine(f(x), ref_emb)
-    Output shape: [B]
+    Wrap a foundation model so it returns per-sample cosine similarity to one fixed reference embedding.
     """
     def __init__(self, foundation_wrapper, ref_emb: torch.Tensor, maximize: bool = True):
         super().__init__()
@@ -37,6 +35,9 @@ class SimilarityForward(torch.nn.Module):
 
 
 class CosineSimilarityTarget:
+    """
+    Define a Grad-CAM target based on cosine similarity to a fixed reference embedding.
+    """
     def __init__(self, ref_embedding, maximize=True):
         ref = ref_embedding.detach()
         if ref.ndim == 2 and ref.shape[0] == 1:
@@ -59,8 +60,7 @@ class CosineSimilarityTarget:
 
 class EmbeddingForwardWrapper(torch.nn.Module):
     """
-    Wraps a model to ensure pytorch-grad-cam's forward hooks intercept the 
-    final embedding vector, even if the model uses a custom method like `get_embeddings`.
+    Wrap a model so Grad-CAM sees the final embedding output even when embeddings are exposed via a custom method.
     """
     def __init__(self, base_model):
         super().__init__()
@@ -73,6 +73,9 @@ class EmbeddingForwardWrapper(torch.nn.Module):
 
 
 def manual_gradcam_class(model, target_layer, x, class_idx, reshape_transform=None):
+    """
+    Compute a class-specific Grad-CAM map manually from one target layer and one input image.
+    """
     acts = []
     grads = []
 
@@ -129,7 +132,7 @@ def manual_gradcam_class(model, target_layer, x, class_idx, reshape_transform=No
 
 def generate_similarity_cam(wrapper, query_img: Image.Image, ref_img: Image.Image, maximize: bool = True):
     """
-    Generates a GradCAM heatmap on the 'query_img' based on its similarity to 'ref_img'
+    Generate a Grad-CAM heatmap on a query image using embedding similarity to a reference image as the target.
     """
     device = wrapper.device
     model = wrapper.model
@@ -174,10 +177,7 @@ def ig_saliency_similarity(
     internal_bs: int = 16,
 ) -> torch.Tensor:
     """
-    IG for similarity scalar s(x)=cos(f(x), ref_emb).
-    No class target is used because forward returns [B].
-    Returns:
-        saliency [B,H,W] on CPU
+    Compute Integrated Gradients saliency maps for similarity-to-reference scores.
     """
     x = x.to(device).requires_grad_(True)
     baseline = torch.zeros_like(x)
@@ -196,6 +196,9 @@ def ig_saliency_similarity(
 
 
 def ig_saliency_batched_similarity(X, explainer, device, steps=32, internal_bs=32, batch_size=32):
+    """
+    Run similarity-based Integrated Gradients in batches and concatenate the resulting saliency maps.
+    """
     outs = []
     n = X.size(0)
     print(f"[IG] Start batched IG: N={n}, batch_size={batch_size}, steps={steps}, internal_bs={internal_bs}")
@@ -208,6 +211,3 @@ def ig_saliency_batched_similarity(X, explainer, device, steps=32, internal_bs=3
         print(f"[IG] Done batch {i//batch_size + 1}, out.shape={tuple(out.shape)}")
         outs.append(out)
     return torch.cat(outs, dim=0)
-
-
-

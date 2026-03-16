@@ -387,7 +387,6 @@ def log_wandb_checkpoint_artifact(
 ) -> None:
     """Log one checkpoint file as a W&B model artifact."""
 
-    print(f"[DEBUG] WANDB run: {run} and checkpoint path: {checkpoint_path}")
     if run is None or not checkpoint_path.exists():
         return
 
@@ -396,7 +395,6 @@ def log_wandb_checkpoint_artifact(
         type="model",
         metadata=metadata or {},
     )
-    print(f"[DEBUG] checkpoint_path: {checkpoint_path}")
     artifact.add_file(local_path=str(checkpoint_path), name=checkpoint_path.name)
     run.log_artifact(artifact, aliases=aliases or ["best"])
     artifact.wait()

@@ -217,12 +217,11 @@ In practice, the base config defines the common defaults for training, model set
 After training or evaluation runs are complete, the corresponding analysis scripts can be executed to recreate summary tables, comparisons, and visualizations.
 
 ```bash
-PYTHONPATH=src python -m jaguar.experiments.analysis_runner \
-  --base_config base/kaggle_base \
-  --experiment_config experiments/kaggle_deduplication
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_background_intervention --run_name eva02_triplet_bg_orig_gray_black_rdn_blur_mixed
 ```
 
 !TODO Anpassung!
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_foreground_contribution
 
 ---
 

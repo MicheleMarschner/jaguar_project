@@ -179,7 +179,7 @@ class TripletLoss(nn.Module):
             violation_rate = (dist_an < dist_ap + self.margin).float().mean().item()
 
             print(
-                f"[TripletDebug] pos={pos_mean:.3f} "
+                f"pos={pos_mean:.3f} "
                 f"neg={neg_mean:.3f} "
                 f"viol={violation_rate:.3f}"
             )

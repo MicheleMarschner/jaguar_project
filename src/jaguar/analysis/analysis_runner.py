@@ -67,6 +67,7 @@ def parse_args() -> argparse.Namespace:
 
 def load_run_config(run_dir: Path, config_name: str = "experiment_config.json") -> dict:
     config_path = run_dir / config_name
+    print(f"DEBUG {run_dir}")
     if not config_path.exists():
         raise FileNotFoundError(f"Missing config file: {config_path}")
     return read_json_if_exists(config_path)
@@ -98,6 +99,8 @@ def build_results_out_dir(experiment_group: str, run_name: str | None = None) ->
     else:
         out_dir = PATHS.results / experiment_group
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"[DEBUG] build_results_out_dir: {run_name}")
     return out_dir
 
 
@@ -136,6 +139,8 @@ def main() -> None:
     #!TODO wie kann man dass auslagern??
     if experiment_group == "kaggle_deduplication":
         run_dir = root_dir / "closed_curated_traink_3_valk_3_p4"
+    
+    print(f"[DEBUG] main: {run_dir}")
 
     REGISTRY[experiment_group](
         config=config,

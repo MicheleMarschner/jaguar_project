@@ -16,6 +16,8 @@ logs/
 wandb.md
 comments.md
 
+/experiments/
+/experiments_new/
 /data/round_1/
 /data/round_2/raw/
 /data/round_2/fiftyone/

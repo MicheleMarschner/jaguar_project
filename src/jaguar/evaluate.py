@@ -10,12 +10,9 @@ from jaguar.utils.utils_evaluate import (
     generate_submission,
 )
     
-def evaluate_experiment(exp_dir, test_csv, tta_mode, use_qe, use_rerank):
-    """
-    Evaluate a single experiment folder containing a TOML config
-    and trained checkpoint.
-    """
 
+def evaluate_experiment(exp_dir, test_csv, tta_mode, use_qe, use_rerank):
+    """Load one experiment folder, run inference on the test set, and write the submission file."""
     exp_dir = Path(exp_dir)
 
     if not exp_dir.exists():
@@ -74,6 +71,7 @@ def evaluate_experiment(exp_dir, test_csv, tta_mode, use_qe, use_rerank):
 
 
 def main():
+    """Parse CLI arguments and evaluate either one experiment folder or all experiment folders in a directory."""
     parser = argparse.ArgumentParser()
 
     group = parser.add_mutually_exclusive_group(required=True)

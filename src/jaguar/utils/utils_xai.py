@@ -328,3 +328,22 @@ def build_bg_sensitivity_summaries(
         "retrieval_summary": retrieval_summary,
         "similarity_summary": similarity_summary,
     }
+
+
+def build_val_resolver(ctx):
+    """
+    Resolve a global val emb_row back to the corresponding validation dataset sample.
+    """
+    emb_row_to_local = {
+        int(emb_row): int(local_idx)
+        for local_idx, emb_row in enumerate(ctx.val_local_to_emb_row)
+    }
+
+    def resolve_sample(sample_idx: int):
+        sample_idx = int(sample_idx)
+        if sample_idx not in emb_row_to_local:
+            raise KeyError(f"emb_row {sample_idx} not found in validation mapping")
+        local_idx = emb_row_to_local[sample_idx]
+        return ctx.val_ds, local_idx, "val"
+
+    return resolve_sample

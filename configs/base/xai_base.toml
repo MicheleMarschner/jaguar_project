@@ -30,7 +30,7 @@ dataset_name = "jaguar_splits_curated"
 split_name = "val"
 n_samples = 332      # "full" 150
 seed = 51
-explainer_names = ["IG", "GradCAM"]
+explainer_names = ["GradCAM", "IG"]
 pair_types = ["easy_pos", "hard_neg", "hard_pos"]
 groups = ["all", "orig_rank1_correct", "orig_rank1_wrong"]
 

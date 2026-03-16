@@ -14,7 +14,7 @@ from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
 from jaguar.utils.utils_evaluation import build_eval_context
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.xai.xai_metrics import compute_saliency_ig_class, compute_saliency_gradcam_class
-
+from jaguar.utils.utils_xai import build_val_resolver
 
 @dataclass
 class ClassAttributionConfig:
@@ -86,24 +86,6 @@ def load_stage1_source_manifest(stage1_run_dir: Path) -> pd.DataFrame:
 
     return manifest
 
-
-def build_val_resolver(ctx):
-    """
-    Resolve a global val emb_row back to the corresponding validation dataset sample.
-    """
-    emb_row_to_local = {
-        int(emb_row): int(local_idx)
-        for local_idx, emb_row in enumerate(ctx.val_local_to_emb_row)
-    }
-
-    def resolve_sample(sample_idx: int):
-        sample_idx = int(sample_idx)
-        if sample_idx not in emb_row_to_local:
-            raise KeyError(f"emb_row {sample_idx} not found in validation mapping")
-        local_idx = emb_row_to_local[sample_idx]
-        return ctx.val_ds, local_idx, "val"
-
-    return resolve_sample
 
 
 def build_group_artifact(manifest: pd.DataFrame, group_name: str) -> dict:

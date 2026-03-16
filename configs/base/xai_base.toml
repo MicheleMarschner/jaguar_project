@@ -22,7 +22,7 @@ split_data_path = "splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split
 use_fiftyone = false
 
 [split]
-include_duplicates = false
+include_duplicates = true
 seed = 51
 
 [xai]

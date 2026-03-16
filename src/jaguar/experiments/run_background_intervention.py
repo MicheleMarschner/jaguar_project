@@ -16,7 +16,7 @@ from jaguar.config import PATHS
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.utils.utils import ensure_dir
 from jaguar.experiments.experiment_output import save_requested_outputs
-from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, evaluate_query_gallery_retrieval
+from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, build_val_gallery_base, build_val_only_retrieval_for_setting, evaluate_query_gallery_retrieval
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_intervention_results
 
 def save_retrieval_results(
@@ -117,12 +117,20 @@ def run_background_intervention(config, save_dir):
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
 
-    base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
+    base = build_val_gallery_base(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+    ctx_val = base["ctx_val"]
 
-    ctx_orig = base["ctx_orig"]
-    gallery_embeddings_orig = base["gallery_embeddings_orig"]
-    gallery_labels_orig = base["gallery_labels_orig"]
-    gallery_global_indices_orig = base["gallery_global_indices_orig"]
+    #base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
+
+    #ctx_orig = base["ctx_orig"]
+    #gallery_embeddings_orig = base["gallery_embeddings_orig"]
+    #gallery_labels_orig = base["gallery_labels_orig"]
+    #gallery_global_indices_orig = base["gallery_global_indices_orig"]
 
     settings = ["original", "gray_bg", "black_bg", "blur_bg", "random_bg", "mixed_original_random_bg"]
 
@@ -135,12 +143,24 @@ def run_background_intervention(config, save_dir):
     all_summaries = []
 
     for setting in settings:
+        """
         query = build_query_for_setting(
             config=config,
             ctx_orig=ctx_orig,
             setting=setting,
         )
+        """
 
+        retrieval, _ = build_val_only_retrieval_for_setting(
+            config=config,
+            ctx_val=ctx_val,
+            gallery_embeddings_val=base["val_embeddings"],
+            gallery_labels_val=base["val_labels"],
+            gallery_global_indices_val=base["val_global_indices"],
+            setting=setting,
+        )
+
+        """
         retrieval = build_query_gallery_retrieval_state(
                 query_embeddings=query["query_embeddings"],
                 gallery_embeddings=gallery_embeddings_orig,
@@ -150,8 +170,11 @@ def run_background_intervention(config, save_dir):
                 gallery_labels=gallery_labels_orig,
                 split_df=ctx_orig.split_df,
             )
-        
+        """
+
         query_df, summary = evaluate_query_gallery_retrieval(retrieval)
+        
+        #query_df, summary = evaluate_query_gallery_retrieval(retrieval)
         result = save_retrieval_results(save_dir, setting, query_df, summary)
         
         all_query_dfs.append(result["query_df"])

@@ -38,8 +38,7 @@ from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
 from jaguar.utils.utils_xai_similarity import SimilarityForward
-from jaguar.utils.utils_xai import format_n_samples_tag, save_vec
-from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
+from jaguar.utils.utils_xai import format_n_samples_tag, save_vec, build_val_resolver
 from jaguar.utils.utils_evaluation import build_eval_context
 from jaguar.utils.utils_experiments import load_toml_from_path, resolve_xai_metrics_paths
 
@@ -803,6 +802,20 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
         
 def run_xai_class_metrics(config: dict, cfg) -> pd.DataFrame:
     """Load saved class-attribution artifacts, run the configured evaluation metrics, and return the summary table."""
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
+
+    ctx = build_eval_context(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+
+    model = ctx.model
+    model.eval()
+    resolve_sample = build_val_resolver(ctx)
+
     run_root, run_root_write, metrics_path, randomized_root = resolve_xai_metrics_paths(config)
 
     run = init_wandb_run(

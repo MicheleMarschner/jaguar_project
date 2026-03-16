@@ -182,11 +182,11 @@ def compute_saliency_gradcam_class(
         sample = ds[local_idx]
 
         x = sample["img"].unsqueeze(0).to(model.device)   # [1,3,H,W]
+        x.requires_grad_(True)
         gold_idx = int(sample["label_idx"])
 
         with torch.no_grad():
-            logits = model(x)
-            pred = int(logits.argmax(dim=1).item())
+            pred = int(model(x.detach()).argmax(dim=1).item())
 
         targets = [ClassTarget(gold_idx)]
         grayscale_cam = cam(input_tensor=x, targets=targets)  # [1,h,w]

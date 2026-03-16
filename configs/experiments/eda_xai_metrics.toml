@@ -6,12 +6,12 @@ explain_type = "pair_similarity_metrics"
 output_profile = "xai"
 setup_name = "base"
 
-[[experiment.runs]]
-experiment_name = "pair_similarity_faith_sanity_complex"
-source_type = "similarity"   
-source_run_dir = "eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/EVA-02__val__n332__seed51"
-
 #[[experiment.runs]]
-#experiment_name = "class_attribution_class_faith_sanity_complex"
-#source_type = "class_attribution"
-#source_run_dir = "eda_xai_class_attribution/eva02_triplet_/EVA-02__val__n332__seed51"
+#experiment_name = "pair_similarity_faith_sanity_complex"
+#source_type = "similarity"   
+#source_run_dir = "eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/EVA-02__val__n332__seed51"
+
+[[experiment.runs]]
+experiment_name = "class_attribution_class_faith_sanity_complex"
+source_type = "class_attribution"
+source_run_dir = "eda_xai_class_attribution/eva02_val_n332_all_groups"

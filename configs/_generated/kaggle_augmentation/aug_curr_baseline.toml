@@ -1,5 +1,7 @@
 [training]
 experiment_name = "aug_curr_baseline"
+seed = 42
+multiple_seeds = false
 
 [augmentation]
 apply_augmentations = true

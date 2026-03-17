@@ -22,7 +22,7 @@ We additionally compared the errors of the Model Soup against a representative i
 - For the EVA-02 + Triplet Loss model trained with Seed 512, errors often occurred on queries where the jaguar appeared in significantly different poses or lighting conditions (for example, Query train_0057.png vs Pred train_0108.png). The individual model sometimes hyper-focuses on global shape rather than spot patterns, confirming issues previously observed in the animal re-identification literature.
 - For the Soup model, the error profile appears slightly different. Many mistakes involve identities such as jaguar 18 and 19, which likely have very similar spot configurations. These cases are difficult not only for the model but also for human annotators when inspecting the images.
 
-Since backgrounds were removed in the round_2 dataset, the models are forced to focus primarily on the animal itself. The top-20 error tables show that most mistakes involve:
+Since backgrounds were removed in the `round_2` dataset, the models are forced to focus primarily on the animal itself. The top-20 error tables show that most mistakes involve:
 - head-only crops, where rosette patterns are missing  
 - highly distorted poses, where the spot pattern is warped  
 - cross-identity similarity, where certain jaguars appear extremely close in the embedding space (for example jaguar 18 frequently confused with 5 or 19)

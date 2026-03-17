@@ -1,5 +1,7 @@
 [training]
 experiment_name = "aug_full_pipeline_erase025"
+seed = 42
+multiple_seeds = false
 
 [augmentation]
 apply_augmentations = true

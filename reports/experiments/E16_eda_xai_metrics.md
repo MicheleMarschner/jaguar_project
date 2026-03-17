@@ -1,12 +1,21 @@
-
-
-
-# E16.1 Interpretability Sanity / Faithfulness Experiment (Data - Round 1)
-*(Subexperiment of # E15 (Q31) Pairwise Similarity Explanations)*
+# E16 XAI Metrics Follow-up Experiments (Data - Round 1)
 
 **Experiment Group:** Interpretability analyses
 
-## Main Research Question
+This document contains the quantitative XAI follow-up analyses for Round 1. It complements the main qualitative explanation experiments by evaluating explanation quality and explainer choice.
+
+- **E16.1** follows up on *E15 (Q31) Pairwise Similarity Explanations* and evaluates pairwise-similarity explanations with sanity, faithfulness, and complexity metrics.
+- **E16.2** follows up on *E14 (Q2) Class Attributions* and compares GradCAM and IG for class attributions.
+
+Together, these two subexperiments make up the XAI metrics section of the interpretability analysis.
+
+
+## E16.1 Interpretability Sanity / Faithfulness Experiment (Data - Round 1)
+*(Subexperiment of E15 (Q31) Pairwise Similarity Explanations)*
+
+**Experiment Group:** Interpretability analyses
+
+### Main Research Question
 ----------------------
 
 Are the pairwise-similarity explanations from **EVA-02** actually tied to the learned model and meaningfully related to the similarity score, or are they only visually plausible?
@@ -17,7 +26,7 @@ This experiment is the **quantitative follow-up to E15**. In **E15**, the pairwi
 2. **faithfulness**: does masking the most salient region reduce similarity more than random masking?
 3. **complexity**: are the maps spatially concentrated or diffuse, and does that change across pair types?
 
-## Setup / Intervention
+### Setup / Intervention
 --------------------
 
 We evaluated pairwise similarity explanations for the fixed trained model **EVA-02** on the same validation subset used in **E15** (**332 pairs per slice**). Two explainers were compared:
@@ -33,7 +42,7 @@ The evaluation was carried out separately for the three pair types introduced in
 
 This makes it possible to test whether explanation quality changes exactly in the regimes that were qualitatively most important in the previous experiment.
 
-## Method / Procedure
+### Method / Procedure
 ------------------
 
 Three metrics were computed.
@@ -50,14 +59,14 @@ A **positive** gap therefore means that masking salient regions hurts similarity
 
 In addition to descriptive summaries, inter-explainer differences were compared with **Mann–Whitney U tests** for each pair type and metric.
 
-## Stage 1 — Quantitative Explanation Evaluation
+### Quantitative Explanation Evaluation
 ----------------------------------------------
 
-### Evaluation
+#### Evaluation
 
 The quantitative results partly support the qualitative interpretation from **E15**, but they also show clear limits. The main pattern is consistent across metrics: the explanations are most defensible for **easy positives** and weakest for **hard negatives**, i.e. exactly the regime where retrieval errors are most diagnostic.
 
-#### Sanity
+##### Sanity
 
 The sanity results are weak overall.
 
@@ -70,7 +79,7 @@ This is important for how the qualitative maps from **E15** should be read. The 
 <p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/xai_metrics/boxplot_sanity__by_model.png" width="55%" /></p>
 <p align="center"><em>Figure 1. Sanity distributions by explainer and pair type for EVA-02. IG remains almost exactly at zero, while GradCAM shows broader but still small deviations.</em></p>
 
-#### Faithfulness
+##### Faithfulness
 
 Faithfulness depends strongly on pair type.
 
@@ -90,7 +99,7 @@ The faithfulness-gap distributions in **Figure 3** make the same pattern clear. 
 
 This directly refines the interpretation from **[E15 (Q31) Pairwise Similarity Explanations](E15_eda_xai_similarity.md)**. There, the hard-negative maps looked visually plausible and jaguar-centered. Here we see that this visual plausibility is not matched by strong faithfulness evidence. In other words, the hard-negative explanations may look reasonable, but they are not reliably supported by masking behavior.
 
-#### Complexity
+##### Complexity
 
 The complexity metric shows the clearest separation between the two explainers.
 
@@ -103,7 +112,7 @@ The difference is visible in **Figure 4** and also strongly supported statistica
 <p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/xai_metrics/boxplot_complexity__by_model.png" width="55%" /></p>
 <p align="center"><em>Figure 4. Complexity distributions by explainer and pair type. IG remains stable, whereas GradCAM is compact for easy positives but much more diffuse for hard negatives and hard positives.</em></p>
 
-### Statistical Comparison Between Explainers
+#### Statistical Comparison Between Explainers
 
 The inter-explainer comparison sharpens the descriptive picture.
 
@@ -115,7 +124,7 @@ For **sanity**, the only significant inter-explainer difference appears in easy 
 
 Overall, the statistical tests do not overturn the descriptive reading; they strengthen it. The most robust difference between the explainers is not in sanity, but in the combination of **faithfulness** and especially **complexity**.
 
-### Key Result / Takeaway
+#### Key Result / Takeaway
 
 The quantitative evaluation supports a **cautious interpretation** of the pairwise maps from **E15**.
 
@@ -129,7 +138,7 @@ Third, **complexity separates the explainers clearly**. **IG** is stable across 
 
 Taken together with **E15**, the most defensible conclusion is: pairwise explanations are **most trustworthy in easy matching settings**, but they become substantially less reliable in the hard-negative regime where interpretability would be most valuable.
 
-## Main Results Table
+### Main Results Table
 ------------------
 
 **Table 1. Summary of sanity, faithfulness, and complexity results for EVA-02.**
@@ -143,7 +152,7 @@ Taken together with **E15**, the most defensible conclusion is: pairwise explana
 | EVA-02 | IG | hard_neg | 0.618 ± 0.035 | -0.005 ± 0.091 | 0.936 ± 0.156 | 0.941 ± 0.198 | 0.000 ± 0.003 |
 | EVA-02 | IG | hard_pos | 0.612 ± 0.032 | 0.020 ± 0.067 | 0.867 ± 0.093 | 0.847 ± 0.130 | 0.000 ± 0.003 |
 
-## Overall Conclusion
+### Overall Conclusion
 ------------------
 
 This experiment provides the quantitative validation that was deferred from **E15**.
@@ -154,7 +163,7 @@ The sanity results further reinforce a cautious reading. **IG** is extremely sta
 
 Overall, the quantitative analysis partly supports the qualitative conclusion from **E15**—namely that the maps are often jaguar-centered and visually plausible—but it also places an important limit on that interpretation: **visual plausibility should not be confused with robust explanation quality**. The pairwise explanations are most defensible in easy matching settings and appreciably less trustworthy for the hard cases that matter most for retrieval failure analysis.
 
-## Main Findings
+### Main Findings
 -------------
 
 - This experiment is the **quantitative companion to E15** and evaluates the same EVA-02 pairwise-similarity setting.
@@ -167,27 +176,27 @@ Overall, the quantitative analysis partly supports the qualitative conclusion fr
 - **GradCAM complexity changes strongly by regime**: it is relatively compact for easy positives (**0.525**) but much more diffuse for hard negatives (**0.827**) and hard positives (**0.724**).
 - The most robust inter-explainer differences appear in **faithfulness gap** and **complexity**, where **IG** is consistently better or more stable than **GradCAM**.
 
-## Limitation
+### Limitation
 ----------
 
 This evaluation covers **one model (EVA-02)**, **one validation subset**, and **one specific pair-sampling setup**. The quantitative results are therefore informative for the analyzed pairwise-similarity experiment, but they should not automatically be generalized to all models, all explainers, or all retrieval settings. In addition, the sanity effect is weak overall, so the conclusions mainly rest on the combination of faithfulness and complexity rather than on a strong randomization signal alone.
 
+----------------------------------------
 
-
-# E16.2 (Q2a) Explainer Comparison for Class Attributions (GradCAM vs IG)
-*(Subexperiment of # E14 (Q2) Class Attributions)*
+## E16.2 (Q2a) Explainer Comparison for Class Attributions (GradCAM vs IG)
+*(Subexperiment of E14 (Q2) Class Attributions)*
 
 **Experiment Group:** Interpretability analyses
 
-## Main Research Question
+### Main Research Question
 ---------------------------------------------------
 How do **GradCAM** and **Integrated Gradients (IG)** compare for EVA-02 class attributions, quantitatively and qualitatively, and does explainer choice materially affect the interpretation?
 
-## Relation to the Main Class-Attribution Experiment
+### Relation to the Main Class-Attribution Experiment
 ---------------------------------------------------
-This document is a methodological follow-up to **[E# E14 (Q2) Class Attributions](E14_eda_xai_class_attribution.md)**. It revisits the same quantitative summaries and qualitative overlays, but with a narrower goal: not to ask what the explanations suggest about the model, but rather **which explainer is more useful and how much the overall interpretation depends on explainer choice**.
+This document is a methodological follow-up to **[E14 (Q2) Class Attributions](E14_eda_xai_class_attribution.md)**. It revisits the same quantitative summaries and qualitative overlays, but with a narrower goal: not to ask what the explanations suggest about the model, but rather **which explainer is more useful and how much the overall interpretation depends on explainer choice**.
 
-## Setup
+### Setup
 ---------------------------------------------------
 We compare **GradCAM** and **Integrated Gradients (IG)** on the same class-attribution outputs used in the main experiment. The comparison is based on:
 
@@ -198,7 +207,7 @@ We compare **GradCAM** and **Integrated Gradients (IG)** on the same class-attri
 
 The figures shown below are re-used from the main class-attribution analysis and are included again here for clarity. Their interpretation, however, is now explicitly methodological.
 
-## Main Findings
+### Main Findings
 ---------------------------------------------------
 The broad interpretation is stable across explainer choice: both methods support the same overall conclusion already established in **[# E14 (Q2) Class Attributions](E14_eda_xai_class_attribution.md)**, namely that sanity is acceptable but masking-based faithfulness is weak.
 
@@ -208,7 +217,7 @@ At the same time, the two explainers differ materially in usability:
 - **IG** is consistently more diffuse, both numerically and visually.
 - As a result, **GradCAM is the more useful explainer in this setting**, even though neither method provides strong faithfulness evidence.
 
-## Quantitative Comparison
+### Quantitative Comparison
 ---------------------------------------------------
 The aggregate metric plots from the main experiment are reproduced below because they already contain the key evidence for the explainer comparison.
 
@@ -247,7 +256,7 @@ Figures 3 and 4 show that **GradCAM performs somewhat better than IG on the same
 
 Table 1 clarifies the same picture statistically. The sanity difference is **not significant**, so sanity does not clearly favor either method. By contrast, GradCAM has a significantly larger **faithfulness gap** and significantly less **complexity** in the two main groups. These differences are meaningful for explainer comparison, even if they do not change the overall conclusion that faithfulness remains weak in absolute terms.
 
-## Qualitative Comparison
+### Qualitative Comparison
 ---------------------------------------------------
 The qualitative overlays from the main experiment are reproduced below because the difference between the two explainers is even clearer visually than numerically.
 
@@ -261,12 +270,12 @@ As seen in Figure 5, **GradCAM** more often produces a coarse but semantically p
 
 Figure 6 points in the same direction for the hard-case subset. Even there, GradCAM remains more visually interpretable than IG, although neither explainer isolates the class evidence especially cleanly.
 
-## Overall Answer
+### Overall Answer
 ---------------------------------------------------
 The overall interpretation does **not** depend strongly on the explainer: both methods support the same broad conclusion from the main class-attribution experiment, namely that sanity is acceptable but masking-based faithfulness is weak.
 
 However, the comparison does matter in practice. **GradCAM is preferable to IG in this setting**, because it yields slightly stronger quantitative results and substantially more interpretable qualitative overlays.
 
-## Concise Conclusion
+### Concise Conclusion
 ---------------------------------------------------
 This methodological follow-up shows that the class-attribution conclusions are broadly stable across explainer choice, but the **quality of interpretation is not**. GradCAM is the more useful explainer for EVA-02 class attributions: it performs somewhat better on the masking-based metrics and produces more semantically plausible overlays than IG. That said, neither explainer provides strong faithfulness evidence in absolute terms.

@@ -399,8 +399,6 @@ def run_split_diagnostics(
 
     ensure_dir(save_dir)
 
-    ### !TODO if not visible yet plothistogramm of full split (after bursts)
-
     hist_path = plot_split_identity_histograms(split_df, save_dir, dedup_policy)
 
     if strategy == "closed_set":

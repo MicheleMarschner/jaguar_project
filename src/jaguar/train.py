@@ -219,7 +219,7 @@ class JaguarTrainer:
         running_loss = 0.0
         num_batches = 0
         
-        eval_loader = loader if loader is not None else self.val_loader #!TODO
+        eval_loader = loader if loader is not None else self.val_loader
         print("[Info] Validating and computing ReID metrics...")
         for batch in tqdm(eval_loader, desc="Extracting Val Embeds"):
             imgs = batch["img"].to(self.device)

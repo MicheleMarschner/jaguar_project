@@ -44,10 +44,12 @@ Together, these experiment groups move from baseline model development to deeper
 | ID | Experiment | Research question | README |
 |---|---|---|---|
 | E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/E01_baseline_and_eda.md` |
-| E0X; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E04_eda_background_intervention.md` |
-| E0X; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `reports/experiments/E_eda_foreground_contribution` |
-| E0X; Q2 | XAI class attribution |  | `reports/experiments/E_eda_class_attribution` |
-| E0X; Q31 | XAI similarity |  | `reports/experiments/E_eda_xai_similarity` |
+| E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E12_eda_background_intervention.md` |
+| E13; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `reports/experiments/E13_eda_foreground_contribution` |
+| E14; Q2 | XAI class attribution |  | `reports/experiments/E14_eda_class_attribution` |
+| E15; Q31 | XAI similarity |  | `reports/experiments/E15_eda_xai_similarity` |
+| E16; | XAI metrics |  | `reports/experiments/E16_eda_xai_similarity` |
+
 
 ## Leaderboard Experiments
 
@@ -63,16 +65,4 @@ Together, these experiment groups move from baseline model development to deeper
 | E09 | Retrieval post-processing | To what extent can inference-time techniques such as TTA, query expansion, and re-ranking improve retrieval precision? | `reports/experiments/E09_kaggle_retrieval.md` |
 | E10 | Statistical stability | Are the observed gains robust across random seeds, or are they dependent on favorable initializations? | `reports/experiments/E10_kaggle_stability.md` |
 | E11 | Ensemble | Can complementary models be combined to outperform the best single model, and are the gains coherent across gallery protocols? | `reports/experiments/E11_kaggle_ensemble.md` |
-
-## EDA Experiments
-
-| ID | Experiment | Research question | README |
-|---|---|---|---|
-| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/E01_baseline_and_eda.md` |
-| E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E12_eda_background_intervention.md` |
-| E13; Q0 | Foreground contribution | How much of the retrieval signal comes from the jaguar foreground versus the background, and does this differ across backbones? | `reports/experiments/E13_eda_foreground_contribution.md` |
-| E14; Q2 | XAI class attribution | Which image regions drive identity-class predictions, and are these class-attribution explanations meaningful? | `reports/experiments/E14_eda_xai_class_attribution.md` |
-| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | `reports/experiments/E15_eda_xai_similarity.md` |
-| E16 | XAI metrics follow-up | Are the generated explanations quantitatively trustworthy in terms of sanity, faithfulness, and complexity, and how much do conclusions depend on explainer choice? | `reports/experiments/E16_eda_xai_metrics.md` |
-| E17 | Model soup | Can interpolating checkpoints from different seeds improve generalization and refine error patterns over individual models? | `reports/experiments/E17-eda_model_soup.md` |
 

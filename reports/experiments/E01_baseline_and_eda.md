@@ -1,4 +1,4 @@
-# Initial baseline and EDA summary (Data - Round 2)
+# E01 - Initial baseline and EDA summary (Data - Round 2)
 
 This initial baseline experiment establishes the starting point for all later analyses on the **Round 2** jaguar dataset. A key property of this round is that the images are no longer natural photographs with background context, but **foreground cutouts**. This matters because it changes what the model can rely on: any future performance differences should primarily be interpreted through **jaguar appearance, crop quality, pose, and image quality**, rather than scene context.
 

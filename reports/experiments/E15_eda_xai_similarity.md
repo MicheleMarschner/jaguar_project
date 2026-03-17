@@ -1,4 +1,4 @@
-# E0X (Q31) Pairwise Similarity Explanations (Data - Round 1)
+# E15 (Q31) Pairwise Similarity Explanations (Data - Round 1)
 ==========================================
 
 **Experiment Group:** Interpretability analyses

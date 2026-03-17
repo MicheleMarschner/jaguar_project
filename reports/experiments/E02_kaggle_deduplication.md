@@ -20,7 +20,7 @@ Burst discovery via pHash-based candidate generation, conservative thresholding,
 
 ### Method / Procedure
 
-To identify burst-like redundancy, perceptual hashes (pHash) were first computed for all images and compared within identity only. This provides a fast and conservative signal for very close visual similarity while avoiding unsafe links between different individuals at the candidate-generation stage.The pHash threshold was then selected using within-identity versus cross-identity diagnostics: the final cutoff was chosen as the largest threshold that still avoided cross-identity collisions.
+To identify burst-like redundancy, perceptual hashes (pHash) were first computed for all images and compared within identity only. This provides a fast and conservative signal for very close visual similarity while avoiding unsafe links between different individuals at the candidate-generation stage. The pHash threshold was then selected using within-identity versus cross-identity diagnostics: the final cutoff was chosen as the largest threshold that still avoided cross-identity collisions.
 
 After thresholding, retained pairs were converted into a graph and grouped via connected components. This is important because burst redundancy is often transitive: if image A matches B and B matches C, all three may belong to the same burst even when A and C are not the strongest direct pair.
 
@@ -28,28 +28,24 @@ pHash was used first because it is efficient, deterministic, and specific to nea
 
 ### Evaluation
 
-The threshold diagnostics show a clear safety boundary. Within-identity links increase steadily as the pHash threshold becomes more permissive, but cross-identity collisions remain at zero up to threshold 11 and first appear at threshold 12. This makes threshold 11 a natural operating point: it is the most permissive setting that still remains collision-free in the diagnostic sample, while already capturing a substantial amount of within-identity redundancy.
+The threshold diagnostics show a clear safety boundary. As shown in **Figure 1**, within-identity links increase steadily as the pHash threshold becomes more permissive, but cross-identity collisions remain at zero up to **threshold 11** and first appear at **threshold 12**. This makes **threshold 11** the natural operating point: it is the most permissive setting that still remains collision-free in the diagnostic sample, while already capturing a substantial amount of within-identity redundancy.
 
-Structurally, the detected redundancy is not limited to isolated pairs but forms sizable burst groups. The example cluster for **Lua** illustrates this well: many images are near-identical apart from tiny local changes, confirming that connected-component grouping is necessary rather than pairwise filtering alone. The larger top-burst visualization further shows that some bursts contain long runs of almost repeated frames, exactly the kind of redundancy that would otherwise create train/validation leakage and artificially simplify retrieval.
+<p align="center"><img src="../../results/round_2/kaggle_deduplication/phash_threshold_diagnostics.png" width="50%" /></p>
+<p align="center"><em>Figure 1. pHash threshold diagnostics showing within-identity links and the onset of cross-identity collisions.</em></p>
 
-At dataset level, burst redundancy is widespread rather than exceptional. A large majority of images belong to burst groups, and the per-identity distribution is highly uneven: some jaguars are dominated by burst members, while others contain a larger singleton share. This matters because leakage risk and duplicate inflation are therefore not uniform across identities. A duplicate-aware protocol is not only needed globally, but also has to be robust to this identity-level heterogeneity.
-
-<p align="center"><img src="../../results/round_2/kaggle_deduplication/curation_sweep.png" width="70%" /></p>
-<p align="center"><em>pHash threshold diagnostics.</em></p>
-
-<p align="center"><img src="../../results/round_2/kaggle_deduplication/duplicate_group_Lua_n24.png" width="70%" /></p>
-<p align="center"><em>example duplicate group (Lua).</em></p>
-
-<p align="center"><img src="../../results/round_2/kaggle_deduplication/burst_per_jaguar.png" width="70%" /></p>
-<p align="center"><em>burst-member vs singleton counts per jaguar here.</em></p>
+Structurally, the detected redundancy is not limited to isolated pairs but forms sizable burst groups. The example burst cluster for **Lua**, shown in **Figure 2**, contains **54 images** and illustrates this clearly: many images are near-identical apart from tiny local changes, confirming that connected-component grouping is necessary rather than pairwise filtering alone. The figure also shows that some bursts contain long runs of almost repeated frames, exactly the kind of redundancy that would otherwise create train/validation leakage and artificially simplify retrieval. This directly motivates the next stage, where tighter duplicate subclusters are identified within each burst for controlled curation.
 
 <p align="center"><img src="../../results/round_2/kaggle_deduplication/burst_top5__Lua__n54.png" width="70%" /></p>
-<p align="center"><em>top burst example strip.</em></p>
+<p align="center"><em>Figure 2. Example images from a large burst group for Lua, illustrating near-identical repeated frames.</em></p>
 
+At dataset level, burst redundancy is widespread rather than exceptional. As seen in **Figure 3**, a large majority of images belong to burst groups, and the per-identity distribution is highly uneven: some jaguars are dominated by burst members, while others contain a larger singleton share. This matters because leakage risk and duplicate inflation are therefore not uniform across identities. A duplicate-aware protocol is thus needed not only globally, but also in a way that remains robust to this identity-level heterogeneity.
+
+<p align="center"><img src="../../results/round_2/kaggle_deduplication/burst_per_jaguar.png" width="70%" /></p>
+<p align="center"><em>Figure 3. Burst-member and singleton image counts per jaguar identity.</em></p>
 
 ### Key Result / Takeaway
 
-Burst redundancy is both **substantial and structured** in the dataset. The threshold sweep identifies **pHash ≤ 11** as the largest conservative cutoff before sampled cross-identity collisions appear, and the connected-component analysis confirms that redundancy often occurs as multi-image burst groups rather than isolated duplicate pairs. This stage therefore establishes a defensible basis for leakage-safe grouping before split construction.
+Burst redundancy is both **substantial and structured** in the dataset. **Figure 1** identifies **pHash ≤ 11** as the largest conservative cutoff before sampled cross-identity collisions appear, while **Figure 2** and **Figure 3** show that redundancy often occurs as multi-image burst groups rather than isolated duplicate pairs. This stage therefore establishes a defensible basis for leakage-safe grouping before split construction.
 
 ## Stage 2 — Split and Duplicate-Aware Curation
 --------------------------------------------
@@ -70,32 +66,44 @@ To prevent leakage, splitting was done at burst-group level rather than image le
 
 After splitting, duplicate-aware curation could either be skipped or applied within each split. If duplicates were kept, all images remained in the final dataset. If curation was enabled, each burst was further partitioned into tighter duplicate subclusters using a stricter pHash threshold. This threshold was not fixed a priori; instead, a small sweep over candidate thresholds was used to measure how many images would be removed under each setting in train and validation. This made the redundancy–retention trade-off explicit and allowed selection of a threshold that reduced obvious duplicates without discarding too much data or creating a strong imbalance between splits.
 
-Within each resulting subcluster, up to train\_k images were retained in training and up to val\_k in validation. These parameters control how much local redundancy is preserved per duplicate set. Representatives were selected using a simple ranking heuristic based on embedding centrality and image sharpness. A possible future refinement would be to prefer a more diverse subset rather than only the most central and sharpest images.
+Within each resulting subcluster, up to `train_k` images were retained in training and up to `val_k` in validation. These parameters control how much local redundancy is preserved per duplicate set. Representatives were selected using a simple ranking heuristic based on embedding centrality and image sharpness. A possible future refinement would be to prefer a more diverse subset rather than only the most central and sharpest images.
+
+An example of such a duplicate subcluster derived from the larger Lua burst is shown in **Figure 4**.
+
+<p align="center"><img src="../../results/round_2/kaggle_deduplication/duplicate_group_Lua_n24.png" width="50%" /></p>
+<p align="center"><em>Figure 4. Example duplicate subcluster within a larger burst group, showing one retained representative and highly similar neighboring frames.</em></p>
 
 ### Evaluation
 
-The curation sweep makes the retention trade-off explicit. Very mild thresholds (pHash = 2 or 3) remove relatively little redundancy, dropping about **24.9%** of training images and **22.0%** of validation images. By contrast, stronger thresholds progressively reduce the dataset much more aggressively: at pHash = 4, the drop rises to about **36.6%** in train and **30.5%** in validation, while pHash = 6 removes nearly half of the training data and more than a third of the validation data.
+The curation sweep makes the retention trade-off explicit. As shown in **Figure 5** and **Table 1**, very mild thresholds (**pHash = 2 or 3**) remove relatively little redundancy, dropping about **24.9%** of training images and **22.0%** of validation images. By contrast, stronger thresholds progressively reduce the dataset much more aggressively: at **pHash = 4**, the drop rises to about **36.6%** in train and **30.5%** in validation, while **pHash = 6** removes nearly half of the training data and more than a third of the validation data.
 
-The chosen setting, **intra-burst pHash = 4**, sits in the middle of this curve and appears to be a reasonable compromise. It is clearly more effective than the weak settings at removing redundant frames, but it does not yet collapse the dataset as severely as the strongest tested option. Importantly, the train and validation drop rates remain relatively close, so curation does not introduce a large asymmetry between splits.
+The chosen setting, **intra-burst pHash = 4**, sits in the middle of this curve and appears to be a reasonable compromise. As visible in **Figure 5**, it is clearly more effective than the weak settings at removing redundant frames, but it does not yet shrink the dataset as severely as the strongest tested option. **Table 1** makes the same trade-off explicit numerically. Importantly, the train and validation drop rates remain relatively close, so curation does not introduce a large asymmetry between splits.
 
-The resulting split statistics also remain consistent with the intended protocol. All identities are preserved, the train/validation ratio stays broadly similar, and the per-identity histograms indicate that the closed-set setup still contains the same individuals on both sides while avoiding duplicate-group leakage. In other words, curation changes redundancy density, not the basic evaluation structure.
+<p align="center"><img src="../../results/round_2/kaggle_deduplication/curation_sweep.png" width="50%" /></p>
+<p align="center"><em>Figure 5. Curation sweep across intra-burst pHash thresholds, showing the retained and removed proportions in train and validation.</em></p>
+
+**Table 1. Train/validation retention under different intra-burst pHash thresholds.**
+
+| phash_threshold | train_kept | train_dropped | train_drop_pct | val_kept | val_dropped | val_drop_pct |
+|---:|---:|---:|---:|---:|---:|---:|
+| 2 | 1177 | 390 | 0.2489 | 256 | 72 | 0.2195 |
+| 3 | 1177 | 390 | 0.2489 | 256 | 72 | 0.2195 |
+| 4 | 994 | 573 | 0.3657 | 228 | 100 | 0.3049 |
+| 5 | 994 | 573 | 0.3657 | 228 | 100 | 0.3049 |
+| 6 | 842 | 725 | 0.4627 | 206 | 122 | 0.3720 |
+
+The resulting split statistics also remain consistent with the intended protocol. As shown in **Figure 6**, all identities are preserved, the train/validation ratio stays broadly similar, and the per-identity histograms indicate that the closed-set setup still contains the same individuals on both sides while avoiding duplicate-group leakage. In other words, curation changes redundancy density, not the basic evaluation structure.
+
+<p align="center"><img src="../../results/round_2/kaggle_deduplication/split_hist_train_val__False.png" width="50%" /></p>
+<p align="center"><em>Figure 6. Per-identity image counts in train and validation after duplicate-aware curation.</em></p>
 
 Overall, this stage shows that leakage-safe splitting and duplicate-aware curation can be combined without breaking the benchmark setup. The selected configuration reduces redundancy substantially, yet still preserves identity coverage and enough within-identity variation for meaningful retrieval evaluation.
 
-**Suggested table / figure placeholders**
-
-*   \[Insert Table: curation sweep summary here\]
-    
-*   \[Insert Figure: curation sweep plot here\]
-    
-*   \[Insert Figure: train vs val identity count histograms here\]
-    
-
 ### Key Result / Takeaway
 
-Burst-level split construction yields a **leakage-safe closed-set protocol**, and the intra-burst curation sweep shows that **pHash = 4** is a practical middle ground. It removes a meaningful share of redundant images while preserving all identities and a similar train/validation structure, making it a suitable setting for downstream controlled experiments.
+Burst-level split construction yields a **leakage-safe closed-set protocol**, and **Figure 5** plus **Table 1** show that **pHash = 4** is a practical middle ground. It removes a meaningful share of redundant images while preserving all identities and a similar train/validation structure, as further illustrated in **Figure 6**. This makes it a suitable setting for downstream controlled experiments.
 
-Stage 3 — Experimentation
+## Stage 3 — Experimentation
 -------------------------
 
 ### Research Question
@@ -104,48 +112,60 @@ How does the degree of duplicate-aware curation within a fixed closed-set setup 
 
 ### Intervention
 
-Controlled variation of curation strength through different train\_k / val\_k settings under otherwise fixed experimental conditions.
+Controlled variation of curation strength through different `train_k / val_k` settings under otherwise fixed experimental conditions.
 
 ### Method / Procedure
 
-This stage isolates the effect of duplicate-aware curation on retrieval performance. Burst annotations, split protocol, intra-burst subclustering threshold (pHash = 4), model, training, and evaluation remained fixed. Only the number of retained images per local duplicate subcluster was varied.
+This stage isolates the effect of duplicate-aware curation on retrieval performance. Burst annotations, split protocol, intra-burst subclustering threshold (**pHash = 4**), model, training, and evaluation remained fixed. Only the number of retained images per local duplicate subcluster was varied.
 
-The experiment series included the full split (keep all) and several curated variants, ranging from aggressive deduplication (1/1) to more moderate and asymmetric settings (3/3, 3/1, 5/1, 8/1, 1/50).
+The experiment series included the full split (keep all) and several curated variants, ranging from aggressive deduplication (**1/1**) to more moderate and asymmetric settings (**3/3, 3/1, 5/1, 8/1, 1/50**) for train and val samples respectively.
 
 ### Evaluation
 
 The results show a clear pattern: **moderate curation performs best**, whereas overly aggressive curation degrades retrieval.
 
-The strongest overall configuration is **train\_k=3, val\_k=3**, which achieves the highest **id-balanced mAP (0.7049)**. Compared with the full split (**0.6788**), this is a gain of **+0.0261**. It also improves **pairwise AP** (**0.9574 vs. 0.9489**) and slightly improves **rank-1** (**0.9592 vs. 0.9573**), although **sim-gap** is slightly lower (**0.8487 vs. 0.8595**).
+The strongest overall configuration is **train_k = 3, val_k = 3**, which achieves the highest **id-balanced mAP (0.7049)**. Compared with the full split (**0.6788**), this is a gain of **+0.0261**. It also improves **pairwise AP** (**0.9574 vs. 0.9489**) and slightly improves **rank-1** (**0.9592 vs. 0.9573**), although **sim-gap** is slightly lower (**0.8487 vs. 0.8595**). This is already visible in the representative comparison shown in **Figure 7**, where the curated setting reaches a stronger validation mAP plateau while keeping training loss broadly comparable.
 
-In contrast, **aggressive curation (1/1)** performs worst among the main variants, dropping to **0.6624 mAP** and **0.9386 rank-1**. This indicates that strong duplicate removal removes useful within-identity variation rather than only harmful redundancy.
+<p align="center">
+  <img src="../../results/round_2/baseline/train_loss_comparison.png" width="45%" />
+  <img src="../../results/round_2/baseline/val_map_comparison.png" width="45%" />
+</p>
+<p align="center">
+  <em>Figure 7. Representative full-vs-curated comparison (3/3 setting): training loss on the left and validation mAP on the right.</em>
+</p>
 
-The remaining variants support the same conclusion. **1/50** performs well on **pairwise AP** and **rank-1**, but remains below 3/3 on **id-balanced mAP**. Settings such as **3/1**, **5/1**, and **8/1** do not provide a consistent improvement over the full split. Thus, the benefit does not come from maximal deduplication, but from reducing redundancy while still preserving several representative views per duplicate subcluster.
+In contrast, **aggressive curation (1/1)** performs worst among the main variants, dropping to **0.6624 mAP** and **0.9386 rank-1**. This indicates that strong duplicate removal discards useful within-identity variation rather than only harmful redundancy.
+
+The remaining variants support the same conclusion. **1/50** performs well on **pairwise AP** and **rank-1**, but remains below **3/3** on **id-balanced mAP**. Settings such as **3/1**, **5/1**, and **8/1** do not provide a consistent improvement over the full split. Thus, the benefit does not come from maximal deduplication, but from reducing redundancy while still preserving several representative views per duplicate subcluster.
 
 Importantly, these metrics should not be interpreted in isolation. In a burst-heavy dataset, retaining all near-duplicates can make retrieval artificially easier, especially when repeated views are overrepresented. Higher raw scores under less curated settings are therefore not automatically evidence of better generalization; they may partly reflect benchmark redundancy. Duplicate-aware curation is relevant not only because it can improve performance, but also because it makes the evaluation more stringent and the resulting metrics more trustworthy.
 
-Training curves are consistent with this interpretation. **Train loss is very similar across settings**, so differences are not explained by optimization instability. The main differences appear in the validation curves, where the moderate curated settings reach the strongest and most stable late-epoch plateau, especially for **mAP** and **pairwise AP**.
+The broader training and validation trajectories in **Figure 8** are consistent with this interpretation. Train loss is very similar across settings, so the differences are not explained by optimization instability. The main separation appears in the validation metrics, where the moderately curated settings reach the strongest and most stable late-epoch plateau, especially for **mAP** and **pairwise AP**.
 
-**Suggested table / figure placeholders**
-
-*   \[Insert Table: stage-3 main comparison across all curation settings here\]
-    
-*   \[Insert Figure: stage-3 metrics overview here\]
-    
-*   \[Insert Figure: train loss comparison here\]
-    
+<p align="center">
+  <img src="../../results/round_2/baseline/deduplication_round_2_train_loss.png" width="50%" />
+</p>
+<p align="center">
+  <img src="../../results/round_2/baseline/deduplication_round_2_metrics_overview.png" width="70%" />
+</p>
+<p align="center">
+<em>Figure 8. Top: training loss across split configurations. Bottom: retrieval metrics across epochs for the different curation settings.</em>
+</p>
 
 ### Key Result / Takeaway
 
-Duplicate-aware curation improves Jaguar Re-ID performance **when applied moderately**. The best overall setting is **train\_k=3, val\_k=3**, which gives the highest **id-balanced mAP** and improves the main retrieval metrics over the full split. More aggressive curation removes too much useful variation, while keeping all duplicates can make raw scores easier to achieve and therefore less reflective of true generalization.
+Duplicate-aware curation improves Jaguar Re-ID performance **when applied moderately**. **Figure 7** and **Figure 8** show that the best overall setting is **train_k = 3, val_k = 3**, which gives the highest **id-balanced mAP** and improves the main retrieval metrics over the full split. More aggressive curation removes too much useful variation, while keeping all duplicates can make raw scores easier to achieve and therefore less reflective of true generalization.
 
-Overall Conclusion
+## Overall Conclusion
 ------------------
 
 The deduplication study shows that burst redundancy is a meaningful property of the Jaguar dataset and must be handled explicitly to avoid leakage and overly optimistic evaluation.
 
-A three-stage pipeline addresses this effectively:(1) conservative pHash-based burst discovery,(2) burst-aware split construction with optional within-split curation, and(3) controlled experiments on curation strength.
+A three-stage pipeline addresses this effectively:  
+(1) conservative pHash-based burst discovery,  
+(2) burst-aware split construction with optional within-split curation, and  
+(3) controlled experiments on curation strength.
 
-The main practical result is that **moderate duplicate-aware curation is preferable to both keeping all images and deduplicating too aggressively**. In this study, **train\_k=3, val\_k=3** provides the best overall trade-off between redundancy reduction and preservation of useful within-identity variation. This makes the dataset not only cleaner from an evaluation perspective, but also stronger for downstream Jaguar Re-ID.
+The main practical result is that **moderate duplicate-aware curation is preferable to both keeping all images and deduplicating too aggressively**. In this study, **train_k = 3, val_k = 3** provides the best overall trade-off between redundancy reduction and preservation of useful within-identity variation. As shown across **Figure 5–Figure 8** and **Table 1**, this makes the dataset not only cleaner from an evaluation perspective, but also stronger for downstream Jaguar Re-ID.
 
 _Overall, duplicate-aware curation should be treated as part of the dataset design, because moderate redundancy reduction improves both evaluation quality and retrieval performance._

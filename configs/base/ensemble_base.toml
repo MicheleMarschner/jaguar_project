@@ -1,6 +1,6 @@
 [ensemble]
 name = "single_eva02"
-gallery_protocol = "both"       # "valonly_gallery"
+gallery_protocol = "valonly_gallery"       # "valonly_gallery", "both"
 
 [output]
 experiment_group = "ensemble"
@@ -46,5 +46,5 @@ use_qe = false
 use_rerank = false
 
 [logging]
-enabled = false
+enabled = true
 mode = "online"

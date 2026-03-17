@@ -137,6 +137,7 @@ def run_background_analysis(run_dir: Path, save_dir: Path) -> dict[str, pd.DataF
     """
     Build all requested tables, plots, and short report sentences for one run folder.
     """
+    print()
     summary_df, per_query_delta_df = load_background_results(run_dir)
 
     main_table = build_background_main_table(summary_df)
@@ -164,11 +165,6 @@ def run(
     run_dir: Path | None = None, 
     **kwargs
 ) -> None:
-    
-    create_background_plots(config, run_dir, root_dir, run_dir, save_dir)
-    
-    results = run_background_analysis(run_dir=root_dir, save_dir=save_dir)
-    print(results["main_table"])
-    print(results["per_query_diagnostics"])
-    print(results["rank1_flip_sentence"])
-    print(results["limitations_sentence"])
+    create_background_plots(config, save_dir)
+    results = run_background_analysis(run_dir=run_dir, save_dir=save_dir)
+    print(results)

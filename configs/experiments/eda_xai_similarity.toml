@@ -5,7 +5,8 @@ base_config = "base/xai_base"
 mode = "explain"
 explain_type = "pair_similarity"
 output_profile = "xai"
+setup_name = "base"
 
 [[experiment.runs]]
-experiment_name = "eva02_easy_hard"
+experiment_name = "eva02_triplet_poseasy_hard_neghard"
 

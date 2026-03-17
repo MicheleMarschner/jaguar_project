@@ -1,0 +1,22 @@
+[training]
+experiment_name = "adam__cosine"
+seed = 512
+multiple_seeds = true
+
+[optimizer]
+type = "Adam"
+lr = 0.001
+weight_decay = 0.0001
+betas = [0.9, 0.999]
+
+[scheduler]
+type = "CosineAnnealingLR"
+T_max = 30
+lr_min = 1e-06
+
+[output]
+profile = "optim_sched"
+experiment_group = "kaggle_optim_sched"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

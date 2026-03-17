@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import wandb
 from wandb.sdk.wandb_run import Run
 
+from jaguar.config import ROUND
+
 load_dotenv()
 
 def _build_wandb_tags(
@@ -14,7 +16,7 @@ def _build_wandb_tags(
     experiment_group: str | None,
     job_type: str | None = None,
 ) -> list[str]:
-    """Build a small set of tags for filtering runs in W&B."""
+    """Build a compact list of W&B tags from the experiment configuration."""
     tags: list[str] = [str(job_type or "run")]
 
     output_profile = (
@@ -48,7 +50,7 @@ def _build_wandb_tags(
 
 
 def is_wandb_enabled(config: dict[str, Any]) -> bool:
-    """Return whether W&B logging is enabled in config."""
+    """Return whether W&B logging is enabled in the configuration."""
     return bool(config.get("logging", {}).get("enabled", False))
 
 
@@ -59,7 +61,7 @@ def init_wandb_run(
     experiment_group: str | None = None,
     job_type: str | None = "train",
 ) -> Run | None:
-    """Initialize a W&B run for one training experiment."""
+    """Initialize a W&B run for a single experiment."""
     if not is_wandb_enabled(config):
         return None
     
@@ -83,7 +85,7 @@ def init_wandb_run(
         group=experiment_group,
         job_type=job_type,
         tags=tags,
-        name=exp_name,
+        name=f"{exp_name}_{ROUND}",
         config=config,
         dir=str(run_dir),
     )
@@ -107,31 +109,12 @@ def init_wandb_run(
     run.define_metric("epoch")
     run.define_metric("train/*", step_metric="epoch")
     run.define_metric("val/*", step_metric="epoch")
+    run.define_metric("inference/*", step_metric="epoch")
     run.define_metric("timing/*", step_metric="epoch")
     run.define_metric("meta/*", step_metric="epoch")
+    run.define_metric("val_rare/*", step_metric="epoch")
 
     return run
-
-
-def log_wandb_ensemble_config(
-    run: Run | None,
-    config: dict[str, Any],
-) -> None:
-    """Log ensemble-specific config fields once per ensemble run."""
-    if run is None:
-        return
-
-    run.config.update(
-        {
-            "fusion_method": config.get("fusion", {}).get("method", "score"),
-            "fusion_weights": config.get("fusion", {}).get("weights"),
-            "normalize_mode": config.get("fusion", {}).get("normalize_mode"),
-            "square_before_fusion": config.get("fusion", {}).get("square_before_fusion"),
-            "n_members": len(config.get("members", [])),
-            "member_names": [m.get("name") for m in config.get("members", [])],
-        },
-        allow_val_change=True,
-    )
 
 def log_wandb_dataset_info(
     run: Run | None,
@@ -142,7 +125,7 @@ def log_wandb_dataset_info(
     num_classes: int,
     device: Any,
 ) -> None:
-    """Log resolved dataset and runtime metadata once per run."""
+    """Log dataset and runtime metadata for a run."""
     if run is None:
         return
 
@@ -163,7 +146,7 @@ def log_wandb_model_info(
     run: Run | None,
     model: Any,
 ) -> None:
-    """Log static model information once per run."""
+    """Log static model parameter counts to W&B."""
     if run is None:
         return
 
@@ -187,15 +170,16 @@ def log_wandb_epoch_metrics(
     current_lr: float,
     epoch_time_sec: float,
     input_size: int | tuple[int, int] | list[int],
+    rare_metrics: dict[str, Any] = None,
 ) -> None:
-    """Log one epoch of train/validation metrics."""
+    """Log one epoch of training and validation metrics."""
     if run is None:
         return
 
-    
     log_dict = {
             "epoch": int(epoch),
             "train/loss": float(avg_loss),
+            "val/loss": float(metrics["val_loss"]),
             "val/mAP": float(metrics["mAP"]),
             "val/pairwise_AP": float(metrics["pairwise_AP"]),
             "val/rank1": float(metrics["rank1"]),
@@ -208,61 +192,20 @@ def log_wandb_epoch_metrics(
 
     if "silhouette" in metrics:
         log_dict["val/silhouette"] = float(metrics["silhouette"])
+    
+    if rare_metrics is not None:
+        log_dict["val_rare/mAP"] = float(rare_metrics["mAP"])
+        log_dict["val_rare/rank1"] = float(rare_metrics["rank1"])
+        log_dict["val_rare/pairwise_AP"] = float(rare_metrics["pairwise_AP"])
+        
     run.log(log_dict)
-
-def log_wandb_ensemble_results(
-    run: Run | None,
-    config: dict[str, Any],
-    exp_name: str,
-    score_metrics: dict[str, Any],
-    emb_metrics: dict[str, Any],
-    oracle_summary: dict[str, Any],
-    oracle_df: pd.DataFrame,
-    score_query_df: pd.DataFrame,
-    emb_query_df: pd.DataFrame,
-    per_model_query_dfs: dict[str, pd.DataFrame],
-) -> None:
-    """Log ensemble metrics, summaries, and per-query tables."""
-    if run is None:
-        return
-
-    run.log(
-        {
-            "ensemble/score_mAP": float(score_metrics["mAP"]),
-            "ensemble/score_rank1": float(score_metrics["rank1"]),
-            "ensemble/emb_mAP": float(emb_metrics["mAP"]),
-            "ensemble/emb_rank1": float(emb_metrics["rank1"]),
-            "ensemble/oracle_mAP": float(oracle_summary["oracle_mAP"]),
-            "ensemble/oracle_rank1": float(oracle_summary["oracle_rank1"]),
-        }
-    )
-
-    run.summary["experiment_name"] = exp_name
-    run.summary["n_members"] = len(config.get("members", []))
-    run.summary["member_names"] = [m.get("name") for m in config.get("members", [])]
-    run.summary["weights"] = config.get("fusion", {}).get("weights")
-    run.summary["normalize_mode"] = config.get("fusion", {}).get("normalize_mode", "global_minmax")
-    run.summary["square_before_fusion"] = config.get("fusion", {}).get("square_before_fusion", True)
-    run.summary["score_mAP"] = float(score_metrics["mAP"])
-    run.summary["score_rank1"] = float(score_metrics["rank1"])
-    run.summary["emb_mAP"] = float(emb_metrics["mAP"])
-    run.summary["emb_rank1"] = float(emb_metrics["rank1"])
-    run.summary["oracle_mAP"] = float(oracle_summary["oracle_mAP"])
-    run.summary["oracle_rank1"] = float(oracle_summary["oracle_rank1"])
-
-    log_wandb_table(run, "oracle/per_query", oracle_df)
-    log_wandb_table(run, "score_fusion/per_query", score_query_df)
-    log_wandb_table(run, "embedding_fusion/per_query", emb_query_df)
-
-    for name, query_df in per_model_query_dfs.items():
-        log_wandb_table(run, f"{name}/per_query", query_df)
 
 
 def log_wandb_ensemble_config(
     run: Run | None,
     config: dict[str, Any],
 ) -> None:
-    """Log ensemble-specific config fields once per ensemble run."""
+    """Log ensemble-specific configuration fields to W&B."""
     if run is None:
         return
 
@@ -335,6 +278,8 @@ def finish_wandb_run(
     best_metrics: dict[str, Any] | None,
     epochs_completed: int,
     total_train_time_sec: float,
+    best_rare_epoch: int | None = None,
+    best_rare_metrics: dict[str, Any] | None = None,
 ) -> None:
     """Write final summary fields and finish the W&B run."""
     if run is None:
@@ -351,7 +296,10 @@ def finish_wandb_run(
         run.summary["best_pairwise_AP"] = float(best_metrics["pairwise_AP"])
         run.summary["best_rank1"] = float(best_metrics["rank1"])
         run.summary["best_sim_gap"] = float(best_metrics["sim_gap"])
-
+    
+    if best_rare_metrics is not None:
+        run.summary["best_rare_mAP"] = float(best_rare_metrics["mAP"])
+        run.summary["best_rare_epoch"] = best_rare_epoch
     run.finish()
 
 
@@ -385,9 +333,8 @@ def log_wandb_checkpoint_artifact(
     metadata: dict[str, Any] | None = None,
     aliases: list[str] | None = None,
 ) -> None:
-    """Log one checkpoint file as a W&B model artifact."""
+    """Log a checkpoint file as a W&B model artifact."""
 
-    print(f"[DEBUG] WANDB run: {run} and checkpoint path: {checkpoint_path}")
     if run is None or not checkpoint_path.exists():
         return
 
@@ -404,6 +351,7 @@ def log_wandb_background_intervention_results(
     run: Run | None,
     result: dict,
 ) -> None:
+    """Log summary tables and metrics for background intervention experiments."""
     if run is None:
         return
 
@@ -435,6 +383,7 @@ def log_wandb_background_sensitivity_results(
     similarity_summary: dict,
     analysis_df: pd.DataFrame,
 ) -> None:
+    """Log background sensitivity summaries and analysis tables."""
     if run is None:
         return
 
@@ -453,6 +402,7 @@ def log_wandb_xai_similarity_results(
     explainer_names: list[str],
     pair_types: tuple[str, ...],
 ) -> None:
+    """Log reference-pair counts and metadata for XAI similarity experiments."""
     if run is None:
         return
 
@@ -466,25 +416,67 @@ def log_wandb_xai_similarity_results(
     log_wandb_table(run, "xai/reference_pairs", ref_df)
 
 
-def log_wandb_xai_metrics_results(
-    run: Run | None,
-    summary_df: pd.DataFrame,
-) -> None:
-    if run is None:
+def log_wandb_xai_metrics_results(run, summary_df: pd.DataFrame) -> None:
+    """Log XAI metric summary rows to W&B."""
+    if run is None or summary_df is None or summary_df.empty:
         return
 
-    log_wandb_table(run, "xai_metrics/summary", summary_df)
+    slice_col = "pair_type" if "pair_type" in summary_df.columns else "group"
+
+    metric_cols = [
+        "sanity_mean", "sanity_median", "sanity_std",
+        "faith_topk_mean", "faith_topk_median", "faith_topk_std",
+        "faith_random_mean", "faith_random_median", "faith_random_std",
+        "faith_gap_mean", "faith_gap_median", "faith_gap_std",
+        "complexity_mean", "complexity_median", "complexity_std",
+    ]
 
     for _, row in summary_df.iterrows():
         expl = row["explainer"]
-        pair = row["pair_type"]
-        run.log({
-            f"xai_metrics/{expl}/{pair}/sanity_mean": float(row["sanity_mean"]),
-            f"xai_metrics/{expl}/{pair}/faith_mean": float(row["faith_mean"]),
-            f"xai_metrics/{expl}/{pair}/complexity_mean": float(row["complexity_mean"]),
-        })
+        slice_value = row[slice_col]
+
+        payload = {}
+        for col in metric_cols:
+            if col in row.index and pd.notna(row[col]):
+                payload[f"xai_metrics/{expl}/{slice_value}/{col}"] = float(row[col])
+
+        if payload:
+            run.log(payload)
 
 
+def log_wandb_xai_class_attribution_results(
+    run: Run | None,
+    manifest: pd.DataFrame,
+    artifacts_saved: list[dict[str, Any]],
+    groups: tuple[str, ...],
+    explainer_names: tuple[str, ...],
+) -> None:
+    """Log compact summaries for Stage-2 class attribution generation."""
+    if run is None:
+        return
+
+    run.summary["groups"] = list(groups)
+    run.summary["explainer_names"] = list(explainer_names)
+    run.summary["n_manifest_rows"] = int(len(manifest))
+    run.summary["n_saved_artifacts"] = int(len(artifacts_saved))
+
+    if not manifest.empty:
+        run.log({"xai_class/manifest_rows": int(len(manifest))})
+        log_wandb_table(run, "xai_class/source_manifest", manifest)
+
+    if artifacts_saved:
+        artifacts_df = pd.DataFrame(artifacts_saved)
+
+        for _, row in artifacts_df.iterrows():
+            run.log(
+                {
+                    f"xai_class/{row['group']}/{row['explainer']}/n_samples": int(row["n_samples"])
+                }
+            )
+
+        log_wandb_table(run, "xai_class/artifacts_saved", artifacts_df)
+
+        
 
 def log_wandb_table(
     run: Run | None,

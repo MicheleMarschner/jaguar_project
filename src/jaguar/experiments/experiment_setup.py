@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-from typing import Any
 
 from jaguar.config import DATA_STORE, PATHS, ROUND
 from jaguar.utils.utils_experiments import deep_update, load_toml_config
@@ -8,18 +7,29 @@ from jaguar.utils.utils_setup import build_habitat_backgrounds, get_burst_paths,
 from jaguar.utils.utils import ensure_dirs, read_json_if_exists, resolve_path
 from jaguar.utils.utils_setup import init_fiftyone_dataset
 
-
-SETUP_STEPS = [
-    "ensure_output_dirs",
-    "ensure_fiftyone_init_dataset",
-    "ensure_background_pool",
-    "ensure_burst_artifacts",
-    "ensure_split_artifacts",
-]
-
+SETUP_STEPS = {
+    "base": [
+        "ensure_output_dirs",
+        "ensure_fiftyone_init_dataset",
+        "ensure_background_pool",
+    ],
+    "deduplication": [
+        "ensure_output_dirs",
+        "ensure_fiftyone_init_dataset",
+        "ensure_burst_artifacts",
+        "ensure_split_artifacts",
+    ],
+}
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Run unified setup for an experiment")
+    """Parse CLI arguments for running a predefined experiment setup routine."""
+    parser = argparse.ArgumentParser(description="Run setup steps for an experiment")
+    parser.add_argument(
+        "--setup_name",
+        type=str,
+        required=True,
+        help="Name of the setup routine",
+    )
     parser.add_argument(
         "--base_config",
         type=str,
@@ -36,12 +46,14 @@ def parse_args():
 
 
 def ensure_output_dirs():
+    """Create the configured project output directories if they do not already exist."""
     print("[SETUP] ensure_output_dirs")
     ensure_dirs(PATHS)
-    print("  -> created all directories")
+    print(f"  -> created all directories")
 
 
 def ensure_fiftyone_init_dataset(current_setup_config: dict):
+    """Ensure that the initial FiftyOne dataset manifest exists when FiftyOne is enabled."""
     print("[SETUP] ensure_fiftyone_init_dataset")
 
     use_fiftyone = current_setup_config["data"].get("use_fiftyone", False)
@@ -68,7 +80,9 @@ def ensure_fiftyone_init_dataset(current_setup_config: dict):
     print(f"  -> finished building: {manifest_dir}")
 
 
+
 def ensure_background_pool():
+    """Ensure that the reusable background patch pool exists for background-based analyses."""
     print("[SETUP] ensure_background_pool")
 
     out_dir = resolve_path("backgrounds", DATA_STORE)
@@ -88,57 +102,38 @@ def ensure_background_pool():
         raw_dir=raw_dir,
         cutout_dir=cutout_dir,
         out_dir=out_dir,
-        n_patches=100,
+        n_patches=200,
         patch_size=224,
     )
 
     print(f"  -> finished building: {out_dir}")
 
 
-def ensure_burst_artifacts(current_setup_config: dict):
-    print("[SETUP] ensure_burst_artifacts")
-
-    # Skip unless dedup/split logic is actually needed
-    split_cfg = current_setup_config.get("split", {})
-    curation_cfg = current_setup_config.get("curation", {})
-
-    needs_bursts = (
-        not split_cfg.get("include_duplicates", True)
-        or curation_cfg.get("train_k") is not None
-        or curation_cfg.get("val_k") is not None
-        or curation_cfg.get("phash_threshold") is not None
-    )
-
-    if not needs_bursts:
-        print("  -> no burst-dependent setup requested, skip")
-        return
+def ensure_burst_artifacts(config):
+    """Ensure that burst-discovery artifacts for the current round exist, creating them if needed."""
 
     from jaguar.preprocessing.burst_discovery import discover_bursts
-
-    use_fiftyone = current_setup_config["data"].get("use_fiftyone", False)
-    burst_min_cluster_size = curation_cfg.get("burst_min_cluster_size", 2)
-    burst_max_within = curation_cfg.get("burst_max_within", 500)
-    burst_max_cross = curation_cfg.get("burst_max_cross", 10000)
-    seed = split_cfg.get("seed", 51)
-    phash_size = curation_cfg.get("phash_size", 8)
-
     bursts_root = get_burst_paths()["write_root"]
 
     for cfg_path in bursts_root.rglob("config.json"):
         cfg = read_json_if_exists(cfg_path)
         if cfg is not None and cfg.get("round") == ROUND:
-            print(f"  -> burst config for {ROUND} already exists")
-            print(f"  -> using: {cfg_path.parent}")
+            print(f"[SETUP] burst config for {ROUND} already exists -> skip")
+            print(f"[SETUP] using: {cfg_path.parent}")
             return cfg_path.parent
 
-    print(f"  -> no burst config for {ROUND} found, running burst discovery")
+    print(f"[SETUP] no burst config for {ROUND} found -> running burst discovery")
+
+    use_fiftyone = config["data"].get("use_fiftyone", False)
+    seed = config.get("split", {}).get("seed")
+
     discover_bursts(
-        use_fiftyone=use_fiftyone,
-        burst_min_cluster_size=burst_min_cluster_size,
-        burst_max_within=burst_max_within,
-        burst_max_cross=burst_max_cross,
+        burst_min_cluster_size=2,
+        burst_max_within=500,
+        burst_max_cross=10000,
         seed=seed,
-        phash_size=phash_size,
+        phash_size=8,
+        use_fiftyone=use_fiftyone,
     )
 
     for cfg_path in bursts_root.rglob("config.json"):
@@ -148,24 +143,12 @@ def ensure_burst_artifacts(current_setup_config: dict):
 
     raise RuntimeError("Burst discovery ran, but no config.json with matching round was found.")
 
-def ensure_split_artifacts(current_setup_config: dict) -> Path | None:
-    print("[SETUP] ensure_split_artifacts")
 
-    split_cfg = current_setup_config.get("split", {})
-    curation_cfg = current_setup_config.get("curation", {})
-    use_fiftyone = current_setup_config["data"].get("use_fiftyone", False)
-
-    required_keys = [
-        "strategy",
-        "include_duplicates",
-        "val_split_size",
-        "seed",
-    ]
-    if not all(k in split_cfg for k in required_keys):
-        print("  -> split config incomplete, skip")
-        return None
-
-    from jaguar.preprocessing.split_and_curate import create_splits_and_curate
+def ensure_split_artifacts(config) -> Path:
+    """Ensure that split and curation artifacts matching the current config exist, creating them if needed."""
+    split_cfg = config.get("split", {})
+    curation_cfg = config.get("curation", {})
+    use_fiftyone = config["data"].get("use_fiftyone", False)
 
     split_strategy = split_cfg["strategy"]
     include_duplicates = split_cfg["include_duplicates"]
@@ -175,10 +158,8 @@ def ensure_split_artifacts(current_setup_config: dict) -> Path | None:
     val_k = curation_cfg.get("val_k")
     phash_threshold = curation_cfg.get("phash_threshold")
 
-    if train_k is None or val_k is None or phash_threshold is None:
-        print("  -> curation config incomplete, skip")
-        return None
-
+    
+    from jaguar.preprocessing.split_and_curate import create_splits_and_curate
     paths = get_split_paths(
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,
@@ -188,10 +169,18 @@ def ensure_split_artifacts(current_setup_config: dict) -> Path | None:
     )
 
     full_path = paths["full_split_file"]
-    write_root = paths["write_root"]
 
     print("[SETUP] expected split path:", full_path)
     print("[SETUP] exists:", full_path.exists())
+    print("[SETUP] split args:", {
+        "split_strategy": split_strategy,
+        "include_duplicates": include_duplicates,
+        "train_k": train_k,
+        "val_k": val_k,
+        "phash_threshold": phash_threshold,
+        "val_split_size": val_split_size,
+        "seed": seed,
+    })
 
     if full_path.exists():
         print("[SETUP] split artifacts already exist -> skip")
@@ -200,7 +189,6 @@ def ensure_split_artifacts(current_setup_config: dict) -> Path | None:
 
     print("[SETUP] no matching split artifacts found -> running split_and_curate")
     create_splits_and_curate(
-        use_fiftyone=use_fiftyone,
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,
         train_k_per_dedup=train_k,
@@ -208,47 +196,52 @@ def ensure_split_artifacts(current_setup_config: dict) -> Path | None:
         phash_thresh_dedup=phash_threshold,
         val_split_size=val_split_size,
         seed=seed,
+        use_fiftyone=use_fiftyone
     )
+
     if not full_path.exists():
         raise RuntimeError(f"Split creation finished, but file not found: {full_path}")
 
     return full_path
 
-def run_step(step_name: str, current_setup_config: dict):
+
+def run_step(step_name: str, config: dict):
+    """Dispatch and execute one named setup step."""
+
     if step_name == "ensure_output_dirs":
         ensure_output_dirs()
     elif step_name == "ensure_fiftyone_init_dataset":
-        ensure_fiftyone_init_dataset(current_setup_config)
+        ensure_fiftyone_init_dataset(config)
     elif step_name == "ensure_background_pool":
         ensure_background_pool()
     elif step_name == "ensure_burst_artifacts":
-        ensure_burst_artifacts(current_setup_config)
+        ensure_burst_artifacts(config)
     elif step_name == "ensure_split_artifacts":
-        ensure_split_artifacts(current_setup_config)
+        ensure_split_artifacts(config)
     else:
         raise ValueError(f"Unknown setup step: {step_name}")
 
 
-def run_setup(base_config_key: str, experiment_config_key: str) -> dict:
-    print(f"[SETUP] steps = {SETUP_STEPS}")
+def main():
+    """Load configs, resolve the requested setup routine, and run all configured setup steps."""
+    args = parse_args()
 
-    base_config = load_toml_config(base_config_key)
-    experiment_config = load_toml_config(experiment_config_key)
+    if args.setup_name not in SETUP_STEPS:
+        raise ValueError(f"Unknown setup_name: {args.setup_name}")
+
+    steps = SETUP_STEPS[args.setup_name]
+
+    print(f"[SETUP] setup_name = {args.setup_name}")
+    print(f"[SETUP] steps = {steps}")
+
+    base_config = load_toml_config(args.base_config)
+    experiment_config = load_toml_config(args.experiment_config)
     current_setup_config = deep_update(base_config, experiment_config)
 
-    for step in SETUP_STEPS:
+    for step in steps:
         run_step(step, current_setup_config)
 
     print("[SETUP] done")
-    return current_setup_config
-
-
-def main():
-    args = parse_args()
-    run_setup(
-        base_config_key=args.base_config,
-        experiment_config_key=args.experiment_config,
-    )
 
 
 if __name__ == "__main__":

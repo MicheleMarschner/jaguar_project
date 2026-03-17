@@ -99,9 +99,6 @@ def show_jaguar_images_with_backgrounds(
 
 def create_background_plots(
     config: dict,
-    run_dir: Path | None = None,
-    root_dir: Path | None = None,
-    exemplar_run_dir: Path | None = None,
     save_dir: Path | None = None,
 ) -> None:
     """
@@ -119,14 +116,13 @@ def create_background_plots(
         ["raw_original", "gray_bg", "blur_bg", "random_bg"],
     )
     n_max = analysis_cfg.get("n_max", 4)
-    use_fiftyone = config["data"].get("use_fiftyone", False)
 
     _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/init", DATA_STORE),
         dataset_name="jaguar_init",
         processing_fn=None,
         overwrite_db=False,
-        use_fiftyone=use_fiftyone,
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     processor_kwargs = {

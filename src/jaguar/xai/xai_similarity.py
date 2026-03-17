@@ -60,8 +60,8 @@ class XAIConfig:
     ig_internal_bs: int = 32
     ig_batch_size: int = 32
 
-    # Retrieval pair taxonomy
     pair_types: Tuple[str, ...] = ("easy_pos", "hard_neg", "hard_pos")
+    groups: tuple[str, ...] = ()
 
     # Output root; each run creates its own subfolder under here
     out_root: Path = Path()
@@ -387,9 +387,6 @@ def compute_saliency_gradcam_for_pair_type(
     }
     return artifact
 
-# ============================================================
-# Load-or-create artifacts per (explainer, pair_type)
-# ============================================================
 
 def load_or_create_saliency_maps(
     resolve_sample,
@@ -490,6 +487,7 @@ def build_curated_train_val_gallery(
 
 
 def run_xai(config, cfg: XAIConfig) -> Dict[Tuple[str, str], Path]:
+    """Run the XAI pipeline: load the trained model, mine reference pairs, generate saliency maps, and return saved artifact paths."""
 
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")

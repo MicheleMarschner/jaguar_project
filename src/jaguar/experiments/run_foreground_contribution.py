@@ -15,13 +15,14 @@ from jaguar.xai.foreground_contribution import (
 )
 from jaguar.datasets.JaguarDataset import MaskAwareJaguarDataset
 from jaguar.utils.utils_evaluation import (
-    build_original_gallery_base,
+    build_val_gallery_base,
     select_val_samples_from_emb_rows,
 )
 from jaguar.utils.utils_xai import get_val_query_indices
 
 
 def parse_args():
+    """Parse command-line arguments for the background sensitivity runner."""
     parser = argparse.ArgumentParser(description="Run background sensitivity analysis")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
@@ -29,6 +30,7 @@ def parse_args():
     return parser.parse_args()
 
 def main():
+    """Load configuration, run background sensitivity analysis, and save all outputs."""
     args = parse_args()
 
     base_config = load_toml_config(args.base_config)
@@ -69,18 +71,59 @@ def main():
         job_type="eval",
     )
 
+    base = build_val_gallery_base(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+    ctx_val = base["ctx_val"]
+
+    """
     base = build_original_gallery_base(
         config=config,
         train_config = train_config,
         checkpoint_dir=checkpoint_dir,
     )
+    """
 
-    ctx_orig = base["ctx_orig"]
-    gallery_emb = base["gallery_embeddings_orig"]
-    gallery_ids = list(base["gallery_labels_orig"])
-    gallery_files = list(base["gallery_files_orig"])
+    #ctx_orig = base["ctx_orig"]
+    gallery_emb = base["val_embeddings"]
+    gallery_ids = list(base["val_labels"])
+    gallery_files = list(base["val_files"])
+    gallery_global_indices = base["val_global_indices"]
+    #gallery_emb = base["gallery_embeddings_orig"]
+    #gallery_ids = list(base["gallery_labels_orig"])
+    #gallery_files = list(base["gallery_files_orig"])
 
     query_emb_rows = get_val_query_indices(
+        split_df=ctx_val.split_df,
+        out_root=run_dir,
+        n_samples=config["xai"]["n_samples"],
+        seed=config["xai"]["seed"],
+    )
+    query_global_indices = query_emb_rows
+
+    samples_list = select_val_samples_from_emb_rows(
+        ctx_orig=ctx_val,
+        query_emb_rows=query_emb_rows,
+    )
+
+    query_ds = MaskAwareJaguarDataset(
+        jaguar_model=ctx_val.model,
+        base_root=PATHS.data_train,
+        data_root=PATHS.data.parent,
+        samples_list=samples_list,
+    )
+
+    query_loader = torch.utils.data.DataLoader(
+        query_ds,
+        batch_size=config["inference"]["batch_size"],
+        shuffle=False,
+    )
+
+    """
+     query_emb_rows = get_val_query_indices(
         split_df=ctx_orig.split_df,
         out_root=run_dir,
         n_samples=config["xai"]["n_samples"],
@@ -92,22 +135,13 @@ def main():
         query_emb_rows=query_emb_rows,
     )
 
-    """
-    # load model weights
-    ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    tmp_state = ckpt["model_state_dict"]
-    state = {k.replace("module.", "", 1): v for k, v in tmp_state.items()}
-    missing, unexpected = model.load_state_dict(state, strict=False)
-    print("full model missing:", len(missing), "unexpected:", len(unexpected))
-    model = model.to(DEVICE).eval()
-    """
-
     query_ds = MaskAwareJaguarDataset(
         jaguar_model=ctx_orig.model,
         base_root=PATHS.data_train,
         data_root=PATHS.data.parent,
         samples_list=samples_list,
     )
+
     query_loader = torch.utils.data.DataLoader(
         query_ds,
         batch_size=config["inference"]["batch_size"],
@@ -126,6 +160,24 @@ def main():
         gallery_emb=gallery_emb,
         gallery_ids=gallery_ids,
         gallery_files=gallery_files,
+    )
+    """
+    
+    xai_result = run_foreground_contribution_analysis(
+        model=ctx_val.model,
+        query_loader=query_loader,
+        results_path=results_path,
+    )
+
+    stress_result = run_bg_vs_jaguar_stress_analysis(
+        model=ctx_val.model,
+        query_loader=query_loader,
+        gallery_emb=gallery_emb,
+        gallery_ids=gallery_ids,
+        gallery_files=gallery_files,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        split_df=ctx_val.split_df,
     )
 
     logits_res = xai_result["logits_res"]
@@ -153,6 +205,24 @@ def main():
         config=config,
         train_config=train_config,
         manifest_dir=manifest_dir,
+        ctx_orig=ctx_val,
+        query_ds=query_ds,
+        query_emb_rows=query_emb_rows,
+        logits_res=logits_res,
+        similarity_res=similarity_res,
+        retrieval_df=retrieval_df,
+        analysis_df=analysis_df,
+        retrieval_summary=retrieval_summary,
+        similarity_summary=similarity_summary,
+    )
+
+    """
+    save_bg_sensitivity_outputs(
+        save_path=run_dir,
+        results_path=results_path,
+        config=config,
+        train_config=train_config,
+        manifest_dir=manifest_dir,
         ctx_orig=ctx_orig,
         query_ds=query_ds,
         query_emb_rows=query_emb_rows,
@@ -163,6 +233,8 @@ def main():
         retrieval_summary=retrieval_summary,
         similarity_summary=similarity_summary,
     )
+    """
+    
 
     log_wandb_background_sensitivity_results(run, retrieval_summary, similarity_summary, analysis_df)
     if run is not None:

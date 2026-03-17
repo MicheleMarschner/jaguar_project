@@ -4,10 +4,9 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from pathlib import Path
 import torch
-import cv2
 from PIL import Image
 
-from jaguar.utils.utils_xai import load_all_refs, load_all_vectors
+from jaguar.utils.utils_xai import _RUN_RE, load_all_refs, load_all_vectors, overlay_heatmap
 from jaguar.config import DATA_STORE, EXPERIMENTS_STORE, PATHS, RESULTS_STORE
 from jaguar.utils.utils import ensure_dir, resolve_path
 from jaguar.utils.utils_datasets import load_full_jaguar_from_FO_export
@@ -164,14 +163,9 @@ def compute_failure_summary_all_models(refs_all: pd.DataFrame) -> pd.DataFrame:
 
 def get_top1_failures_for_model(refs_model: pd.DataFrame) -> pd.DataFrame:
     """
-    RQ1 (Why does the model retrieve the wrong identity?).
-
-    Purpose: Identify concrete top-1 failure cases for a single model/run:
+    Identify concrete top-1 failure cases for a single model/run:
     - hard_neg is the top-1 candidate (rank_in_gallery==1)
     - easy_pos exists but appears later (easy_rank>1)
-    Also computes sim_gap_wrong_minus_right = hard_sim - easy_sim.
-    Output: Failure DataFrame sorted by largest similarity gap (worst confusions first).
-    Why: Selects the exact cases you should visualize/explain (query + wrong + true match).
     """
     easy = refs_model[refs_model["pair_type"]=="easy_pos"][["query_idx","ref_idx","pair_sim","rank_in_gallery"]].copy()
     easy = easy.rename(columns={"ref_idx":"easy_ref_idx","pair_sim":"easy_sim","rank_in_gallery":"easy_rank"})
@@ -192,11 +186,8 @@ def save_failure_panels(
     n_per_model: int = 10,
 ):
     """
-    RQ1 – qualitative evidence.
-
-    Purpose: Save concrete image triptychs for the worst top-1 failure cases per model:
+    Save concrete image triptychs for the worst top-1 failure cases per model:
     [Query | Wrong top-1 (hard_neg) | Best true match (easy_pos)] with ranks and similarities in titles.
-    Output: PNG panels saved under output_dir/<model>/failure_XX__q<idx>.png
     """
     ensure_dir(out_dir)
 
@@ -247,13 +238,10 @@ def save_failure_panels(
 
 def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) -> pd.DataFrame:
     """
-    RQ3 (Easy vs hard true matches) – bucketing step.
-
-    Purpose: Split easy_pos cases into difficulty buckets using rank quantiles of the first true match:
+    Split easy_pos cases into difficulty buckets using rank quantiles of the first true match:
     - easy_pos_easy (low rank)
     - easy_pos_mid
     - easy_pos_hard (high rank)
-    Why: Lets you compare what “hard positives” look like vs “easy positives”.
     """
     easy = pairs_df[pairs_df["pair_type"] == "easy_pos"].copy()
     if "rank_in_gallery" not in easy.columns:
@@ -277,14 +265,19 @@ def add_easypos_rank_quantiles(pairs_df: pd.DataFrame, q_low=0.2, q_high=0.8) ->
 
 def idx_to_imgpath(torch_ds, idx: int) -> Path:
     s = torch_ds.samples[int(idx)]
-    # prefer absolute path if stored
-    if "filepath" in s:
-        return Path(s["filepath"])
-    if "path" in s:
-        return Path(s["path"])
-    # if only filename stored, resolve using dataset helper if available
-    # fall back: assume it's already absolute
-    return Path(s.get("filename", ""))
+
+    if "filepath" in s and s["filepath"]:
+        p = Path(s["filepath"])
+        return p if p.is_absolute() else PATHS.data.parent / p
+
+    if "path" in s and s["path"]:
+        p = Path(s["path"])
+        return p if p.is_absolute() else PATHS.data.parent / p
+
+    if "filename" in s and s["filename"]:
+        return PATHS.data.parent / s["filename"]
+
+    raise ValueError(f"No usable image path for sample idx={idx}: {s}")
 
 
 def build_saliency_lookup(artifact: dict) -> dict:
@@ -346,9 +339,6 @@ def save_pairtype_trained_vs_randomized_panels(
 ) -> None:
     """
     Save qualitative panels for trained vs randomized saliency maps.
-
-    Panel layout:
-    [Query | Reference | Trained overlay on query | Randomized overlay on query]
     """
     run_dir = Path(run_dir)
     source_run_dir = run_dir.parent if run_dir.name == "xai_metrics" else run_dir
@@ -396,8 +386,8 @@ def save_pairtype_trained_vs_randomized_panels(
             sal_tr = trained_lookup.get((q, r), None)
             sal_rand = randomized_lookup.get((q, r), None)
 
-            q_vis_tr = overlay_heatmap(q_img, sal_tr) if sal_tr is not None else q_img
-            q_vis_rand = overlay_heatmap(q_img, sal_rand) if sal_rand is not None else q_img
+            q_vis_tr = overlay_heatmap(img_rgb=q_img, saliency_2d=sal_tr, alpha=0.62, percentile=97.0, threshold=0.10) if sal_tr is not None else q_img
+            q_vis_rand = overlay_heatmap(img_rgb=q_img, saliency_2d=sal_rand, alpha=0.62, percentile=97.0, threshold=0.10) if sal_rand is not None else q_img
 
             fig, axes = plt.subplots(1, 4, figsize=(16, 4))
             axes[0].imshow(q_img)
@@ -425,23 +415,6 @@ def save_pairtype_trained_vs_randomized_panels(
             plt.close(fig)
 
         print(f"[OK] Saved {len(chosen)} panels for {pair_type} to {pair_dir}")
-
-
-def overlay_heatmap(img_rgb: np.ndarray, saliency_2d: np.ndarray, alpha: float = 0.45) -> np.ndarray:
-    s = np.abs(saliency_2d)
-    s = (s - s.min()) / (s.max() - s.min() + 1e-8)
-
-    if s.shape != img_rgb.shape[:2]:
-        s = cv2.resize(s, (img_rgb.shape[1], img_rgb.shape[0]))
-
-    heat = cv2.applyColorMap(np.uint8(255 * s), cv2.COLORMAP_JET)
-    heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB)
-
-    if img_rgb.dtype != np.uint8:
-        img_rgb = np.clip(img_rgb, 0, 1)
-        img_rgb = (img_rgb * 255).astype(np.uint8)
-
-    return cv2.addWeighted(img_rgb, 1 - alpha, heat, alpha, 0)
 
 
 def build_saliency_lookup_from_artifact(artifact: dict) -> dict:
@@ -537,27 +510,37 @@ def run(
     exemplar_run_dir: Path | None = None,
     **kwargs,
 ) -> None:
+    
     if run_dir is not None:
         rel_path = run_dir.relative_to(PATHS.runs)
-        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        run_root = resolve_path(str(rel_path), EXPERIMENTS_STORE)
         save_root = Path(RESULTS_STORE.write_root) / rel_path
     elif root_dir is not None:
         rel_path = root_dir.relative_to(PATHS.runs)
-        run_root = resolve_path(rel_path, EXPERIMENTS_STORE)
+        run_root = resolve_path(str(rel_path), EXPERIMENTS_STORE)
         save_root = Path(RESULTS_STORE.write_root) / rel_path
     else:
         raise ValueError("Expected either run_dir or root_dir")
-
+    
+    child_dirs = [
+        p for p in run_root.iterdir()
+        if p.is_dir() and _RUN_RE.match(p.name)
+    ]
+    if len(child_dirs) == 1:
+        run_root = child_dirs[0]
+    else:
+        raise RuntimeError(f"Expected exactly one run dir under {run_root}, found: {child_dirs}")
     ensure_dir(save_root)
 
     if root_dir is not None and run_dir is None:
         raise NotImplementedError("Group-mode analysis not implemented yet.")
-
+    
     dataset_name = config["xai"]["dataset_name"]
     n_samples = config["xai"]["n_samples"]
     explainer = config["xai"]["explainer_names"][0]
 
     df_vec = load_all_vectors(run_root)
+    print(df_vec.head())
     refs_all = load_all_refs(run_root)
     print(refs_all.head())
 
@@ -572,11 +555,14 @@ def run(
     summary_fail_display[["median_easy_rank_in_failures","median_sim_gap_wrong_minus_right"]].fillna("—")
     summary_fail.to_csv(save_root / "failure_summary_all_models.csv", index=False)
 
+    use_fiftyone = config["data"].get("use_fiftyone", False)
+
     _, torch_ds = load_full_jaguar_from_FO_export(
         resolve_path("fiftyone/splits_curated", DATA_STORE),
         dataset_name=dataset_name,
         processing_fn=None,
         overwrite_db=False, 
+        use_fiftyone=use_fiftyone
     )
 
     save_failure_panels(refs_all, torch_ds, save_root / "failure_panels", n_per_model=n_samples)
@@ -618,4 +604,5 @@ def run(
     )
 
     print(f"\nAnalysis complete. Results saved to {save_root}")
+    
     

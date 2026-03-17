@@ -7,21 +7,32 @@ from jaguar.utils.utils_setup import build_split_stem
 
 
 def load_toml_config(config_name: str) -> dict:
+    """
+    Load a named project TOML config from the central configs directory.
+    """
     with open(PATHS.configs / f"{config_name}.toml", "rb") as f:
         return tomllib.load(f)
     
 def load_toml_from_path(path: str | Path) -> dict:
-    """Load a TOML file from an arbitrary path."""
+    """
+    Load a TOML file from any given filesystem path.
+    """
     path = Path(path)
     with open(path, "rb") as f:
         return tomllib.load(f)
     
 def read_toml_from_path(path: Path) -> dict:
+    """
+    Read a TOML file from a Path object and return its parsed contents.
+    """
     with open(path, "rb") as f:
         return tomllib.load(f)
 
 
 def deep_update(base: dict, override: dict) -> dict:
+    """
+    Recursively merge an override dictionary into a base dictionary.
+    """
     result = dict(base)
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
@@ -31,8 +42,10 @@ def deep_update(base: dict, override: dict) -> dict:
     return result
 
 
-
 def to_toml_value(value):
+    """
+    Convert a supported Python value into its TOML string representation.
+    """
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, str):
@@ -45,6 +58,9 @@ def to_toml_value(value):
 
 
 def dict_to_toml(data: dict) -> str:
+    """
+    Serialize a nested config dictionary into a TOML string.
+    """
     lines: list[str] = []
 
     scalar_items: list[tuple[str, object]] = []
@@ -81,8 +97,10 @@ def dict_to_toml(data: dict) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-
 def _pick_value(run_cfg: dict, experiment_meta: dict, base_config: dict, *path, default=None):
+    """
+    Pick a config value with precedence run config, then experiment metadata, then base config.
+    """
     key = path[-1]
 
     if key in run_cfg:
@@ -103,6 +121,9 @@ def build_ensemble_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one ensemble experiment run.
+    """
     override = {
         "ensemble": {
             "name": run_cfg["experiment_name"],
@@ -154,9 +175,11 @@ def build_ensemble_override(
     return override
 
 
-
 def resolve_xai_metrics_paths(config: dict):
-    source_run_dir = Path(config["xai_metrics"]["source_run_dir"])
+    """
+    Resolve and create the key output directories used for XAI metric computation.
+    """
+    source_run_dir = str(config["xai_metrics"]["source_run_dir"])
 
     run_root = resolve_path(source_run_dir, EXPERIMENTS_STORE)
     if not run_root.exists():
@@ -178,6 +201,9 @@ def build_xai_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one XAI or XAI-metrics experiment run.
+    """
     override = {
         "evaluation": {
             "experiment_name": run_cfg["experiment_name"],
@@ -259,6 +285,9 @@ def build_standard_override(
     experiment_meta: dict,
     base_config: dict,
 ) -> dict:
+    """
+    Build the override config for one standard training or evaluation run.
+    """
     override = {
         "training": {
             "experiment_name": run_cfg["experiment_name"],
@@ -270,15 +299,33 @@ def build_standard_override(
         "val_background": ("preprocessing", "val_background"),
 
         "backbone_name": ("model", "backbone_name"),
+        "emb_dim": ("model", "emb_dim"),
         "head_type": ("model", "head_type"),
         "s": ("model", "s"),
         "m": ("model", "m"),
+        "use_projection": ("model", "use_projection"),
+        "use_forward_features": ("model", "use_forward_features"),
+        "mining_type": ("model", "mining_type"),
+
+        "ema": ("training", "ema"),
+        "ema_decay": ("training", "ema_decay"),
+        "monitor_metric": ("training", "monitor_metric"),
+        "epochs": ("training", "epochs"),
+        "unfreeze_epoch": ("training", "unfreeze_epoch"),
+        "unfreeze_blocks": ("training", "unfreeze_blocks"),
+        "early_stopping" : ("training", "early_stopping"),
+        "early_stopping_patience" : ("training", "early_stopping_patience"),
+        "samples_per_class" : ("training", "samples_per_class"),
 
         "optimizer_type": ("optimizer", "type"),
         "optimizer_lr": ("optimizer", "lr"),
+        "optimizer_lr_muon": ("optimizer", "lr_muon"),
+        "optimizer_backbone_lr": ("optimizer", "backbone_lr"),
         "optimizer_weight_decay": ("optimizer", "weight_decay"),
         "optimizer_momentum": ("optimizer", "momentum"),
         "optimizer_betas": ("optimizer", "betas"),
+        "optimizer_factor": ("optimizer", "optimizer_factor"),
+        "optimizerr_patience": ("optimizer", "optimizer_patience"),
 
         "scheduler_type": ("scheduler", "type"),
         "scheduler_T_max": ("scheduler", "T_max"),
@@ -288,20 +335,24 @@ def build_standard_override(
         "scheduler_lr_ramp_ep": ("scheduler", "lr_ramp_ep"),
         "scheduler_lr_sus_ep": ("scheduler", "lr_sus_ep"),
         "scheduler_lr_decay": ("scheduler", "lr_decay"),
-        "scheduler_factor": ("scheduler", "factor"),
-        "scheduler_patience": ("scheduler", "patience"),
-        "scheduler_epochs": ("scheduler", "epochs"),
-        "scheduler_total_steps": ("scheduler", "total_steps"),
 
         "apply_augmentations": ("augmentation", "apply_augmentations"),
         "horizontal_flip": ("augmentation", "horizontal_flip"),
+        "random_resized_crop": ("augmentation", "random_resized_crop"),
+        "gaussian_blur": ("augmentation", "gaussian_blur"),
         "affine_degrees": ("augmentation", "affine_degrees"),
         "affine_translate": ("augmentation", "affine_translate"),
         "affine_scale": ("augmentation", "affine_scale"),
         "color_jitter_brightness": ("augmentation", "color_jitter_brightness"),
         "color_jitter_contrast": ("augmentation", "color_jitter_contrast"),
         "random_erasing_p": ("augmentation", "random_erasing_p"),
-
+        
+        "silhouette_freq": ("mining_analysis", "silhouette_freq"),
+        "force_silhouette": ("mining_analysis", "force_silhouette"),
+        
+        "enabled": ("rare_identity_eval", "enabled"),
+        "threshold": ("rare_idenrare_identity_evaltity_val", "threshold"),
+        
         "pr_enabled": ("progressive_resizing", "enabled"),
         "pr_sizes": ("progressive_resizing", "sizes"),
         "pr_stage_epochs": ("progressive_resizing", "stage_epochs"),
@@ -391,6 +442,9 @@ def build_split_relpath(
     val_k_per_dedup: int,
     phash_thresh_dedup: int,
 ) -> str:
+    """
+    Build the canonical relative path to the full split parquet for one split configuration.
+    """
     stem = build_split_stem(
         split_strategy=split_strategy,
         include_duplicates=include_duplicates,
@@ -399,23 +453,3 @@ def build_split_relpath(
         phash_thresh_dedup=phash_thresh_dedup,
     )
     return f"splits/{stem}/full_split.parquet"
-
-
-def build_override_for_mode(mode: str, run_cfg: dict, experiment_meta: dict, base_config: dict) -> dict:
-    if mode == "ensemble":
-        return build_ensemble_override(
-            run_cfg=run_cfg,
-            experiment_meta=experiment_meta,
-            base_config=base_config,
-        )
-    if mode in {"explain", "eval"}:
-        return build_xai_override(
-            run_cfg=run_cfg,
-            experiment_meta=experiment_meta,
-            base_config=base_config,
-        )
-    return build_standard_override(
-        run_cfg=run_cfg,
-        experiment_meta=experiment_meta,
-        base_config=base_config,
-    )

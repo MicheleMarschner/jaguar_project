@@ -5,6 +5,7 @@ base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
 output_profile = "backbone"
+setup_name = "base"
 
 [[experiment.runs]]
 experiment_name = "backbone_eva02"

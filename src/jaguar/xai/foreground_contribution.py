@@ -31,7 +31,9 @@ from pytorch_grad_cam.utils.image import show_cam_on_image
 
 from jaguar.config import IMGNET_MEAN, IMGNET_STD, DEVICE
 from jaguar.utils.utils import ensure_dir, save_parquet, to_rel_path
-from jaguar.utils.utils_xai_similarity import manual_gradcam_class
+from jaguar.utils.utils_xai_class import manual_gradcam_class
+from jaguar.utils.utils_evaluation import build_query_gallery_retrieval_state, build_retrieval_diagnostics_per_query
+
 
 def extract_query_variant_embeddings(model, dataloader, device):
     """Extracts embeddings for original, jaguar-only, and background-only query views."""
@@ -72,76 +74,84 @@ def extract_query_variant_embeddings(model, dataloader, device):
         list(query_files),
     )
 
-
-def compute_retrieval_metrics_per_query(
-    query_emb: np.ndarray,
+def compute_retrieval_bg_vs_jaguar(
+    query_emb_orig: np.ndarray,
+    query_emb_jaguar_only: np.ndarray,
+    query_emb_bg_only: np.ndarray,
     query_ids: list[str],
     query_files: list[str],
+    query_global_indices: np.ndarray,
     gallery_emb: np.ndarray,
     gallery_ids: list[str],
     gallery_files: list[str],
+    gallery_global_indices: np.ndarray,
+    split_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """
-    Computes per-query retrieval outcomes; excludes exact self-match via filename.
-    Assumes embeddings are normalized.
-    """
-    sim = query_emb @ gallery_emb.T
+    """Compares whether Jaguar identity is driven more by the animal region or the background."""
+    gallery_ids_arr = np.asarray(gallery_ids)
 
-    gallery_ids = np.asarray(gallery_ids)
-    gallery_files = np.asarray(gallery_files)
+    retrieval_orig = build_query_gallery_retrieval_state(
+        query_embeddings=query_emb_orig,
+        gallery_embeddings=gallery_emb,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        query_labels=np.asarray(query_ids),
+        gallery_labels=gallery_ids_arr,
+        split_df=split_df,
+    )
+    df_orig = build_retrieval_diagnostics_per_query(retrieval_orig).add_suffix("_orig")
 
-    rows = []
+    retrieval_jag = build_query_gallery_retrieval_state(
+        query_embeddings=query_emb_jaguar_only,
+        gallery_embeddings=gallery_emb,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        query_labels=np.asarray(query_ids),
+        gallery_labels=gallery_ids_arr,
+        split_df=split_df,
+    )
+    df_jag = build_retrieval_diagnostics_per_query(retrieval_jag).add_suffix("_jaguar_only")
 
-    for i in range(len(query_ids)):
-        gold_id = query_ids[i]
-        qfile = query_files[i]
+    retrieval_bg = build_query_gallery_retrieval_state(
+        query_embeddings=query_emb_bg_only,
+        gallery_embeddings=gallery_emb,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        query_labels=np.asarray(query_ids),
+        gallery_labels=gallery_ids_arr,
+        split_df=split_df,
+    )
+    df_bg = build_retrieval_diagnostics_per_query(retrieval_bg).add_suffix("_bg_only")
 
-        scores = sim[i].copy()
+    df = pd.concat([df_orig, df_jag, df_bg], axis=1)
 
-        self_mask = (gallery_files == qfile)
-        scores[self_mask] = -np.inf
+    df["id"] = query_ids
+    df["filepath"] = query_files
+    df["query_idx"] = query_global_indices
 
-        ranked_idx = np.argsort(-scores)
+    df["bg_better_than_jag_rank"] = df["gold_rank_bg_only"] < df["gold_rank_jaguar_only"]
+    df["bg_better_than_jag_rank1"] = (
+        df["is_rank1_bg_only"].astype(int) > df["is_rank1_jaguar_only"].astype(int)
+    )
+    df["bg_better_than_jag_rank5"] = (
+        df["is_rank5_bg_only"].astype(int) > df["is_rank5_jaguar_only"].astype(int)
+    )
+    df["bg_better_than_jag_margin"] = (
+        df["margin_gold_minus_impostor_bg_only"] >
+        df["margin_gold_minus_impostor_jaguar_only"]
+    )
 
-        gold_mask = (gallery_ids == gold_id) & (~self_mask)
-        non_gold_mask = (gallery_ids != gold_id) & (~self_mask)
+    df["gold_rank_delta_bg_minus_jag"] = (
+        df["gold_rank_bg_only"] - df["gold_rank_jaguar_only"]
+    )
+    df["margin_delta_bg_minus_jag"] = (
+        df["margin_gold_minus_impostor_bg_only"] -
+        df["margin_gold_minus_impostor_jaguar_only"]
+    )
 
-        if not gold_mask.any():
-            rows.append({
-                "id": gold_id,
-                "filepath": qfile,
-                "gold_rank": np.nan,
-                "is_rank1": False,
-                "is_rank5": False,
-                "best_gold_similarity": np.nan,
-                "best_impostor_similarity": np.nan,
-                "margin_gold_minus_impostor": np.nan,
-            })
-            continue
+    return df
 
-        best_gold_similarity = float(scores[gold_mask].max())
-        best_impostor_similarity = float(scores[non_gold_mask].max()) if non_gold_mask.any() else np.nan
-
-        ranked_gallery_ids = gallery_ids[ranked_idx]
-        first_gold_pos = int(np.where(ranked_gallery_ids == gold_id)[0][0]) + 1
-
-        rows.append({
-            "id": gold_id,
-            "filepath": qfile,
-            "gold_rank": first_gold_pos,
-            "is_rank1": first_gold_pos <= 1,
-            "is_rank5": first_gold_pos <= 5,
-            "best_gold_similarity": best_gold_similarity,
-            "best_impostor_similarity": best_impostor_similarity,
-            "margin_gold_minus_impostor": (
-                best_gold_similarity - best_impostor_similarity
-                if not np.isnan(best_impostor_similarity) else np.nan
-            ),
-        })
-
-    return pd.DataFrame(rows)
-
-
+"""
 def compute_retrieval_bg_vs_jaguar(
     query_emb_orig: np.ndarray,
     query_emb_jaguar_only: np.ndarray,
@@ -152,7 +162,7 @@ def compute_retrieval_bg_vs_jaguar(
     gallery_ids: list[str],
     gallery_files: list[str],
 ) -> pd.DataFrame:
-    """Compares whether Jaguar identity is driven more by the animal region or the background."""
+    '''Compares whether Jaguar identity is driven more by the animal region or the background.'''
     df_orig = compute_retrieval_metrics_per_query(
         query_emb_orig, query_ids, query_files,
         gallery_emb, gallery_ids, gallery_files
@@ -197,7 +207,15 @@ def compute_retrieval_bg_vs_jaguar(
     return df
 
 
+"""
+
 def compute_logit_sensitivity(model, dataloader, device):
+    """
+    Compare gold-class classification scores across original, jaguar-only, and background-only queries.
+
+    Runs the classifier on all three query variants and records how much the gold-class
+    logit and log-probability drop when foreground or background information is removed.
+    """
     results = []
     model.eval()
     
@@ -272,6 +290,12 @@ def compute_logit_sensitivity(model, dataloader, device):
 
 
 def compute_embedding_stability(model, dataloader, device):
+    """
+    Measure how much masked-query embeddings stay aligned with the original query embedding.
+
+    Extracts ReID embeddings for original, jaguar-only, and background-only inputs and
+    compares each masked variant to the original with cosine similarity.
+    """
     results = []
     model.eval()
     
@@ -307,8 +331,11 @@ def compute_embedding_stability(model, dataloader, device):
 
 
 def generate_visuals_logits(model, dataloader, df_results, output_dir, device):
-    """"
-    Generates GradCam overlays for spurious cases
+    """
+    Create CAM comparison grids for the most background-dominant classification cases.
+
+    For selected samples, saves side-by-side original, EigenCAM, and GradCAM views for
+    original, jaguar-only, and background-only query variants.
     """
     output_dir = Path(output_dir) / "heatmaps"
     ensure_dir(output_dir)
@@ -388,6 +415,12 @@ def run_foreground_contribution_analysis(
     query_loader,
     results_path: Path,
 ) -> dict:
+    """
+    Run foreground-vs-background diagnostics on classification and embedding behavior.
+
+    Produces per-sample classification sensitivity scores, embedding stability scores,
+    and qualitative CAM visualizations for representative cases.
+    """
     
     # Run Sensitivity Analysis on classification (logits)
     logits_res = compute_logit_sensitivity(model, query_loader, DEVICE)
@@ -408,7 +441,54 @@ def run_bg_vs_jaguar_stress_analysis(
     gallery_emb,
     gallery_ids,
     gallery_files,
+    query_global_indices: np.ndarray,
+    gallery_global_indices: np.ndarray,
+    split_df: pd.DataFrame,
 ) -> dict:
+    """
+    Evaluate retrieval changes when queries keep only jaguar content or only background.
+
+    Extracts embeddings for all query variants and compares retrieval outcomes against a
+    fixed gallery to quantify foreground-versus-background dependence in ranking behavior.
+    """
+    query_emb_orig, query_emb_jag, query_emb_bg, query_ids, query_files = extract_query_variant_embeddings(
+        model,
+        query_loader,
+        DEVICE,
+    )
+
+    retrieval_df = compute_retrieval_bg_vs_jaguar(
+        query_emb_orig=query_emb_orig,
+        query_emb_jaguar_only=query_emb_jag,
+        query_emb_bg_only=query_emb_bg,
+        query_ids=query_ids,
+        query_files=query_files,
+        query_global_indices=query_global_indices,
+        gallery_emb=gallery_emb,
+        gallery_ids=gallery_ids,
+        gallery_files=gallery_files,
+        gallery_global_indices=gallery_global_indices,
+        split_df=split_df,
+    )
+
+    return {
+        "retrieval_df": retrieval_df,
+    }
+
+"""
+def run_bg_vs_jaguar_stress_analysis(
+    model,
+    query_loader,
+    gallery_emb,
+    gallery_ids,
+    gallery_files,
+) -> dict:
+    '''
+    Evaluate retrieval changes when queries keep only jaguar content or only background.
+
+    Extracts embeddings for all query variants and compares retrieval outcomes against a
+    fixed gallery to quantify foreground-versus-background dependence in ranking behavior.
+    '''
     query_emb_orig, query_emb_jag, query_emb_bg, query_ids, query_files = extract_query_variant_embeddings(
         model,
         query_loader,
@@ -430,6 +510,8 @@ def run_bg_vs_jaguar_stress_analysis(
         "retrieval_df": retrieval_df,
     }
 
+"""
+
 
 def save_bg_sensitivity_outputs(
     save_path: Path,
@@ -447,6 +529,12 @@ def save_bg_sensitivity_outputs(
     retrieval_summary: dict,
     similarity_summary: dict,
 ) -> None:
+    """
+    Persist all foreground-vs-background analysis artifacts and a run-level config record.
+
+    Saves the core per-sample tables, summary JSON files, and a compact metadata file
+    that documents which data, model, masking setup, and output paths belong to the run.
+    """
     backbone_name = train_config["model"]["backbone_name"]
     head_type = train_config["model"]["head_type"]
     n_samples = config["xai"]["n_samples"]
@@ -485,7 +573,7 @@ def save_bg_sensitivity_outputs(
         "data": {
             "dataset_name": dataset_name,
             "manifest_dir": to_rel_path(manifest_dir),
-            "gallery_source": "original_train_plus_val_from_shared_base",
+            "gallery_source": "original_val_from_shared_base",
         },
         "model": {
             "checkpoint_dir": to_rel_path(ctx_orig.checkpoint_dir),
@@ -521,4 +609,3 @@ def save_bg_sensitivity_outputs(
 
     with open(save_path / f"run_config__{backbone_name}_{head_type}__n{n_samples}.json", "w") as f:
         json.dump(run_config, f, indent=2)
-

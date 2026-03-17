@@ -3,10 +3,11 @@ import subprocess
 
 from jaguar.config import PATHS
 from jaguar.utils.utils import ensure_dir
-from jaguar.utils.utils_experiments import build_override_for_mode, dict_to_toml, load_toml_config
-from jaguar.experiments.experiment_setup import run_setup
+from jaguar.utils.utils_experiments import build_ensemble_override, build_standard_override, build_xai_override, dict_to_toml, load_toml_config
+
 
 def parse_args():
+    """Parse CLI arguments for batch experiment execution."""
     parser = argparse.ArgumentParser(description="Run experiments")
     parser.add_argument(
         "--base_config",
@@ -29,8 +30,8 @@ def parse_args():
     return parser.parse_args()
 
 
-
 def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) -> str:
+    """Resolve which experiment entry script to run for the given mode and experiment metadata."""
     if mode == "train":
         return main_script
 
@@ -49,6 +50,8 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
         explain_type = experiment_meta.get("explain_type")
         if explain_type == "pair_similarity":
             return "src/jaguar/experiments/run_xai_similarity.py"
+        if explain_type == "class_attribution":
+            return "src/jaguar/experiments/run_class_attribution_generation.py"
         if explain_type == "pair_similarity_metrics":
             return "src/jaguar/experiments/run_xai_metrics.py"
         if explain_type == "background_sensitivity":
@@ -58,9 +61,32 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
     raise ValueError(f"Unknown mode: {mode}")
 
 
+def expand_run_variants(run_cfg: dict) -> list[dict]:
+    """Expand one run config into one or more concrete run variants."""
+    if "seed" not in run_cfg:
+        return [run_cfg]
+
+    raw_seed = run_cfg["seed"]
+
+    if not isinstance(raw_seed, list):
+        return [run_cfg]
+
+    experiment_name = run_cfg["experiment_name"]
+    variants = []
+
+    for seed in raw_seed:
+        variant = dict(run_cfg)
+        variant["seed"] = seed
+        variant["multiple_seeds"] = True
+        variant["experiment_name"] = f"{experiment_name}_seed_{seed}"
+        variants.append(variant)
+
+    return variants
+
+
 def run_experiments():
+    """Generate per-run override configs, optionally run setup, and write a shell script for all commands."""
     args = parse_args()
-    
     experiment_config = load_toml_config(args.experiment_config)
     base_config = load_toml_config(args.base_config)
 
@@ -69,36 +95,58 @@ def run_experiments():
     if not runs:
         raise ValueError("No runs found under [[experiment.runs]]")
 
-    experiment_group = experiment_meta.get("name", "experiment")
+    experiment_group = experiment_config.get("experiment", {}).get("name", "experiment")
+    setup_name = experiment_meta.get("setup_name")
     generated_dir = PATHS.configs / "_generated" / experiment_group
     ensure_dir(generated_dir)
 
     mode = experiment_meta.get("mode", "train")
 
-    print(f"Found {len(runs)} runs.")
+    expanded_runs = []
+    for run_cfg in runs:
+        expanded_runs.extend(expand_run_variants(run_cfg))
+
+    print(f"Found {len(expanded_runs)} concrete runs.")
     print(f"mode = {mode}")
 
     all_cmds = []
 
-    for i, run_cfg in enumerate(runs, start=1):
+    for i, run_cfg in enumerate(expanded_runs, start=1):
         experiment_name = run_cfg["experiment_name"]
+
+        if mode == "ensemble":
+            override = build_ensemble_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
+        elif mode == "explain" or mode == "eval":
+            override = build_xai_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
+        else:
+            override = build_standard_override(
+                run_cfg=run_cfg,
+                experiment_meta=experiment_meta,
+                base_config=base_config,
+            )
+
+        if "seed" in run_cfg:
+            override.setdefault("training", {})["seed"] = run_cfg["seed"]
+
+        if run_cfg.get("multiple_seeds"):
+            override.setdefault("training", {})["multiple_seeds"] = True
         
-        override = build_override_for_mode(
-            mode=mode,
-            run_cfg=run_cfg,
-            experiment_meta=experiment_meta,
-            base_config=base_config,
-        )
         override_text = dict_to_toml(override)
 
-        print(f"\n[{i}/{len(runs)}] {experiment_name}")
+        print(f"\n[{i}/{len(expanded_runs)}] {experiment_name}")
 
         override_path = generated_dir / f"{experiment_name}.toml"
         override_path.write_text(override_text, encoding="utf-8")
         rel_path = override_path.relative_to(PATHS.configs).with_suffix("")
 
-        run_setup(args.base_config, rel_path)
-    
         target_script = resolve_target_script(
             mode=mode,
             experiment_meta=experiment_meta,
@@ -120,14 +168,39 @@ def run_experiments():
                 experiment_name,
             ])
 
+        print("Generated override config:")
+        print(override_text)
+        print("Command:")
+        print(" ".join(cmd))
+
+        if setup_name:
+            setup_cmd = [
+                "python",
+                "src/jaguar/experiments/experiment_setup.py",
+                "--setup_name",
+                setup_name,
+                "--base_config",
+                args.base_config,
+                "--experiment_config",
+                str(rel_path),
+            ]
+            print("Running setup:", " ".join(setup_cmd))
+            setup_result = subprocess.run(setup_cmd)
+
+            if setup_result.returncode != 0:
+                raise RuntimeError(f"Setup failed: {experiment_name}")
+
         print("Running:", " ".join(cmd))
-        #result = subprocess.run(cmd)
+        result = subprocess.run(cmd)
 
-        #if result.returncode != 0:
-        #    raise RuntimeError(f"Run failed: {experiment_name}")
+        if result.returncode != 0:
+            raise RuntimeError(f"Run failed: {experiment_name}")
 
-        
-        all_cmds.append(" ".join(cmd))
+        run_lines = []
+        if setup_name:
+            run_lines.append(" ".join(setup_cmd))
+        run_lines.append(" ".join(cmd))
+        all_cmds.extend(run_lines)
         all_cmds.append("")
 
         print("Generated override config:")

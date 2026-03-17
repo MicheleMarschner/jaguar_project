@@ -1,7 +1,6 @@
 import json
 import os
 from datetime import datetime
-import tomllib
 import torch
 import numpy as np
 from dataclasses import fields
@@ -12,10 +11,11 @@ import matplotlib.pyplot as plt
 
 from typing import Any, Literal, Optional, Sequence
 
-from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, ArtifactStore, Paths
+from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, PATHS, Paths
 
 
 def read_json_if_exists(path: Path) -> Optional[dict[str, Any]] | Optional[list[dict[str, Any]]]:
+    """Load a JSON file if present, otherwise return None."""
     if not path.exists():
         return None
     with open(path, "r", encoding="utf-8") as f:
@@ -23,20 +23,20 @@ def read_json_if_exists(path: Path) -> Optional[dict[str, Any]] | Optional[list[
 
 
 def write_json(obj, path: Path):
+    """Write a Python object to JSON with indentation."""
     with open(path, "w") as f:
         json.dump(obj, f, indent=2)
 
 
 def ensure_dir(p: Path) -> None:
     """
-    Ensures that the specified directories exist or creates it and any 
-    missing parent directories.
+    Create a directory and all missing parent directories if needed.
     """
     p.mkdir(parents=True, exist_ok=True)
 
 
 def ensure_dirs(paths: Paths = PATHS) -> None:
-    """Create all directories in PATHS (dataclass fields that are Path)."""
+    """Create all Path-valued directories defined in the Paths dataclass."""
     for f in fields(paths):
         val = getattr(paths, f.name)
         if isinstance(val, Path):
@@ -45,20 +45,20 @@ def ensure_dirs(paths: Paths = PATHS) -> None:
 
 def get_timestamp():
     """
-    Return a human-readable timestamp string (YYYY-MM-DD_HH-MM) for naming 
-    files or runs.
+    Return a timestamp string for naming files, folders, or runs.
     """
     return datetime.now().strftime("%Y-%m-%d_%H-%M")
 
 
 def to_numpy(x):
+    """Convert a tensor or array-like object to a NumPy array."""
     if torch.is_tensor(x):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
 
 def set_seeds(seed: int=51, deterministic: bool=True) -> None:
-    """Sets seeds for complete reproducibility across all libraries and operations"""
+    """Set Python, NumPy, and PyTorch seeds for reproducible runs."""
 
     # Python hashing (affects iteration order in some cases)
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -103,8 +103,9 @@ def set_seeds(seed: int=51, deterministic: bool=True) -> None:
 
 def normalize_query_indices(query_indices: Sequence[int], dataset_len: int) -> np.ndarray:
     """
-    Strict sequence-only API.
-    - Single sample must be [i], NOT i.
+    Validate query indices and convert them to a flat NumPy integer array.
+
+    This enforces the sequence-only API and checks that all indices are in range.
     """
     if query_indices is None:
         raise ValueError("query_indices must be a list/array. For one sample use [i].")
@@ -122,8 +123,7 @@ def normalize_query_indices(query_indices: Sequence[int], dataset_len: int) -> n
 
 def denormalize_image(x, mean=IMGNET_MEAN, std=IMGNET_STD):
     """
-    x: torch.Tensor [3,H,W] normalized
-    returns: np.ndarray [H,W,3] in [0,1]
+    Convert a normalized image tensor or array into an HWC image in [0, 1].
     """
     if isinstance(x, np.ndarray):
         # assume already CHW or HWC
@@ -142,10 +142,7 @@ def denormalize_image(x, mean=IMGNET_MEAN, std=IMGNET_STD):
 
 def tensor_img_to_hwc01(x):
     """
-    Converts image tensor/array to HWC float [0,1] for matplotlib.imshow.
-    Supports:
-      - torch.Tensor [C,H,W] or [H,W,C]
-      - np.ndarray   [C,H,W] or [H,W,C]
+    Convert a tensor or array image into HWC float format in [0, 1] for plotting.
     """
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().float().numpy()
@@ -166,7 +163,7 @@ def tensor_img_to_hwc01(x):
 
 
 def json_default(obj):
-    """Make numpy/path types JSON serializable."""
+    """Convert NumPy scalars and Path objects into JSON-serializable values."""
     try:
         if isinstance(obj, (np.integer,)):
             return int(obj)
@@ -182,22 +179,25 @@ def json_default(obj):
 
 
 def save_npy(path: Path, arr: np.ndarray) -> None:
+    """Save a NumPy array to disk, creating the parent directory if needed."""
     ensure_dir(path.parent)
     np.save(path, arr)
 
 
 def save_parquet(path: Path, df: pd.DataFrame) -> None:
+    """Save a DataFrame as parquet, creating the parent directory if needed."""
     ensure_dir(path.parent)
     df.to_parquet(path, index=False)
 
 
 def load_parquet(path: Path) -> pd.DataFrame:
+    """Load a parquet file into a DataFrame."""
     return pd.read_parquet(path)
 
 
 def resolve_path(rel: str, store) -> Path:
     """
-    Cache-first Resolver.
+    Resolve a relative artifact path by checking read roots first, then the write root.
     """
     rel = rel.replace("\\", "/").lstrip("/")
 
@@ -212,6 +212,7 @@ def resolve_path(rel: str, store) -> Path:
 PathRoot = Literal["data", "runs", "results"]
 
 def to_abs(root: PathRoot, rel: str) -> Path:
+    """Convert a stored root tag and relative path into an absolute project path."""
     rel = rel.replace("\\", "/").lstrip("/")
     if root == "data":
         return DATA_ROOT / rel
@@ -223,10 +224,16 @@ def to_abs(root: PathRoot, rel: str) -> Path:
 
 
 def to_abs_path(obj: dict) -> Path:
+    """Resolve a serialized path object with root and rel fields to an absolute path."""
     return to_abs(obj["root"], obj["rel"])
 
 
 def to_rel_path(p: str | Path) -> dict:
+    """
+    Convert an absolute path into a project-relative root/rel representation.
+
+    Paths outside known project roots fall back to filename-only storage.
+    """
     p = Path(p)
 
     if not p.is_absolute():
@@ -249,6 +256,7 @@ def to_rel_path(p: str | Path) -> dict:
 
 
 def save_fig(fig: plt.Figure, save_path: str | Path, dpi: int = 200) -> None:
+    """Save and close a matplotlib figure, creating the parent directory if needed."""
     save_path = Path(save_path)
     save_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout()

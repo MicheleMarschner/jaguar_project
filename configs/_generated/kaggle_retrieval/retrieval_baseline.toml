@@ -1,0 +1,3 @@
+[evaluation]
+apply_tta = false
+experiment_group = "kaggle_retrieval"

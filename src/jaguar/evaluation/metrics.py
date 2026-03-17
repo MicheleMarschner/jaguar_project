@@ -7,23 +7,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import silhouette_score
 
-###############################################################
-# Example usage (after validation loop):
-#
-# bundle = ReIDEvalBundle(
-#     model=model,
-#     embeddings=val_embeddings,
-#     labels=labels_idx,
-#     device=device
-# )
-# results = bundle.compute_all()
-# print(results)
-###############################################################
 
 def compute_pairwise_ap(labels, embeddings):
     """
-    Pairwise AP: treats every pair of images as a binary classification:
-    same identity vs different identity.
+    Compute pairwise average precision by treating each image pair as a same-identity or different-identity decision.
     """
 
     N = len(labels)
@@ -46,13 +33,7 @@ def compute_pairwise_ap(labels, embeddings):
 
 def compute_ib_map_from_embeddings(labels, embeddings):
     """
-    Compute identity-balanced mAP from embeddings and labels
-    Args:
-        labels: list of ground truth labels per image
-        embeddings: numpy array of shape (N, D)
-    Returns:
-        ib_map: identity-balanced mAP
-        identity_map: dict of per-identity mean AP
+    Compute identity-balanced mean average precision directly from labels and embedding vectors.
     """
     N = len(labels)
     identity_map = {}
@@ -91,18 +72,7 @@ def compute_ib_map_from_embeddings(labels, embeddings):
 
 class ReIDEvalBundle:
     """
-    Lightweight evaluation bundle for ReID.
-
-    Supports 3 modes:
-    1) Precomputed embeddings (fastest)            -> embeddings=...
-    2) Images + model (extract embeddings)         -> images=..., model=...
-    3) Embeddings + fine-tuned head projection     -> embeddings=..., model=...
-
-    Design:
-    - Compute embeddings once (cached)
-    - Compute similarity once (cached)
-    - Reuse for all metrics (mAP, AP, Rank-k, similarity diagnostics)
-    - Fits small validation sets ~300 images)
+    Cached evaluation bundle for ReID embeddings, retrieval metrics, and similarity diagnostics.
     """
     def __init__(
         self,
@@ -113,6 +83,9 @@ class ReIDEvalBundle:
         device="cuda",
         normalize=True,
     ):
+        """
+        Initialize the bundle from embeddings or images and optionally apply a model before evaluation.
+        """
         self.model = model
         self.device = device
         self.normalize = normalize
@@ -139,7 +112,7 @@ class ReIDEvalBundle:
     # Silhouette score for clustering quality of embeddings
     # -------------------------------------------------------
     def compute_silhouette(self):
-        """Computes O(N^2) Silhouette Score on CPU."""
+        """Compute the silhouette score of the evaluated embeddings using cosine distance."""
         emb_np = self.finetuned_embeddings()
         lbl_np = self.labels
         # Note: If validation set grows, consider sampling 1000 points here
@@ -150,10 +123,7 @@ class ReIDEvalBundle:
     # -------------------------------------------------
     def finetuned_embeddings(self):
         """
-        Returns the final embeddings used for evaluationL
-        1) If embeddings already provided and no model -> use as-is
-        2) If embeddings + model -> pass through model head
-        3) If images + model -> extract embeddings from images
+        Return the final embeddings used for evaluation, reusing cached results when available.
         """
         if self._finetuned_embeddings is not None:
             return self._finetuned_embeddings
@@ -198,7 +168,7 @@ class ReIDEvalBundle:
         return self._finetuned_embeddings
 
     def similarity_matrix(self):
-        """Cosine similarity matrix (NxN), cached."""
+        """Return the cached cosine similarity matrix for all evaluated samples."""
         if self._sim_matrix is None:
             emb = self.finetuned_embeddings()
             sim = cosine_similarity(emb)
@@ -207,7 +177,7 @@ class ReIDEvalBundle:
         return self._sim_matrix
 
     def ranked_indices(self):
-        """Sorted retrieval indices per query."""
+        """Return per-query retrieval rankings sorted by descending similarity."""
         if self._ranked_indices is None:
             sim = self.similarity_matrix()
             self._ranked_indices = np.argsort(-sim, axis=1)
@@ -217,14 +187,17 @@ class ReIDEvalBundle:
     # Core ReID Metrics
     # -------------------------------------------------
     def mAP(self):
+        """Compute identity-balanced mean average precision from the evaluated embeddings."""
         self.finetuned_embeddings()
         ib_map, _ = compute_ib_map_from_embeddings(self.labels, self._finetuned_embeddings)
         return ib_map  # now mAP and identity-balanced mAP are the same
 
     def identity_balanced_map(self):
+        """Return the identity-balanced mean average precision score."""
         return self.mAP()
     
     def pairwise_ap(self):
+        """Compute pairwise average precision over all image pairs."""
         emb = self.finetuned_embeddings()
         return compute_pairwise_ap(self.labels, emb)
 
@@ -233,8 +206,7 @@ class ReIDEvalBundle:
     # -------------------------------------------------
     def top_k_accuracy(self, k=1):
         """
-        Rank-k accuracy (CMC metric).
-        Checks if correct identity appears in top-k retrievals.
+        Compute rank-k retrieval accuracy based on whether a correct identity appears in the top-k results.
         """
         ranked = self.ranked_indices()
         labels = self.labels
@@ -252,14 +224,16 @@ class ReIDEvalBundle:
         return correct / total
 
     def rank1(self):
+        """Return rank-1 retrieval accuracy."""
         return self.top_k_accuracy(k=1)
 
     def rank5(self):
+        """Return rank-5 retrieval accuracy."""
         return self.top_k_accuracy(k=5)
     
     def ndcg(self, k=None):
         """
-        Normalized Discounted Cumulative Gain for ReID ranking quality.
+        Compute normalized discounted cumulative gain for the ranked retrieval results.
         """
         ranked = self.ranked_indices()
         labels = self.labels
@@ -288,10 +262,14 @@ class ReIDEvalBundle:
         return float(np.mean(ndcgs)) if ndcgs else 0.0
     
     def recall_at_k(self, k=5):
+        """Return recall at k, equivalent here to top-k retrieval accuracy."""
         # Recall@k is equivalent to top-k accuracy
         return self.top_k_accuracy(k)
     
     def intra_inter_distance(self):
+        """
+        Compute average intra-identity and inter-identity L2 distances in embedding space.
+        """
         emb = self.finetuned_embeddings()
         labels = self.labels
 
@@ -318,7 +296,7 @@ class ReIDEvalBundle:
     # Embedding Diagnostics 
     # -------------------------------------------------
     def mean_positive_similarity(self):
-        """Average similarity between same-identity images."""
+        """Compute the mean cosine similarity between same-identity samples."""
         sim = self.similarity_matrix()
         labels = self.labels
 
@@ -332,7 +310,7 @@ class ReIDEvalBundle:
         return float(np.mean(pos_sims)) if pos_sims else 0.0
 
     def mean_negative_similarity(self):
-        """Average similarity between different identities."""
+        """Compute the mean cosine similarity between different-identity samples."""
         sim = self.similarity_matrix()
         labels = self.labels
 
@@ -345,8 +323,7 @@ class ReIDEvalBundle:
 
     def similarity_gap(self):
         """
-        Separation quality of embeddings.
-        Higher = better identity discrimination.
+        Compute the separation gap between positive and negative cosine similarities.
         """
         return self.mean_positive_similarity() - self.mean_negative_similarity()
 
@@ -356,15 +333,7 @@ class ReIDEvalBundle:
     # -------------------------------------------------
     def compute_all(self, k_ndcg=10, k_recall=5, include_silhouette=False):
         """
-        One-call evaluation using shared cached computations.
-
-        Includes:
-        - Competition metric (identity-balanced mAP)
-        - Standard ReID metrics (mAP, Rank-k)
-        - Ranking quality (nDCG)
-        - Retrieval framing (Recall@K)
-        - Embedding diagnostics (similarity + distance structure)
-        - include_silhouette: Set to True only for periodic analysis or specific experiments.
+        Compute the full set of retrieval, ranking, and embedding diagnostics in one cached pass.
         """
 
         # Core ranking metrics
@@ -386,9 +355,6 @@ class ReIDEvalBundle:
         # Distance diagnostics (geometry of embedding space)
         dist_stats = self.intra_inter_distance()
         
-        # Silouhette score for embeddings 
-        sil = self.compute_silhouette()
-
         results = {
             # --- Competition / primary ---
             "id_balanced_mAP": id_map,
@@ -418,72 +384,7 @@ class ReIDEvalBundle:
         }
         
         if include_silhouette:
-            results["silhouette"] = sil
+            # Silouhette score for embeddings 
+            results["silhouette"] = self.compute_silhouette()
             
         return results 
-
-if __name__ == "__main__":
-    import torch
-    import numpy as np
-
-    # ---- Dummy model (mimics your MegaDescriptor head) ----
-    class DummyModel:
-        def eval(self):
-            pass
-
-        def get_embeddings(self, x):
-            # Simulate a learned projection
-            return torch.nn.functional.normalize(x, dim=1)
-
-    np.random.seed(42)
-    torch.manual_seed(42)
-
-    # ---- Simulate a small ReID validation set ----
-    n_identities = 10
-    images_per_id = 30  # 10 * 30 = 300 images (like your case)
-    dim = 128
-
-    labels = []
-    embeddings = []
-
-    for identity in range(n_identities):
-        # Create identity cluster (same jaguar = similar embeddings)
-        center = np.random.randn(dim)
-        center = center / np.linalg.norm(center)
-
-        for _ in range(images_per_id):
-            emb = center + 0.1 * np.random.randn(dim)
-            embeddings.append(emb)
-            labels.append(identity)
-
-    embeddings = np.vstack(embeddings)
-    labels = np.array(labels)
-
-    print("Embeddings shape:", embeddings.shape)
-    print("Number of identities:", len(np.unique(labels)))
-
-    # ---- Run evaluation bundle ----
-    model = DummyModel()
-    device = "cpu"
-
-    bundle = ReIDEvalBundle(
-        model=model,
-        embeddings=embeddings,
-        labels=labels,
-        device=device
-    )
-
-    results = bundle.compute_all()
-
-    # Optional advanced metrics
-    ndcg_score = bundle.ndcg(k=10)
-    recall5 = bundle.recall_at_k(k=5)
-    dist_stats = bundle.intra_inter_distance()
-
-    print("\n=== ReID Evaluation Results ===")
-    for k, v in results.items():
-        print(f"{k}: {v:.4f}")
-
-    print(f"nDCG@10: {ndcg_score:.4f}")
-    print(f"Recall@5: {recall5:.4f}")
-    print("\nDistance stats:", dist_stats)

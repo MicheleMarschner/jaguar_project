@@ -2,22 +2,29 @@ from pathlib import Path
 import re
 from PIL import Image
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import pandas as pd
+import seaborn as sns
+import math
 
-from typing import Iterable
+from jaguar.utils.utils import ensure_dir
+from typing import Iterable, Optional
+
+sns.set_theme(style="whitegrid", palette="muted")
 
 
 def print_section(title: str) -> None:
+    """Print a formatted section header for console output."""
     print("\n" + "=" * 80)
     print(title)
     print("=" * 80)
 
 
-# Fast "first-pass" sanity report before any expensive image scanning.
-# Goal: catch schema/missing-value issues immediately.
 def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dict:
+    """Print basic schema and missing-value checks for train and test tables."""
     report = {
         "train_shape": tuple(train_df.shape),
         "test_shape": tuple(test_df.shape),
@@ -47,13 +54,8 @@ def basic_integrity_report(train_df: pd.DataFrame, test_df: pd.DataFrame) -> dic
     return report
 
 
-# ----------------------------
-# EDA: class distribution
-# ----------------------------
-
-# Identity frequency distribution drives almost every downstream decision:
-# split protocol, rebalancing, filtering thresholds, and evaluation interpretation.
 def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
+    """Summarize the number of images per identity in the training set."""
     counts = train_df["ground_truth"].value_counts().sort_values(ascending=False)
     desc = counts.describe()
 
@@ -69,11 +71,10 @@ def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
     for k, v in summary.items():
         print(f"{k}: {v}")
 
-    # Identify identities that may need careful handling (few samples)
-    min_samples_for_split = 2  
+    min_samples_for_split = 2
     low_sample_identities = counts[counts < min_samples_for_split]
 
-    if len(low_sample_identities) > 0:   
+    if len(low_sample_identities) > 0:
         print(f"\nWarning: {len(low_sample_identities)} identities have fewer than {min_samples_for_split} images")
 
     print("\nTop-10 IDs by count:")
@@ -81,14 +82,13 @@ def class_distribution(train_df: pd.DataFrame) -> tuple[pd.Series, dict]:
 
     return counts, summary
 
-# Scenario analysis only: summarizes consequences of minimum-images-per-identity rules
-# without modifying the dataset yet.
+
 def identity_filter_summary(
     identity_counts: pd.Series,
     thresholds: Iterable[int],
     out_dir: Path,
 ) -> pd.DataFrame:
-    # ---- summary table ----
+    """Create a summary table for different minimum-images-per-identity thresholds."""
     rows = []
     for x in thresholds:
         keep = identity_counts[identity_counts >= x]
@@ -136,14 +136,12 @@ def identity_filter_summary(
     return summary
 
 
-
-# Reads image headers (and mode) to build a lightweight technical profile of the dataset.
-# Failed loads are tracked to surface corrupted/missing files.
 def analyze_images(
     df: pd.DataFrame,
     img_dir: Path,
     img_col: str = "filename",
 ) -> pd.DataFrame:
+    """Read image size and mode metadata for all files listed in the dataframe."""
     widths: list[int] = []
     heights: list[int] = []
     modes: list[str] = []
@@ -181,13 +179,13 @@ def analyze_images(
 
     return stats_df
 
-# Protects against silent train/CSV mismatches that would later break EDA, dedup, or training.
+
 def check_filename_and_folder_consistency(
     train_df: pd.DataFrame,
     data_path: Path,
     filename_col: str = "filename",
 ) -> None:
-    # filename format + index coverage
+    """Check filename format, index continuity, and CSV-to-folder consistency."""
     pat = re.compile(r"^train_(\d{4})\.png$", re.IGNORECASE)
     ok = train_df[filename_col].astype(str).apply(lambda s: bool(pat.match(s)))
     print("filename format train_####.png valid:", f"{ok.mean()*100:.1f}%")
@@ -210,7 +208,6 @@ def check_filename_and_folder_consistency(
     else:
         print("index coverage: no valid indices extracted")
 
-    # --- CSV vs folder check ---
     print("\n=== CSV ↔ TRAIN FOLDER CONSISTENCY ===")
     if not data_path.exists():
         print("TRAIN_DIR does not exist:", data_path)
@@ -230,18 +227,14 @@ def check_filename_and_folder_consistency(
         if extra_on_disk[:10]:
             print("example extra:", extra_on_disk[:10])
 
-# Joins upstream feature artifacts (sharpness) with freshly computed image metadata
-# so we can analyze quality signals together with size/resolution.
+
 def merge_sharpness_with_image_stats(
     df_sharp: pd.DataFrame,
     img_stats_df: pd.DataFrame,
     key: str = "filename",
     validate: str = "one_to_one",
 ) -> pd.DataFrame:
-    """
-    Merge sharpness/features table with image stats (width/height/mode),
-    then add derived size columns.
-    """
+    """Merge sharpness features with image metadata and add derived size columns."""
     merged = df_sharp.merge(
         img_stats_df,
         on=key,
@@ -255,15 +248,13 @@ def merge_sharpness_with_image_stats(
 
     return merged
 
-# Utility for qualitative spot checks of extremes (useful for debugging dataset artifacts).
+
 def get_top_bottom_by_column(
     df: pd.DataFrame,
     col: str,
     n: int = 10,
 ):
-    """
-    Returns (top_n_df, bottom_n_df) sorted by column.
-    """
+    """Return the top-n and bottom-n rows sorted by a given column."""
     tmp = df.copy()
     tmp = tmp.dropna(subset=[col])
 
@@ -272,15 +263,15 @@ def get_top_bottom_by_column(
     return top_n, bottom_n
 
 
-
 def alpha_background_table_scene(
     train_df: pd.DataFrame,
     img_dir: Path,
     filename_col: str = "filename",
-    alpha0_thresh: float = 0.01,      # >1% transparent => cutout
-    min_bg_mean: float = 5.0,         # bg not black
-    min_bg_std: float = 10.0,         # bg has texture/variation
+    alpha0_thresh: float = 0.01,
+    min_bg_mean: float = 5.0,
+    min_bg_std: float = 10.0,
 ) -> pd.DataFrame:
+    """Classify images by alpha cutout presence and visible background content."""
     rows = []
     for _, r in tqdm(train_df.iterrows(), total=len(train_df), desc="EDA alpha/bg scene"):
         fp = img_dir / str(r[filename_col])
@@ -288,20 +279,20 @@ def alpha_background_table_scene(
             rgba = Image.open(fp).convert("RGBA")
             arr = np.array(rgba)
             rgb = arr[..., :3].astype(np.float32)
-            a   = arr[..., 3]
+            a = arr[..., 3]
 
             alpha0_frac = float((a == 0).mean())
             is_cutout = alpha0_frac > alpha0_thresh
 
             bg_present_scene = False
             bg_mean = np.nan
-            bg_std  = np.nan
+            bg_std = np.nan
 
             if is_cutout:
-                bg = rgb[a == 0]  # Nx3
+                bg = rgb[a == 0]
                 if bg.size:
                     bg_mean = float(bg.mean())
-                    bg_std  = float(bg.std())  # variation across bg pixels/channels
+                    bg_std = float(bg.std())
                     bg_present_scene = (bg_mean >= min_bg_mean) and (bg_std >= min_bg_std)
 
             label = (
@@ -329,16 +320,8 @@ def alpha_background_table_scene(
     return pd.DataFrame(rows)
 
 
-
 def plot_bg_label_counts(alpha_df, save_path):
-    """
-    Bar chart for alpha/background categories.
-    Expects alpha_df to have a 'label' column like:
-      - 'no_cutout'
-      - 'cutout_bg_present'
-      - 'cutout_bg_missing'
-      - (optional) 'error'
-    """
+    """Plot the number of images in each alpha/background label category."""
     counts = alpha_df["label"].value_counts()
 
     plt.figure(figsize=(7, 4))
@@ -349,3 +332,209 @@ def plot_bg_label_counts(alpha_df, save_path):
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
+
+
+# ============================================================
+# EDA Plots
+# ============================================================
+
+def plot_image_dimensions(stats_df: pd.DataFrame, save_path: Optional[Path] = None, show: bool = False) -> None:
+    fig = plt.figure(figsize=(8, 4))
+    plt.hist(stats_df["width"], bins=50, alpha=0.6, label="width")
+    plt.hist(stats_df["height"], bins=50, alpha=0.6, label="height")
+    plt.legend()
+    plt.title("Distribution of image widths and heights (train)")
+    plt.xlabel("Pixels")
+    plt.ylabel("Count")
+    plt.tight_layout()
+
+    if save_path is not None:
+        ensure_dir(save_path.parent)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+# Left: per-identity counts (sorted) to reveal long-tail imbalance.
+# Right: histogram of class sizes to summarize the distribution shape.
+def plot_identity_distribution(counts: pd.Series, save_path: Path) -> None:
+    plt.figure(figsize=(12, 6))
+
+    # Bar chart
+    ax = plt.subplot(1, 2, 1)
+    color_palette = ['red' if x < 20 else 'skyblue' for x in counts.values]
+    sns.barplot(x=counts.values, y=counts.index, palette=color_palette, ax=ax)
+
+    ax.set_title("Training Data: Image Count per Jaguar", fontsize=14)
+    ax.set_xlabel("Number of Images")
+    ax.set_ylabel("Class index (sorted)")
+    ax.tick_params(axis='y', rotation=30)
+
+    # for horizontal bars, median count should be a VERTICAL line (x-axis), not hline
+    ax.axvline(x=counts.median(), color='red', linestyle='--', label=f'Median: {counts.median():.1f}')
+    for p in ax.patches:
+        w = p.get_width()   # horizontal bar length
+        y = p.get_y() + p.get_height() / 2
+        ax.annotate(
+            f"{int(w)}",
+            (w, y),
+            ha="left",
+            va="center",
+            fontsize=8,
+            xytext=(3, 0),
+            textcoords="offset points",
+        )
+    ax.legend()
+
+    # Histogram
+    plt.subplot(1, 2, 2)
+    sns.histplot(counts.values, bins=15, kde=True, color="darkgreen", alpha=0.5)
+    plt.title("Distribution of Class Sizes", fontsize=14)
+    plt.xlabel("Images per Jaguar")
+    plt.ylabel("Count")
+
+    plt.tight_layout()
+
+    ensure_dir(save_path.parent)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+
+
+# Sharpness spans orders of magnitude, so we use a log-scaled x-axis and log-spaced bins.
+def sharpness_histogramm(artifacts_dir, save_dir, filename="sharpness_histogram.png"):
+    df = pd.read_parquet(artifacts_dir / "meta_img_features.parquet").copy()
+
+    x = df["sharpness"].dropna()
+    x = x[x >= 0]  
+    median = x.median()
+    p95 = x.quantile(0.95)
+
+    bins = np.logspace(np.log10(x.min()), np.log10(x.max()), 70)  
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(x, bins=bins, kde=False, ax=ax)
+
+    ax.set_xscale("log")
+    ax.set_title("Sharpness Histogram (log x-scale)")
+    ax.set_xlabel("Sharpness (log scale)")
+    ax.set_ylabel("Count")
+
+    ax.axvline(median, color="green", linestyle="--", linewidth=2, label=f"median={median:.1f}")
+    ax.axvline(p95, color="green", linestyle=":", linewidth=2, label=f"p95={p95:.1f}")
+    ax.legend(frameon=False)
+
+    ax.xaxis.set_major_locator(mticker.LogLocator(base=10))
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f"{v:g}"))
+    ax.xaxis.set_minor_locator(mticker.LogLocator(base=10, subs=(2, 3, 5)))
+    ax.xaxis.set_minor_formatter(mticker.FuncFormatter(lambda v, pos: f"{v:g}"))
+
+    ax.tick_params(axis="x", which="major", labelsize=10, length=4)
+    ax.tick_params(axis="x", which="minor", labelsize=10, length=2)
+
+    ax.grid(False)
+
+    plt.tight_layout()
+    plt.savefig(save_dir/filename, dpi=200, bbox_inches="tight")
+
+
+# Resolution also spans a wide range; log-x avoids compressing low-resolution bins.
+def plot_resolution_histogram(
+    values: pd.Series,
+    title: str,
+    xlabel: str,
+    save_path: str | Path | None = None,
+    bins_n: int = 50,
+    add_quantile_lines: bool = False,
+):
+    """
+    Log-x histogram with log-spaced bins.
+    """
+    x = pd.to_numeric(values, errors="coerce").dropna()
+    x = x[x > 0]
+    if len(x) == 0:
+        raise ValueError("No positive values to plot on log scale.")
+
+    bins = np.logspace(np.log10(x.min()), np.log10(x.max()), bins_n)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(x, bins=bins, kde=False, ax=ax)
+
+    ax.set_xscale("log")
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Count")
+
+    # log ticks
+    ax.xaxis.set_major_locator(mticker.LogLocator(base=10))
+    ax.xaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda v, pos: f"{int(v):,}" if v >= 1 else f"{v:g}")
+    )
+    ax.xaxis.set_minor_locator(mticker.LogLocator(base=10, subs=(2, 3, 5)))
+    ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+
+    ax.grid(False)
+
+    if add_quantile_lines:
+        median = float(x.median())
+        p95 = float(x.quantile(0.95))
+        ax.axvline(median, color="green", linestyle="--", linewidth=2, label=f"median={median:.1f}")
+        ax.axvline(p95, color="green", linestyle=":", linewidth=2, label=f"p95={p95:.1f}")
+        ax.legend(frameon=False)
+
+    plt.tight_layout()
+
+    fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    print(f"[Plot] Saved to: {save_path}")
+
+    return fig, ax
+
+
+# Qualitative inspection helper: visualize extreme examples with identity + size metadata.
+def show_image_gallery(
+    df_subset: pd.DataFrame,
+    image_root: str | Path | None = None,   # NEW
+    title: str = "",
+    n_cols: int = 5,
+    figsize_per_img: float = 3.2,
+    save_path: str | Path | None = None,
+):
+    df_subset = df_subset.reset_index(drop=True)
+    n_rows = math.ceil(len(df_subset) / n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * figsize_per_img, n_rows * figsize_per_img))
+
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1 or n_cols == 1:
+        axes = list(axes)
+    else:
+        axes = axes.flatten()
+
+    for ax in axes[len(df_subset):]:
+        ax.axis("off")
+
+    for i, (_, row) in enumerate(df_subset.iterrows()):
+        ax = axes[i]
+        fname = str(row.get("filename"))
+        fp = image_root / fname
+
+        with Image.open(fp) as img:
+            img = img.convert("RGB")
+            ax.imshow(img)
+
+        fname = str(row.get("filename", fp.name))
+        jag_id = str(row.get("identity_id", "NA"))
+
+        title_line = jag_id
+        title_line += f" | {int(row['width'])}×{int(row['height'])}"
+        title_line += f" | {int(row['resolution_px']):,} px"
+
+        ax.set_title(title_line, fontsize=9)
+        ax.axis("off")
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.subplots_adjust(top=0.88, wspace=0.05, hspace=0.35)
+
+    fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    print(f"[Gallery] Saved to: {save_path}")
+

@@ -206,9 +206,14 @@ PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
   --experiment_config experiments/kaggle_deduplication
 ```
 
-This command generates an executable configuration for each run defined in the experiment configuration under `configs/_generated/<experiment_group>` and executes them sequentially.
+PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
+  --base_config base/ensemble_base \
+  --experiment_config experiments/kaggle_ensemble
 
-In practice, the base config defines the common defaults for training, model setup, preprocessing, and evaluation, while the experiment config specifies the actual intervention to be tested.
+This command generates an executable configuration for each run defined in the experiment configuration under `configs/_generated/<experiment_group>` and executes them sequentially.
+The commands need to be started from the project root directory
+
+The base config defines the common defaults for training, model setup, preprocessing, and evaluation, while the experiment config specifies the actual intervention to be tested.
 
 ---
 
@@ -217,12 +222,19 @@ In practice, the base config defines the common defaults for training, model set
 After training or evaluation runs are complete, the corresponding analysis scripts can be executed to recreate summary tables, comparisons, and visualizations.
 
 ```bash
-PYTHONPATH=src python -m jaguar.experiments.analysis_runner \
-  --base_config base/kaggle_base \
-  --experiment_config experiments/kaggle_deduplication
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_background_intervention --run_name eva02_triplet_bg_orig_gray_black_rdn_blur_mixed
 ```
 
 !TODO Anpassung!
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_foreground_contribution
+
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group baseline
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_xai_similarity
+jaguar_project % PYTHONPATH=src python -m jaguar.analysis.analysis_runner \
+   --experiment_group eda_xai_class_attribution \
+  --run_name eva02_val_n332_all_groups
+
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group kaggle_deduplication
 
 ---
 

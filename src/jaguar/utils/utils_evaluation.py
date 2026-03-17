@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 from pathlib import Path
-from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -15,13 +14,13 @@ from jaguar.utils.utils_datasets import (
     get_transforms,
     load_split_jaguar_from_FO_export,
 )
+from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 
 
 @dataclass
 class EvalContext:
     """
-    Shared evaluation context for trained JaguarID runs. Bundles everything needed 
-    to evaluate one trained Jaguar Re-ID run consistently.
+    Shared evaluation bundle for one trained JaguarID run, including model, splits, and index mappings.
     """
     model: JaguarIDModel
     train_ds: object
@@ -41,8 +40,7 @@ def build_local_to_emb_row(
     split_filename_col: str = "filename",
 ) -> np.ndarray:
     """
-    Links dataset samples to their global embedding-row ids so evaluation results can
-    be aligned back to the curated Jaguar split metadata.
+    Map dataset-local sample order to the global emb_row ids stored in the split table.
     """
     split_sub = split_df[split_df["split_final"] == split].copy()
     split_sub[split_filename_col] = split_sub[split_filename_col].astype(str)
@@ -86,8 +84,7 @@ def map_emb_rows_to_local_indices(
     local_to_emb_row: np.ndarray,
 ) -> np.ndarray:
     """
-    Converts global embedding-row ids into dataset-local indices so selected Jaguar samples
-    can be retrieved from the current split.
+    Convert global emb_row ids back into dataset-local indices for the current split dataset.
     """
     emb_rows = np.asarray(emb_rows, dtype=np.int64)
 
@@ -111,8 +108,7 @@ def build_eval_context(
     eval_val_setting: str | None = None,
 ) -> EvalContext:
     """
-    Prepares the shared evaluation setup for one Jaguar Re-ID experiment, including
-    the trained model, curated splits, and metadata needed for later analysis.
+    Build the shared evaluation context for one trained run, including datasets, model, and split metadata.
     """
 
     parquet_root = resolve_path(config["data"]["split_data_path"], EXPERIMENTS_STORE)
@@ -132,6 +128,7 @@ def build_eval_context(
         train_processing_fn=train_processing_fn,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     num_classes = len(train_ds.label_to_idx)
@@ -175,8 +172,7 @@ def build_eval_context(
 @dataclass
 class RetrievalState:
     """
-    Prepared query-gallery retrieval state. Stores everything needed to 
-    evaluate Jaguar query-gallery retrieval consistently.
+    Prepared retrieval state containing embeddings, labels, similarities, and burst metadata for query-gallery evaluation.
     """
     q_global: np.ndarray
     g_global: np.ndarray
@@ -187,8 +183,10 @@ class RetrievalState:
     burst_g: np.ndarray
 
 
-def _l2_normalize(emb: np.ndarray) -> np.ndarray:
-    """Normalizes embeddings so Jaguar image similarity can be compared on a common scale."""
+def l2_normalize(emb: np.ndarray) -> np.ndarray:
+    """
+    L2-normalize embedding vectors so cosine-style similarity is computed on a common scale.
+    """
     emb = np.asarray(emb, dtype=np.float32)
     return emb / (np.linalg.norm(emb, axis=1, keepdims=True) + 1e-12)
 
@@ -203,26 +201,23 @@ def build_query_gallery_retrieval_state(
     split_df: pd.DataFrame,
 ) -> RetrievalState:
     """
-    Build rectangular query-gallery retrieval state from already extracted embeddings. It includes 
-    burst metadata so trivial same-burst matches can be excluded during evaluation.
+    Build the full query-gallery retrieval state from embeddings, labels, indices, and burst metadata.
     """
     q_global = np.asarray(query_global_indices, dtype=np.int64)
     g_global = np.asarray(gallery_global_indices, dtype=np.int64)
 
-    emb_q = _l2_normalize(query_embeddings)
-    emb_g = _l2_normalize(gallery_embeddings)
+    emb_q = l2_normalize(query_embeddings)
+    emb_g = l2_normalize(gallery_embeddings)
 
     # Rectangular Similarity [N, M]: Row i = query i, Col j = gallery item j
     sim_matrix = emb_q @ emb_g.T
 
-    # Filter labels
     labels_q = np.asarray(query_labels)
     labels_g = np.asarray(gallery_labels)
 
-    # burst filtering: Skip same-burst matches so “easy positives” aren’t just near-duplicate frames.
     bg = split_df.set_index("emb_row")["burst_group_id"]
-    burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
-    burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
+    burst_q = bg.reindex(q_global).to_numpy()
+    burst_g = bg.reindex(g_global).to_numpy()
 
     return RetrievalState(
         q_global=q_global,
@@ -235,7 +230,6 @@ def build_query_gallery_retrieval_state(
     )
 
 
-
 def build_query_gallery_retrieval_state_from_sim(
     sim_matrix: np.ndarray,
     query_global_indices: np.ndarray,
@@ -244,6 +238,9 @@ def build_query_gallery_retrieval_state_from_sim(
     gallery_labels: np.ndarray,
     split_df: pd.DataFrame,
 ) -> RetrievalState:
+    """
+    Build the same retrieval state structure when a similarity matrix is already available.
+    """
     q_global = np.asarray(query_global_indices, dtype=np.int64)
     g_global = np.asarray(gallery_global_indices, dtype=np.int64)
 
@@ -260,14 +257,15 @@ def build_query_gallery_retrieval_state_from_sim(
         burst_q=burst_q,
         burst_g=burst_g,
     )
+
+
 # ============================================================
 # Ranking / evaluation
 # ============================================================
 
 def get_ranked_candidates_for_query(retrieval: RetrievalState, i: int):
     """
-    Builds the valid ranked gallery list for one Jaguar query after excluding
-    trivial self-matches and same-burst images.
+    Build the valid ranked gallery list for one query after removing self-matches and same-burst items.
     """
     # Get ranks for specific query (descending similarity); processes row i of sim_matrix
     sims_i = retrieval.sim_matrix[i]
@@ -309,8 +307,12 @@ def evaluate_query_gallery_retrieval(
     retrieval: RetrievalState,
 ) -> tuple[pd.DataFrame, dict]:
     """
-    Computes per-query and overall Jaguar retrieval performance from a prepared
-    query-gallery retrieval setup.
+    Compute per-query retrieval metrics and aggregate summary statistics
+    from a prepared retrieval state.
+
+    Strict filtering:
+    - excludes same-global-index matches (original counterpart / self-match)
+    - excludes same-burst matches only when both burst ids are present
     """
     query_rows = []
     ap_list = []
@@ -318,24 +320,50 @@ def evaluate_query_gallery_retrieval(
 
     n_queries = len(retrieval.q_global)
 
-    # Iterate over queries
     for i in tqdm(range(n_queries), desc="Evaluating Retrieval"):
-        q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
+        q_idx_global = int(retrieval.q_global[i])
+        q_label = retrieval.labels_q[i]
+        q_burst = retrieval.burst_q[i]
 
-        if len(ranked_candidates) == 0:
+        sims = retrieval.sim_matrix[i]
+        g_idx = retrieval.g_global
+        g_labels = retrieval.labels_g
+        g_bursts = retrieval.burst_g
+
+        valid_mask = np.ones(len(g_idx), dtype=bool)
+
+        # 1) remove exact same sample / original counterpart
+        same_index_mask = (g_idx == q_idx_global)
+        valid_mask &= ~same_index_mask
+
+        # 2) remove same-burst samples only if both burst ids are present
+        q_burst_present = pd.notna(q_burst)
+        g_burst_present = pd.notna(g_bursts)
+        same_burst_mask = q_burst_present & g_burst_present & (g_bursts == q_burst)
+        valid_mask &= ~same_burst_mask
+
+        valid_positions = np.where(valid_mask)[0]
+        if len(valid_positions) == 0:
             continue
 
-        rels = np.array([int(c["is_same_id"]) for c in ranked_candidates], dtype=np.int64)
+        sims_valid = sims[valid_positions]
+        order = np.argsort(-sims_valid)
+        ranked_positions = valid_positions[order]
 
-        num_rel = rels.sum()
+        ranked_labels = g_labels[ranked_positions]
+        rels = (ranked_labels == q_label).astype(np.int64)
+
+        num_rel = int(rels.sum())
         if num_rel == 0:
             continue
 
         precision_at_k = np.cumsum(rels) / (np.arange(len(rels)) + 1)
         ap = float((precision_at_k * rels).sum() / num_rel)
 
-        rank1_correct = bool(ranked_candidates[0]["is_same_id"])
+        rank1_correct = bool(rels[0] == 1)
         first_pos_rank = int(np.where(rels == 1)[0][0] + 1)
+
+        top1_pos = ranked_positions[0]
 
         ap_list.append(ap)
         rank1_hits.append(rank1_correct)
@@ -343,14 +371,15 @@ def evaluate_query_gallery_retrieval(
         query_rows.append({
             "query_idx": q_idx_global,
             "query_label": q_label,
-            "n_gallery_valid": len(ranked_candidates),
-            "n_relevant": int(num_rel),
+            "query_burst": q_burst,
+            "n_gallery_valid": int(len(ranked_positions)),
+            "n_relevant": num_rel,
             "rank1_correct": rank1_correct,
             "ap": ap,
             "first_pos_rank": first_pos_rank,
-            "top1_idx": ranked_candidates[0]["gallery_global_idx"],
-            "top1_label": ranked_candidates[0]["gallery_label"],
-            "top1_sim": ranked_candidates[0]["sim"],
+            "top1_idx": int(retrieval.g_global[top1_pos]),
+            "top1_label": retrieval.labels_g[top1_pos],
+            "top1_sim": float(retrieval.sim_matrix[i, top1_pos]),
         })
 
     query_df = pd.DataFrame(query_rows)
@@ -366,8 +395,7 @@ def evaluate_query_gallery_retrieval(
 
 def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir: Path):
     """
-    Builds the shared original gallery used as the fixed reference for background-reliance
-    comparisons across query settings.
+    Build the fixed original gallery state used as the shared reference across query-setting comparisons.
     """
 
     ctx_orig = build_eval_context(
@@ -387,7 +415,6 @@ def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir
         cache_prefix="original_train",
     )
 
-    ##  !TODO klären welchen background die haben sollten
     val_embeddings_orig = load_or_extract_jaguarid_embeddings(
         model=ctx_orig.model,
         torch_ds=ctx_orig.val_ds,
@@ -417,13 +444,6 @@ def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir
     val_files = [str(s["filename"]) for s in ctx_orig.val_ds.samples]
     gallery_files_orig = train_files + val_files
 
-    #query_emb_rows = get_val_query_indices(
-    #    split_df=ctx_orig.split_df,
-    #    out_root=save_dir,
-    #    n_samples=config["evaluation"]["n_queries"],
-    #    seed=config["evaluation"]["seed"],
-    #)
-
     return {
         "ctx_orig": ctx_orig,
         "train_embeddings_orig": train_embeddings_orig,
@@ -441,11 +461,10 @@ def build_query_for_setting(
     setting: str,
 ) -> dict:
     """
-    Builds the query side for one background setting so retrieval can be compared
-    against the same fixed original gallery.
+    Build the query-side embeddings and metadata for one evaluation setting against the same fixed gallery.
     """
     val_processing_fn = build_eval_processing_fn(setting, config)
-
+    
     _, _, val_ds = load_split_jaguar_from_FO_export(
         PATHS.data_export / "splits_curated",
         overwrite_db=False,
@@ -454,6 +473,7 @@ def build_query_for_setting(
         train_processing_fn=None,
         val_processing_fn=val_processing_fn,
         include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
     )
 
     val_ds.transform = get_transforms(
@@ -499,6 +519,96 @@ def build_query_for_setting(
     }
 
 
+def build_val_query_for_setting(
+    config: dict,
+    ctx_val,
+    setting: str,
+) -> dict:
+    """
+    Build val-only query embeddings and metadata for one evaluation setting.
+
+    This is the val-only counterpart to build_query_for_setting(...):
+    queries come from the validation split under the requested setting,
+    and are intended to be evaluated against a val-only gallery.
+    """
+    val_processing_fn = build_eval_processing_fn(setting, config)
+
+    _, _, val_ds = load_split_jaguar_from_FO_export(
+        PATHS.data_export / "splits_curated",
+        overwrite_db=False,
+        parquet_path=ctx_val.parquet_root,
+        dataset_name="jaguar_splits_curated",
+        train_processing_fn=None,
+        val_processing_fn=val_processing_fn,
+        include_duplicates=config["split"]["include_duplicates"],
+        use_fiftyone=config["data"]["use_fiftyone"],
+    )
+
+    val_ds.transform = get_transforms(
+        config,
+        ctx_val.model.backbone_wrapper,
+        is_training=False,
+    )
+
+    val_local_to_emb_row = build_local_to_emb_row(
+        val_ds,
+        ctx_val.split_df,
+        split="val",
+    )
+
+    query_embeddings = load_or_extract_jaguarid_embeddings(
+        model=ctx_val.model,
+        torch_ds=val_ds,
+        split="val",
+        batch_size=config["inference"]["batch_size"],
+        num_workers=config["data"]["num_workers"],
+        use_tta=config["inference"]["use_tta"],
+        cache_prefix=f"{setting}_val",
+    )
+
+    return {
+        "query_embeddings": query_embeddings,
+        "query_labels": np.asarray(val_ds.labels),
+        "query_global_indices": val_local_to_emb_row,
+        "val_ds": val_ds,
+    }
+
+
+def build_val_only_retrieval_for_setting(
+    config: dict,
+    ctx_val,
+    gallery_embeddings_val: np.ndarray,
+    gallery_labels_val: np.ndarray,
+    gallery_global_indices_val: np.ndarray,
+    setting: str,
+) -> tuple[RetrievalState, dict]:
+    """
+    Build a full val-only retrieval state for one query setting.
+
+    Query side:
+        validation split under `setting`
+    Gallery side:
+        original validation split only
+    """
+    query = build_val_query_for_setting(
+        config=config,
+        ctx_val=ctx_val,
+        setting=setting,
+    )
+
+    retrieval = build_query_gallery_retrieval_state(
+        query_embeddings=query["query_embeddings"],
+        gallery_embeddings=gallery_embeddings_val,
+        query_global_indices=query["query_global_indices"],
+        gallery_global_indices=gallery_global_indices_val,
+        query_labels=query["query_labels"],
+        gallery_labels=gallery_labels_val,
+        split_df=ctx_val.split_df,
+    )
+
+    return retrieval, query
+
+
 def build_val_gallery_base(
     config: dict,
     train_config: dict,
@@ -506,8 +616,7 @@ def build_val_gallery_base(
     eval_val_setting: str = "original",
 ) -> dict:
     """
-    Builds a pure val-vs-val retrieval base:
-    the same val split provides both query and gallery candidates.
+    Build a val-only retrieval base where the validation split provides both queries and gallery candidates.
     """
     ctx_val = build_eval_context(
         config=config,
@@ -523,7 +632,7 @@ def build_val_gallery_base(
         batch_size=config["inference"]["batch_size"],
         num_workers=config["data"]["num_workers"],
         use_tta=config["inference"]["use_tta"],
-        cache_prefix=f"{eval_val_setting}_val",
+        cache_prefix=f"{eval_val_setting}_val_gallery",
     )
 
     val_labels = np.asarray(ctx_val.val_ds.labels)
@@ -539,6 +648,100 @@ def build_val_gallery_base(
     }
 
 
+def build_retrieval_diagnostics_per_query(
+    retrieval: RetrievalState,
+) -> pd.DataFrame:
+    """
+    Build per-query retrieval diagnostics using the shared strict protocol.
+
+    Strict filtering:
+    - excludes same-global-index matches
+    - excludes same-burst matches
+    """
+    rows = []
+
+    n_queries = len(retrieval.q_global)
+
+    for i in tqdm(range(n_queries), desc="Building Retrieval Diagnostics"):
+        q_idx_global = int(retrieval.q_global[i])
+        q_label = retrieval.labels_q[i]
+        q_burst = retrieval.burst_q[i]
+
+        if pd.notna(q_burst):
+            n_queries_with_query_burst += 1
+        else:
+            n_queries_without_query_burst += 1
+
+        sims = retrieval.sim_matrix[i]
+        g_idx = retrieval.g_global
+        g_labels = retrieval.labels_g
+        g_bursts = retrieval.burst_g
+
+        valid_mask = np.ones(len(g_idx), dtype=bool)
+        valid_mask &= (g_idx != q_idx_global)
+
+        if q_burst != -1:
+            valid_mask &= (g_bursts != q_burst)
+
+        valid_positions = np.where(valid_mask)[0]
+        if len(valid_positions) == 0:
+            rows.append({
+                "query_idx": q_idx_global,
+                "query_label": q_label,
+                "gold_rank": np.nan,
+                "is_rank1": False,
+                "is_rank5": False,
+                "best_gold_similarity": np.nan,
+                "best_impostor_similarity": np.nan,
+                "margin_gold_minus_impostor": np.nan,
+            })
+            continue
+
+        sims_valid = sims[valid_positions]
+        order = np.argsort(-sims_valid)
+        ranked_positions = valid_positions[order]
+
+        ranked_labels = g_labels[ranked_positions]
+        rels = (ranked_labels == q_label)
+
+        if not rels.any():
+            rows.append({
+                "query_idx": q_idx_global,
+                "query_label": q_label,
+                "gold_rank": np.nan,
+                "is_rank1": False,
+                "is_rank5": False,
+                "best_gold_similarity": np.nan,
+                "best_impostor_similarity": np.nan,
+                "margin_gold_minus_impostor": np.nan,
+            })
+            continue
+
+        gold_scores = sims[valid_positions][g_labels[valid_positions] == q_label]
+        impostor_scores = sims[valid_positions][g_labels[valid_positions] != q_label]
+
+        best_gold_similarity = float(gold_scores.max()) if len(gold_scores) > 0 else np.nan
+        best_impostor_similarity = float(impostor_scores.max()) if len(impostor_scores) > 0 else np.nan
+
+        first_gold_rank = int(np.where(rels)[0][0] + 1)
+
+        rows.append({
+            "query_idx": q_idx_global,
+            "query_label": q_label,
+            "gold_rank": first_gold_rank,
+            "is_rank1": first_gold_rank <= 1,
+            "is_rank5": first_gold_rank <= 5,
+            "best_gold_similarity": best_gold_similarity,
+            "best_impostor_similarity": best_impostor_similarity,
+            "margin_gold_minus_impostor": (
+                best_gold_similarity - best_impostor_similarity
+                if not np.isnan(best_impostor_similarity) else np.nan
+            ),
+        })
+
+    return pd.DataFrame(rows)
+
+
 def save_retrieval_results_per_id(
     save_dir: Path,
     setting: str,
@@ -547,7 +750,7 @@ def save_retrieval_results_per_id(
     identity_df: pd.DataFrame | None = None,
 ) -> dict:
     """
-    Saves retrieval results for one evaluation setting.
+    Save per-query, optional per-identity, and summary retrieval results for one evaluation setting.
     """
     out_dir = save_dir / setting
     ensure_dir(out_dir)
@@ -568,7 +771,7 @@ def save_retrieval_results_per_id(
 
 def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> list[dict]:
     """
-    Resolve global val emb_row ids to the corresponding val dataset samples.
+    Resolve selected global validation emb_row ids back to the corresponding validation dataset samples.
     """
     val_local_idx = map_emb_rows_to_local_indices(
         query_emb_rows,
@@ -577,10 +780,10 @@ def select_val_samples_from_emb_rows(ctx_orig, query_emb_rows: np.ndarray) -> li
     return [ctx_orig.val_ds.samples[int(i)] for i in val_local_idx]
 
 
-
-
 def load_checkpoint_into_model(model: JaguarIDModel, checkpoint_path: Path) -> None:
-    """Load checkpoint weights into a JaguarIDModel."""
+    """
+    Load checkpoint weights into a JaguarIDModel and switch it to eval mode on the configured device.
+    """
     checkpoint = torch.load(
         checkpoint_path,
         map_location=DEVICE,

@@ -13,6 +13,8 @@ from torch.utils.data import Dataset
 import torchvision.transforms.v2 as transforms
 
 class JaguarDataset(Dataset):
+    """Dataset wrapper for loading Jaguar Re-ID samples from split files, manifests, or raw test images."""
+
     def __init__(
         self,
         base_root: Union[str, Path],
@@ -27,6 +29,7 @@ class JaguarDataset(Dataset):
         filename_key: str = "filename",
         samples_list: Optional[List[Dict[str, Any]]] = None,
     ):
+        """Initialize the dataset from an explicit sample list, a split parquet, a manifest, or raw test images."""
         self.base_root = Path(base_root)
         self.data_root = Path(data_root).resolve() if data_root is not None else None
         self.transform = transform
@@ -108,12 +111,15 @@ class JaguarDataset(Dataset):
             self.labels_idx = [self.label_to_idx[l] for l in self.labels]
 
     def __len__(self):
+        """Return the number of samples in the dataset."""
         return len(self.samples)
 
     def set_epoch(self, epoch: int):
+        """Store the current epoch so sample-dependent processing can access it."""
         self.epoch = int(epoch)
 
     def _resolve_path(self, p: str) -> Path:
+        """Resolve a sample filepath to an existing train or test image path under the data root."""
         pp = Path(p)
         if pp.is_absolute() and pp.exists():
             return pp
@@ -125,6 +131,7 @@ class JaguarDataset(Dataset):
         return pp
     
     def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Load one sample, apply optional preprocessing and transforms, and return model-ready outputs."""
         s = dict(self.samples[idx])
         s["_epoch"] = self.epoch
         s.setdefault("filename", s.get(self.filename_key) or Path(s[self.filepath_key]).name)
@@ -167,9 +174,12 @@ class JaguarDataset(Dataset):
 # 1. SPECIALIZED DATASET (Inherits from your JaguarDataset)
 # ---------------------------------------------------------
 class MaskAwareJaguarDataset(JaguarDataset):
+    """Specialized Jaguar dataset that returns original, jaguar-only, and background-only image variants."""
+
     def __init__(self, 
                  jaguar_model,
                  *args, **kwargs):
+        """Initialize mask-aware preprocessing using the model's expected input size and normalization settings."""
         
         super().__init__(*args, **kwargs)
         
@@ -199,6 +209,7 @@ class MaskAwareJaguarDataset(JaguarDataset):
         self.mask_fill_color = (128, 128, 128)
 
     def __getitem__(self, idx: int) -> Dict[str, Any]:
+        """Load one RGBA sample, derive foreground and background masks, and return three normalized image variants."""
         s = self.samples[idx]
         img_path = self._resolve_path(s[self.filepath_key])
         
@@ -242,4 +253,3 @@ class MaskAwareJaguarDataset(JaguarDataset):
             "filepath": str(img_path),
             "id": str(s.get("ground_truth", {}).get("label", "unknown"))
         }
-        

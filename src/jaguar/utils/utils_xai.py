@@ -5,25 +5,42 @@ import torch
 import numpy as np
 import pandas as pd
 import re
+import cv2
 
 
-def normalize_heatmap(h):
-    """
-    h: [H,W] tensor/ndarray
-    returns [H,W] in [0,1]
-    """
-    if isinstance(h, torch.Tensor):
-        h = h.detach().cpu().float().numpy()
-    h = h.astype(np.float32)
+def overlay_heatmap(
+    img_rgb: np.ndarray,
+    saliency_2d: np.ndarray,
+    alpha: float = 0.45,
+    percentile: float = 99.0,
+    threshold: float = 0.25,
+) -> np.ndarray:
+    s = np.abs(saliency_2d).astype(np.float32)
 
-    h_min = h.min()
-    h_max = h.max()
-    if h_max - h_min < 1e-12:
-        return np.zeros_like(h, dtype=np.float32)
-    return (h - h_min) / (h_max - h_min)
+    if s.shape != img_rgb.shape[:2]:
+        s = cv2.resize(s, (img_rgb.shape[1], img_rgb.shape[0]))
+
+    hi = np.percentile(s, percentile)
+    if hi <= 1e-8:
+        hi = float(s.max())
+
+    s = np.clip(s / (hi + 1e-8), 0, 1)
+    s[s < threshold] = 0.0
+
+    heat = cv2.applyColorMap(np.uint8(255 * s), cv2.COLORMAP_TURBO)
+    heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB)
+
+    if img_rgb.dtype != np.uint8:
+        img_rgb = np.clip(img_rgb, 0, 1)
+        img_rgb = (img_rgb * 255).astype(np.uint8)
+
+    return cv2.addWeighted(img_rgb, 1 - alpha, heat, alpha, 0)
 
 
 def find_module_name(model: torch.nn.Module, target_module: torch.nn.Module) -> str:
+    """
+    Return the dotted module name of a given submodule inside the model.
+    """
     for name, m in model.named_modules():
         if m is target_module:
             return name
@@ -31,6 +48,9 @@ def find_module_name(model: torch.nn.Module, target_module: torch.nn.Module) -> 
 
 
 def save_vec(save_dir: Path, prefix: str, expl: str, pt: str, vec: np.ndarray) -> str:
+    """
+    Save one metric vector as a .npy file and return the stored filename.
+    """
     fname = f"{prefix}__{expl}__{pt}.npy"
     p = Path(save_dir) / fname
     np.save(p, np.asarray(vec, dtype=np.float32))
@@ -41,7 +61,9 @@ def save_vec(save_dir: Path, prefix: str, expl: str, pt: str, vec: np.ndarray) -
 # ============================================================
 
 def get_curated_indices(split_df: pd.DataFrame, splits: Sequence[str]) -> np.ndarray:
-    """Return global emb_row ids for curated samples in the requested splits."""
+    """
+    Return global embedding-row indices for curated samples in the requested splits.
+    """
     df = split_df[
         split_df["split_final"].isin(list(splits))
         & split_df["keep_curated"].fillna(False).astype(bool)
@@ -50,7 +72,9 @@ def get_curated_indices(split_df: pd.DataFrame, splits: Sequence[str]) -> np.nda
 
 
 def sample_indices(indices: np.ndarray, n_samples: int, seed: int) -> np.ndarray:
-    """Deterministically sample up to n_samples indices without replacement."""
+    """
+    Deterministically sample up to n_samples indices without replacement.
+    """
     indices = np.asarray(indices, dtype=np.int64).reshape(-1)
 
     if len(indices) == 0:
@@ -68,8 +92,7 @@ def get_val_query_indices(
     seed: int,
 ) -> np.ndarray:
     """
-    Cache the exact global emb_row query subset so runs can be compared on the
-    same validation images across repeated runs.
+    Build or reload the fixed curated validation query subset used across repeated runs.
     """
     n_tag = "full" if n_samples is None else str(n_samples)
     idx_path = out_root / f"xai_val_idx_n{n_tag}.npy"
@@ -87,8 +110,7 @@ def get_val_query_indices(
 
 def resolve_n_samples(n_samples: int | str | None) -> int | None:
     """
-    Resolve configured sample count.
-    Returns None for full-split usage.
+    Resolve the configured sample count, treating full/all as the full split.
     """
     if n_samples is None:
         return None
@@ -104,7 +126,7 @@ def resolve_n_samples(n_samples: int | str | None) -> int | None:
 
 def format_n_samples_tag(n_samples: int | str | None) -> str:
     """
-    Stable tag for run/file names.
+    Convert the configured sample count into a stable filename/run tag.
     """
     resolved = resolve_n_samples(n_samples)
     return "full" if resolved is None else str(resolved)
@@ -112,12 +134,10 @@ def format_n_samples_tag(n_samples: int | str | None) -> str:
 
 def resolve_vec_path(vec_path_raw: str, metrics_dir: Path) -> Path:
     """
-    Resolves a metric vector path from the summary CSV.
+    Resolve a stored metric-vector path against the current metrics directory layout.
 
-    Supports:
-    1) Absolute path that exists
-    2) Absolute path that used to be under .../xai/<run>/... and is now under .../xai/similarity/<run>/...
-    3) Relative path (or filename) relative to metrics_dir
+    Supports existing absolute paths, relative paths, and older absolute paths from
+    the pre-similarity directory structure.
     """
     if not isinstance(vec_path_raw, str) or not vec_path_raw:
         raise FileNotFoundError(f"Empty vec path: {vec_path_raw}")
@@ -156,14 +176,13 @@ _RUN_RE = re.compile(r"^(?P<model>.+)__(?P<split>.+)__n(?P<n>\d+)__seed(?P<seed>
 
 def load_all_vectors(run_root: Path) -> pd.DataFrame:
     """
-    Returns long dataframe with per-sample metric values:
-    model, split, n_samples, seed, run_id, explainer, pair_type, metric, sample_i, value
+    Load all per-sample XAI metric vectors under a run root into one long dataframe.
     """
     out = []
 
-    for summary_csv in run_root.rglob("metrics/xai_summary_metrics.csv"):
-        metrics_dir = summary_csv.parent          # .../metrics
-        run_dir = metrics_dir.parent              # .../<model>__<split>__n..__seed..
+    for summary_csv in run_root.rglob("xai_metrics/xai_summary_metrics.csv"):
+        metrics_dir = summary_csv.parent          
+        run_dir = metrics_dir.parent              
         m = _RUN_RE.match(run_dir.name)
         if m is None:
             continue
@@ -211,8 +230,7 @@ def load_all_vectors(run_root: Path) -> pd.DataFrame:
 
 def load_all_refs(xai_similarity_root: Path) -> pd.DataFrame:
     """
-    Loads and concatenates all refs_n*.parquet under xai_similarity_root.
-    Adds run metadata columns: model, split, n_samples, seed, run_id.
+    Load and concatenate all reference parquet files and attach run metadata columns.
     """
     dfs = []
 
@@ -243,6 +261,9 @@ def load_all_refs(xai_similarity_root: Path) -> pd.DataFrame:
 
 
 def summarize_retrieval_variant(df: pd.DataFrame, suffix: str) -> dict:
+    """
+    Summarize retrieval quality for one query variant identified by its column suffix.
+    """
     return {
         "rank1": float(df[f"is_rank1_{suffix}"].mean()),
         "rank5": float(df[f"is_rank5_{suffix}"].mean()),
@@ -253,6 +274,9 @@ def summarize_retrieval_variant(df: pd.DataFrame, suffix: str) -> dict:
 
 
 def summarize_bg_vs_jaguar(df: pd.DataFrame) -> dict:
+    """
+    Summarize whether background-only queries outperform jaguar-only queries.
+    """
     return {
         "share_bg_better_rank": float(df["bg_better_than_jag_rank"].mean()),
         "share_bg_better_rank1": float(df["bg_better_than_jag_rank1"].mean()),
@@ -264,6 +288,9 @@ def summarize_bg_vs_jaguar(df: pd.DataFrame) -> dict:
 
 
 def summarize_embedding_stability(df: pd.DataFrame) -> dict:
+    """
+    Summarize how strongly original embeddings align with jaguar-only versus background-only queries.
+    """
     delta = df["stability_bg_only"] - df["stability_jaguar_only"]
     return {
         "mean_stability_jaguar_only": float(df["stability_jaguar_only"].mean()),
@@ -280,6 +307,9 @@ def build_bg_sensitivity_summaries(
     retrieval_df: pd.DataFrame,
     similarity_res: pd.DataFrame,
 ) -> dict:
+    """
+    Merge retrieval and embedding results and build the main foreground-vs-background summaries.
+    """
     analysis_df = retrieval_df.merge(
         similarity_res,
         on=["id", "filepath"],
@@ -314,3 +344,21 @@ def build_bg_sensitivity_summaries(
         "similarity_summary": similarity_summary,
     }
 
+
+def build_val_resolver(ctx):
+    """
+    Resolve a global val emb_row back to the corresponding validation dataset sample.
+    """
+    emb_row_to_local = {
+        int(emb_row): int(local_idx)
+        for local_idx, emb_row in enumerate(ctx.val_local_to_emb_row)
+    }
+
+    def resolve_sample(sample_idx: int):
+        sample_idx = int(sample_idx)
+        if sample_idx not in emb_row_to_local:
+            raise KeyError(f"emb_row {sample_idx} not found in validation mapping")
+        local_idx = emb_row_to_local[sample_idx]
+        return ctx.val_ds, local_idx, "val"
+
+    return resolve_sample

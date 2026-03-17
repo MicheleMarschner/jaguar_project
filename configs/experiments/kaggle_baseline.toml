@@ -4,7 +4,8 @@ description = "Train one single model on the data"
 base_config = "base/kaggle_base"
 mode = "train"
 train_type = "kaggle"
-output_profile = "baseline"
+output_profile = "base"
+setup_name = "base"
 
 [[experiment.runs]]
 experiment_name = "baseline_init"
@@ -12,10 +13,7 @@ head_type = "arcface"   # Options: "arcface"
 m = 0.50
 use_projection = true
 use_forward_features = false
-include_duplicates = true
-split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
 use_balanced_sampler = false    # Set to true to handle class imbalance
-save_dir = "checkpoints/round_2/"  
 # ---Fine-tuning Params---
 unfreeze_epoch = 0       # At epoch 5, start training part of the backbone; ; if set to 0 the backbone stays frozen
 ema = false

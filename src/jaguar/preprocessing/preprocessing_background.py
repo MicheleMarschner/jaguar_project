@@ -13,6 +13,8 @@ import random
 from pathlib import Path
 from PIL import Image, ImageFilter
 
+from jaguar.config import DATA_ROOT
+
 
 def rgba_on_solid_bg(rgba: Image.Image, color=(128, 128, 128)) -> Image.Image:
     """Composite an RGBA cutout onto a solid RGB background."""
@@ -74,6 +76,7 @@ class ImageProcessor:
         This makes augmentation reproducible while still allowing background changes across epochs.
         """
         bg_dir = Path(bg_dir)
+        bg_path = DATA_ROOT / bg_dir
         bg_files = [p for p in bg_dir.iterdir() if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
         if not bg_files:
             raise ValueError(f"No backgrounds in {bg_dir}")

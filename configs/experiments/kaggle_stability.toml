@@ -1,0 +1,42 @@
+[experiment]
+name = "kaggle_stability"
+description = "Stability analysis for the top-ranked model on the Kaggle leaderboard and for variations in the grid of optimizers and schedulers."
+base_config = "base/kaggle_base"
+mode = "kaggle"
+setup_name = "kaggle_stability"
+output_profile = "stability"
+
+[[experiment.runs]]
+experiment_name = "stability_seed_42"
+backbone_name = "EVA-02"
+optimizer_type = "Adam" 
+scheduler_type = "JaguardIdScheduler"
+seed = [42]
+
+[[experiment.runs]]
+experiment_name = "stability_seed_123"
+backbone_name = "EVA-02"
+optimizer_type = "Adam" 
+scheduler_type = "JaguardIdScheduler"
+seed = [123]
+
+[[experiment.runs]]
+experiment_name = "stability_seed_256"
+backbone_name = "EVA-02"
+optimizer_type = "Adam" 
+scheduler_type = "JaguardIdScheduler"
+seed = [256]
+
+[[experiment.runs]]
+experiment_name = "stability_seed_512"
+backbone_name = "EVA-02"
+optimizer_type = "Adam" 
+scheduler_type = "JaguardIdScheduler"
+seed = [512]
+
+[[experiment.runs]]
+experiment_name = "stability_seed_1024"
+backbone_name = "EVA-02"
+optimizer_type = "Adam" 
+scheduler_type = "JaguardIdScheduler"
+seed = [1024]

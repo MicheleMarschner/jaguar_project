@@ -3,6 +3,9 @@ from typing import Any
 
 
 def build_backbone_stats(model, config: dict) -> dict[str, Any]:
+    """
+    Collect core backbone and head statistics for reporting and comparison across runs.
+    """
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     total_params = sum(p.numel() for p in model.parameters())
 
@@ -17,6 +20,9 @@ def build_backbone_stats(model, config: dict) -> dict[str, Any]:
 
 
 def build_timing_stats(epoch_times: list[float]) -> dict[str, Any]:
+    """
+    Summarize per-epoch training times into total, average, and count statistics.
+    """
     total_train_time_sec = float(sum(epoch_times))
     avg_epoch_time_sec = float(total_train_time_sec / len(epoch_times)) if epoch_times else 0.0
 
@@ -29,14 +35,17 @@ def build_timing_stats(epoch_times: list[float]) -> dict[str, Any]:
 
 
 def build_output_artifacts(
-    *,
     run_dir: Path,
     config: dict,
     final_results: dict,
     train_history: list[dict],
     model=None,
     epoch_times: list[float] | None = None,
+    final_rare_results: dict | None = None,
 ) -> dict[str, Any]:
+    """
+    Assemble the standard output artifact bundle for one training run.
+    """
     artifacts: dict[str, Any] = {
         "run_dir": run_dir,
         "config": config,
@@ -51,4 +60,3 @@ def build_output_artifacts(
         artifacts["timing_stats"] = build_timing_stats(epoch_times)
 
     return artifacts
-

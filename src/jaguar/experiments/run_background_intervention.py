@@ -1,25 +1,11 @@
 """
-Background-intervention Evaluation for Jaguar Re-ID.
+Run background-intervention evaluation for Jaguar re-identification.
 
-Project role:
-- Evaluates retrieval performance under different query background manipulations.
-- Compares each manipulated query setting against the same original gallery.
-- Quantifies performance drops relative to the unmodified query condition.
-
-Procedure:
-- Build a fixed original gallery from the shared evaluation setup.
-- Construct query sets for multiple background settings (e.g., original, gray, blur, black).
-- Run retrieval for each setting against the same gallery.
-- Save per-query results and aggregate summaries for each setting.
-- Compute per-query and aggregate deltas relative to the original setting.
-
-Purpose:
-- Measure how sensitive retrieval performance is to background changes.
-- Test whether the model relies on background information rather than identity cues alone.
+This module compares multiple query background variants against a fixed
+original gallery and measures retrieval changes relative to the original
+query condition.
 """
 import os
-
-from jaguar.experiments.experiment_output import save_requested_outputs
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 from pathlib import Path
@@ -29,7 +15,8 @@ import argparse
 from jaguar.config import PATHS
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.utils.utils import ensure_dir
-from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, evaluate_query_gallery_retrieval
+from jaguar.experiments.experiment_output import save_requested_outputs
+from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, build_val_gallery_base, build_val_only_retrieval_for_setting, evaluate_query_gallery_retrieval
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_intervention_results
 
 def save_retrieval_results(
@@ -38,9 +25,7 @@ def save_retrieval_results(
     query_df: pd.DataFrame,
     summary: dict,
 ) -> dict:
-    """
-    Saves per-query and summary retrieval outputs for one background setting.
-    """
+    """Save per-query and summary retrieval outputs for one background setting."""
     query_df = query_df.copy()
     query_df["setting"] = setting
 
@@ -69,10 +54,7 @@ def aggregate_and_save_background_results(
     all_summaries: list[dict],
     save_dir: Path,
 ) -> dict:
-    """
-    Aggregates all background-setting results, computes deltas against the original
-    setting, and saves the combined outputs.
-    """
+    """Aggregate setting-level results, compute deltas to the original setting, and save them."""
     per_query_all = pd.concat(all_query_dfs, ignore_index=True)
     summary_all = pd.DataFrame(all_summaries)
 
@@ -130,22 +112,20 @@ def aggregate_and_save_background_results(
 
 
 def run_background_intervention(config, save_dir):
-    """
-    Runs the full background-intervention evaluation by comparing several query background
-    settings against the same original gallery.
-    """
+    """Run retrieval evaluation for multiple query background settings against one fixed gallery."""
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
     ensure_dir(save_dir)
 
-    base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
+    base = build_val_gallery_base(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+    ctx_val = base["ctx_val"]
 
-    ctx_orig = base["ctx_orig"]
-    gallery_embeddings_orig = base["gallery_embeddings_orig"]
-    gallery_labels_orig = base["gallery_labels_orig"]
-    gallery_global_indices_orig = base["gallery_global_indices_orig"]
-
-    settings = ["original", "gray_bg", "blur_bg", "black_bg"]
+    settings = ["original", "gray_bg", "black_bg", "blur_bg", "random_bg", "mixed_original_random_bg"]
 
     if "original" not in settings:
         raise ValueError(
@@ -156,22 +136,15 @@ def run_background_intervention(config, save_dir):
     all_summaries = []
 
     for setting in settings:
-        query = build_query_for_setting(
+        retrieval, _ = build_val_only_retrieval_for_setting(
             config=config,
-            ctx_orig=ctx_orig,
+            ctx_val=ctx_val,
+            gallery_embeddings_val=base["val_embeddings"],
+            gallery_labels_val=base["val_labels"],
+            gallery_global_indices_val=base["val_global_indices"],
             setting=setting,
         )
 
-        retrieval = build_query_gallery_retrieval_state(
-                query_embeddings=query["query_embeddings"],
-                gallery_embeddings=gallery_embeddings_orig,
-                query_global_indices=query["query_global_indices"],
-                gallery_global_indices=gallery_global_indices_orig,
-                query_labels=query["query_labels"],
-                gallery_labels=gallery_labels_orig,
-                split_df=ctx_orig.split_df,
-            )
-        
         query_df, summary = evaluate_query_gallery_retrieval(retrieval)
         result = save_retrieval_results(save_dir, setting, query_df, summary)
         
@@ -188,6 +161,7 @@ def run_background_intervention(config, save_dir):
 
 
 def parse_args():
+    """Parse command-line arguments for the background intervention runner."""
     parser = argparse.ArgumentParser(description="Run background intervention evaluation")
     parser.add_argument("--base_config", type=str, required=True)
     parser.add_argument("--experiment_config", type=str, required=True)
@@ -196,6 +170,7 @@ def parse_args():
 
 
 def main():
+    """Load configuration, run background intervention evaluation, and save outputs."""
     args = parse_args()
 
     base_config = load_toml_config(args.base_config)
@@ -225,7 +200,6 @@ def main():
     if run is not None:
         run.finish()
 
-
     artifacts = {
         "run_dir": run_dir,
         "config": config,
@@ -236,6 +210,5 @@ def main():
     print(f"[Summary] {result['summary_path']}")
 
 
-
 if __name__ == "__main__":
-    main()  
+    main()

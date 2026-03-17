@@ -463,14 +463,15 @@ def run_phash_sweep(
 
 
 def create_splits_and_curate(
-        use_fiftyone,
         split_strategy, 
         include_duplicates, 
         train_k_per_dedup, 
         val_k_per_dedup, 
         phash_thresh_dedup, 
         val_split_size, 
-        seed):
+        seed,
+        use_fiftyone,
+    ):
 
     fo_dataset_name = "jaguar_burst"
     paths = get_split_paths(

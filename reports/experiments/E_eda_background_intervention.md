@@ -1,11 +1,4 @@
-Possible Sub RQs:
-Which query background manipulations are most harmful to jaguar Re-ID retrieval?
-Do background manipulations induce systematic rank-1 failures or only mild score degradation?
-“Performance degradation under query-side background manipulations indicates that retrieval is not fully invariant to background context.”
-
-
-
-# E0X (Q1) Background Intervention
+# E0X (Q1) Background Intervention (Data - Round 1)
 
 **Experiment Group:** Robustness and diagnostic experiments
 
@@ -15,85 +8,108 @@ How robust is retrieval performance to different query-side background intervent
 ---
 
 ## Intervention
-We kept the trained model and the gallery fixed in the original condition and modified only the query background. We evaluated four query settings: `original`, `gray_bg`, `blur_bg`, and `black_bg`. Retrieval performance was measured with mAP and Rank-1, and all manipulated settings were compared against the original query condition.
+To isolate the effect of background context at inference time, we kept the trained model and the gallery fixed and modified only the query background. The model was trained on the original round_1 images, while evaluation was performed under six query settings: `original`, `gray_bg`, `black_bg`, `blur_bg`, `random_bg`, and `mixed_original_random_bg`.
 
-### Main Findings
-- **Best condition:** [original / other] with **mAP = [x.xxx]** and **Rank-1 = [x.xxx]**.
-- The strongest degradation was observed under **[setting]**, with **ΔmAP = [x.xxx]** and **ΔRank-1 = [x.xxx]** relative to the original queries.
-- Across manipulations, the effect was **[small / moderate / substantial]**, indicating that retrieval is **[largely robust / somewhat sensitive / strongly sensitive]** to background changes in the query image.
+The gallery was built from the validation split in the original condition, and all manipulated query variants were retrieved against this same fixed gallery. Exact self-matches were excluded during evaluation, and same-burst matches were also removed to avoid trivial near-duplicate retrieval. The goal of this setup is therefore to measure how strongly retrieval changes when only the query-side background is altered.
 
-### Main Results Table
+<p align="center"><img src="../../results/round_1/eda_background_intervention/eva02_triplet_bg_orig_gray_black_rdn_blur_mixed/qualitative_backgrounds/Marcela_background_variants.png" width="70%" /></p>
+<p align="center"><em>example query background variants.</em></p>
 
-| setting  | mAP | Rank-1 | ΔmAP vs original | ΔRank-1 vs original |
-|----------|-----|--------|------------------|---------------------|
-| original | [ ] | [ ]    | [ ]              | [ ]                 |
-| gray_bg  | [ ] | [ ]    | [ ]              | [ ]                 |
-| blur_bg  | [ ] | [ ]    | [ ]              | [ ]                 |
-| black_bg | [ ] | [ ]    | [ ]              | [ ]                 |
+## Important evaluation note
+The absolute retrieval scores in the `original` condition are extremely high (**mAP = 0.998**, **Rank-1 = 0.997**). These values should be interpreted with care. Most importantly, evaluation is restricted to queries that still have at least one valid positive in the gallery after filtering. Queries without any remaining valid positive are skipped. As a result, the absolute scores here reflect the **evaluable subset** of validation queries under this controlled protocol and are not directly comparable to the standard validation score reported during training.
 
-### Per-Query Diagnostics
-To assess whether the degradation was broad or concentrated in a few difficult cases, we also analyzed per-query changes relative to the original condition.
+For this reason, the key signal in this experiment is the **relative degradation across interventions**, not the absolute ceiling-level baseline.
 
-| setting  | mean ΔAP vs original | median ΔAP vs original | rank-1 flip rate | mean Δ first positive rank |
-|----------|----------------------|------------------------|------------------|----------------------------|
-| gray_bg  | [ ]                  | [ ]                    | [ ]              | [ ]                        |
-| blur_bg  | [ ]                  | [ ]                    | [ ]              | [ ]                        |
-| black_bg | [ ]                  | [ ]                    | [ ]              | [ ]                        |
+## Main Findings
+-------------
 
-**Rank-1 stability.** 
+* **Best condition:** **original**, with **mAP = 0.998** and **Rank-1 = 0.997**.
+* **blur_bg** is by far the least harmful intervention and remains nearly identical to the original setting (**ΔmAP = -0.006**, **ΔRank-1 = -0.006**).
+* The strongest degradation is observed under **random_bg**, with **ΔmAP = -0.469** and **ΔRank-1 = -0.567**.
+* **black_bg** and **gray_bg** also cause substantial drops, while **mixed_original_random_bg** is harmful but less severe than full random replacement.
+* Overall, the relative pattern is clear: retrieval is **not fully invariant** to background manipulation.
 
-### Plots
-1. **Aggregate performance by setting** (`plot_background_main_metrics.png`)  
-   Shows mAP and Rank-1 for each background condition.
+## Main Results Table
+------------------
 
-2. **Performance drop relative to original** (`plot_background_deltas.png`)  
-   Highlights which manipulations caused the largest degradation.
+| setting | mAP | Rank-1 | ΔmAP vs original | ΔRank-1 vs original |
+|----------|-----:|-------:|-----------------:|--------------------:|
+| original | 0.998 | 0.997 | 0.000 | 0.000 |
+| blur_bg | 0.992 | 0.991 | -0.006 | -0.006 |
+| mixed_original_random_bg | 0.785 | 0.737 | -0.212 | -0.260 |
+| gray_bg | 0.723 | 0.675 | -0.274 | -0.322 |
+| black_bg | 0.648 | 0.588 | -0.350 | -0.409 |
+| random_bg | 0.529 | 0.430 | -0.469 | -0.567 |
 
-3. **Per-query AP change vs original** (`plot_background_delta_ap_boxplot.png`)  
-   Shows whether the effect is consistent across queries or driven by a subset of cases.
+<p align="center"><img src="../../results/round_1/eda_background_intervention/eva02_triplet_bg_orig_gray_black_rdn_blur_mixed/plot_background_main_metrics.png" width="70%" /></p>
+<p align="center"><em>Bar plot of aggregate mAP and Rank-1 across settings.</em></p>
 
-### Interpretation
-The results show that retrieval performance is **[largely invariant / not fully invariant / clearly sensitive]** to query-side background manipulation. Because the gallery remains unchanged and only the query background is altered, any drop relative to the original condition indicates that the model is not perfectly robust to background changes at inference time.
+### Aggregate performance analysis
 
-### Limitation
-This experiment tests query-side robustness to background manipulation, but it does not fully separate true background intervention from artifacts introduced by the manipulation itself.
+The ordering of intervention severity is consistent and easy to interpret. **blur_bg** leaves retrieval almost unchanged, whereas **random_bg** causes the strongest degradation by a large margin. **black_bg** and **gray_bg** are also clearly harmful, and **mixed_original_random_bg** lies in between.
 
-### Conclusion
-Background manipulation caused the largest performance drop under **[setting]**, while **[setting]** remained closest to the original condition. Overall, this experiment provides evidence that the model is **[robust / somewhat sensitive / strongly sensitive]** to query background changes, suggesting **[limited / partial / substantial]** dependence on contextual information beyond the jaguar itself.
+This pattern suggests that the model is not equally sensitive to all background changes. Performance remains stable when coarse scene structure is preserved by blurring, but drops strongly when the original context is removed or replaced. The main issue is therefore not background change per se, but **context replacement**.
 
+## Per-Query Diagnostics
+---------------------
 
+To assess whether the degradation is broad-based or driven by a subset of unstable queries, we also analyzed per-query changes relative to the original condition.
 
+| setting | mean ΔAP vs original | median ΔAP vs original | rank-1 flip rate | mean Δ first positive rank |
+|----------|---------------------:|-----------------------:|-----------------:|---------------------------:|
+| blur_bg | -0.006 | 0.000 | 0.006 | 0.046 |
+| mixed_original_random_bg | -0.212 | 0.000 | 0.260 | 8.731 |
+| gray_bg | -0.274 | 0.000 | 0.322 | 12.362 |
+| black_bg | -0.350 | -0.017 | 0.409 | 16.437 |
+| random_bg | -0.469 | -0.581 | 0.567 | 19.495 |
 
-Main table
+[PLACEHOLDER: ]
+<p align="center"><img src="../../results/round_1/eda_background_intervention/eva02_triplet_bg_orig_gray_black_rdn_blur_mixed/plot_background_delta_ap_boxplot.png" width="70%" /></p>
+<p align="center"><em>Boxplot of per-query ΔAP vs original.</em></p>
 
-One row per intervention:
+### Rank-1 stability
 
-setting
+The per-query analysis shows two main regimes.
 
-mAP
+* **blur_bg** is almost perfectly stable. The median ΔAP is **0.000**, the mean ΔAP is only **-0.006**, and the rank-1 flip rate is **0.6%**.
+* **random_bg** causes the clearest systematic failures. Its median ΔAP is **-0.581**, and the rank-1 flip rate reaches **56.7%**, showing that the degradation affects a large share of queries rather than only a few outliers.
+* **black_bg** also causes substantial failures, though less consistently than random replacement.
+* **gray_bg** and **mixed_original_random_bg** show a mixed pattern: many queries remain stable, but a substantial subset degrades strongly.
 
-Rank-1
+## Interpretation
+--------------
 
-ΔmAP vs original
+### Which query background manipulations are most harmful to jaguar Re-ID retrieval?
 
-ΔRank-1 vs original
+The most harmful manipulation is **random_bg**, followed by **black_bg**, **gray_bg**, and **mixed_original_random_bg**, while **blur_bg** is largely harmless. This ordering is consistent across both aggregate metrics and per-query diagnostics.
 
-Per-query diagnostics
+The main implication is that **replacing the original context is much more damaging than merely degrading it**. Blurring preserves coarse scene information, whereas black, gray, and especially random replacement remove or overwrite it.
 
-For each intervention:
+### Do background manipulations induce systematic rank-1 failures or only mild score degradation?
 
-mean ΔAP vs original
+This depends on the manipulation.
 
-median ΔAP vs original
+* **blur_bg** causes only negligible degradation.
+* **random_bg** induces a clear **systematic rank-1 failure mode**, not just a mild score drop.
+* **black_bg** also causes many rank-1 failures.
+* **gray_bg** and **mixed_original_random_bg** show a mixed regime with both stable and strongly degraded queries.
 
-rank-1 flip rate
+Thus, severe interventions do not just lower similarity slightly; they often change the retrieval outcome itself.
 
-mean Δ first positive rank
+### Does performance degradation under query-side background manipulations indicate that retrieval is not fully invariant to background context?
 
-Main plots
+Yes. The relative degradation pattern provides strong evidence that retrieval is **not fully background-invariant**.
 
-grouped bar plot: mAP and Rank-1 by setting
+If retrieval depended only on jaguar appearance, changing the background while keeping the foreground fixed should have had little effect. Instead, several interventions lead to large drops, especially **random_bg**, **black_bg**, and **gray_bg**. At the same time, the near-original performance under **blur_bg** shows that the model is not simply fragile to any perturbation. It is specifically sensitive when the original context is removed or replaced.
 
-delta bar plot: ΔmAP and ΔRank-1 vs original
+## Limitation
+----------
 
-boxplot: per-query ΔAP vs original
+This experiment provides clear evidence of sensitivity to altered context, but it does not fully separate true background reliance from artifacts introduced by the interventions themselves. In particular, **black_bg**, **gray_bg**, and **random_bg** are somewhat artificial manipulations. In addition, the absolute baseline should be interpreted cautiously because evaluation is restricted to queries with at least one valid positive after filtering.
+
+## Conclusion
+----------
+
+The background intervention experiment shows that jaguar Re-ID retrieval is **not fully robust** to query-side background manipulation. Performance remains almost unchanged under **blur_bg**, but drops substantially under **gray_bg**, **black_bg**, and especially **random_bg**.
+
+Overall, the most important result is the **relative ordering of interventions**: retrieval is robust to mild degradation of the original context, but clearly sensitive when that context is removed or replaced. This indicates that the model is **partially background-dependent rather than fully background-invariant**.

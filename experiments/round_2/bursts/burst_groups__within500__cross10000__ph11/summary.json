@@ -1,8 +1,0 @@
-{
-  "num_images": 1895,
-  "num_identities": 31,
-  "num_burst_clusters": 342,
-  "num_burst_images": 1447,
-  "num_filtered_edges": 3607,
-  "min_cluster_size": 2
-}

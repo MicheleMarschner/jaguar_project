@@ -21,6 +21,7 @@ Purpose:
 import gc
 from pathlib import Path
 from jaguar.experiments.experiment_output import save_requested_outputs
+from jaguar.experiments.run_class_attribution_generation import build_val_resolver
 from jaguar.utils.utils_xai_class import compute_saliency_gradcam_class, compute_saliency_ig_class
 import numpy as np
 import torch
@@ -37,11 +38,15 @@ from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_sal
 from jaguar.config import EXPERIMENTS_STORE, PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
 from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
-from jaguar.utils.utils_xai_similarity import SimilarityForward, format_n_samples_tag, save_vec
-from jaguar.logging.wandb_logger import log_wandb_xai_metrics_results
+from jaguar.utils.utils_xai_similarity import SimilarityForward
+from jaguar.utils.utils_xai import format_n_samples_tag, save_vec, build_val_resolver
 from jaguar.utils.utils_evaluation import build_eval_context
 from jaguar.utils.utils_experiments import load_toml_from_path, resolve_xai_metrics_paths
 
+
+# ============================================================
+# Faithfulness
+# ============================================================
 
 def _get_faithfulness_config(config: dict) -> dict:
     """
@@ -54,20 +59,13 @@ def _get_faithfulness_config(config: dict) -> dict:
         "use_abs": bool(faith_cfg.get("use_abs", True)),
     }
 
-
-
-# ============================================================
-# Faithfulness
-# ============================================================
 def _mask_pixels_from_order(
     x: torch.Tensor,
     order: torch.Tensor,
     k: int,
     baseline_value: float = 0.0,
 ) -> torch.Tensor:
-    """
-    Mask the first k flattened pixel locations in a [C,H,W] tensor.
-    """
+    """Mask the first k flattened pixel positions in a single [C, H, W] image tensor."""
     x_masked = x.clone()
     flat = x_masked.view(x_masked.shape[0], -1)
     flat[:, order[:k]] = baseline_value
@@ -80,9 +78,7 @@ def _get_pixel_order_for_class_faithfulness(
     rng: np.random.Generator | None = None,
     use_abs: bool = True,
 ) -> torch.Tensor:
-    """
-    Returns flattened pixel order for masking.
-    """
+    """Return a flattened pixel ranking for masking, either by saliency strength or a random permutation."""
     s = saliency_2d
     if use_abs:
         s = s.abs()
@@ -111,11 +107,7 @@ def faithfulness_topk_vs_random_class(
     random_seed: int = 0,
     baseline_value: float = 0.0,
 ) -> dict:
-    """
-    Class-attribution faithfulness:
-    measure gold-class log-prob drop after masking top-k salient pixels
-    vs random same-sized pixels.
-    """
+    """Compare gold-class confidence drops after masking top-saliency pixels versus random pixels of the same size."""
     rng = np.random.default_rng(random_seed)
     model.eval()
 
@@ -211,6 +203,7 @@ def faithfulness_topk_vs_random_class(
 
 
 def _auc_trapz(y: np.ndarray, x: np.ndarray) -> float:
+    """Compute a trapezoidal AUC with compatibility for NumPy versions with or without `trapezoid`."""
     if hasattr(np, "trapezoid"):
         return float(np.trapezoid(y, x))
     return float(np.trapz(y, x))
@@ -242,9 +235,7 @@ def _get_deletion_order(
     order_mode: str,
     rng: np.random.Generator | None = None,
 ) -> torch.Tensor:
-    """
-    Returns flattened pixel order for deletion
-    """
+    """Return a flattened pixel deletion order based on saliency ranking or a random permutation."""
     n_pix = saliency_2d.numel()
 
     if order_mode == "saliency":
@@ -257,7 +248,6 @@ def _get_deletion_order(
         return torch.as_tensor(perm, dtype=torch.long)
 
     raise ValueError(f"Unknown order_mode: {order_mode}")
-
 
 
 @torch.no_grad()
@@ -348,13 +338,13 @@ def faithfulness_deletion_auc_similarity(
         }
     }
 
-
 def run_faithfulness_metric(
     artifact,
     resolve_sample,
     model_wrapper,
     config: dict,
 ) -> dict:
+    """Run the faithfulness metric with saliency-based and random deletion, then summarize both scores and their gap."""
     faith_cfg = _get_faithfulness_config(config)
 
     res_topk = faithfulness_deletion_auc_similarity(
@@ -436,7 +426,7 @@ def run_faithfulness_metric_class(
 # ============================================================
 
 def _spearman_corr_flat(a: np.ndarray, b: np.ndarray) -> float:
-    # ranks (dense enough for our use)
+    """Compute a Spearman-style correlation on two flattened arrays via rank-transformed cosine similarity."""
     ra = np.argsort(np.argsort(a))
     rb = np.argsort(np.argsort(b))
     ra = ra.astype(np.float32)
@@ -503,6 +493,7 @@ def run_sanity_metric(
     ref_df_pair,
     cfg,
 ):
+    """Run the parameter-randomization sanity metric for the requested explainer and return the resulting summary."""
     if explainer_name == "IG":
         compute_saliency_fn = compute_saliency_ig_for_pair_type
     elif explainer_name == "GradCAM":
@@ -720,6 +711,8 @@ def run_xai_metrics(
 
 
 def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
+    """Load saved pairwise XAI artifacts, run the configured evaluation metrics, and return the summary table."""
+    
     checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
     train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
 
@@ -809,6 +802,20 @@ def run_xai_similarity_metrics(config: dict, cfg) -> pd.DataFrame:
 
         
 def run_xai_class_metrics(config: dict, cfg) -> pd.DataFrame:
+    """Load saved class-attribution artifacts, run the configured evaluation metrics, and return the summary table."""
+    checkpoint_dir = PATHS.checkpoints / config["evaluation"]["checkpoint_dir"]
+    train_config = load_toml_from_path(checkpoint_dir / "config_leaderboard_exp.toml")
+
+    ctx = build_eval_context(
+        config=config,
+        train_config=train_config,
+        checkpoint_dir=checkpoint_dir,
+        eval_val_setting="original",
+    )
+
+    model = ctx.model
+    model.eval()
+    resolve_sample = build_val_resolver(ctx)
 
     run_root, run_root_write, metrics_path, randomized_root = resolve_xai_metrics_paths(config)
 
@@ -841,7 +848,7 @@ def run_xai_class_metrics(config: dict, cfg) -> pd.DataFrame:
         metrics_path=metrics_path,
         randomized_root=randomized_root,
         run_sanity_fn=run_sanity_metric_class,          # class-specific wrapper
-        run_faithfulness_fn=faithfulness_topk_vs_random_class,  # class-specific wrapper
+        run_faithfulness_fn=run_faithfulness_metric_class,  # class-specific wrapper
         run_complexity_fn=run_complexity_metric,
         build_sanity_kwargs_fn=lambda item: dict(
             explainer_name=item["explainer"],

@@ -1,5 +1,5 @@
 [model]
-backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "DINOv3-Base", "DINOv3-Large", "DINOv2_for_wildlife", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
+backbone_name = "EVA-02"   # Options: "EVA-02", "MegaDescriptor-L", "MiewID", "DINO-Small", "DINOv2-Base", "ConvNeXt-V2", "EfficientNet-B4", "Swin-Transformer" 
 head_type = "triplet"   # Options: "arcface"
 emb_dim = 1024
 freeze_backbone = true
@@ -13,11 +13,11 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
 include_duplicates = false
-seed = 51
+seed = [42]
 
 [data]
-split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
-# split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
+# split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
+split_data_path = "/splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
 # split_data_path = "/splits/default_kaggle/full_split.parquet"
 dataset_name = "jaguar_stage0"
 use_balanced_sampler = false    # Set to true to handle class imbalance
@@ -32,7 +32,7 @@ phash_threshold = 4
 [preprocessing]
 train_background = "original"
 val_background = "original"
-bg_dir = "data/round_2/backgrounds"
+bg_dir = "backgrounds"
 p_original = 0.5
 edge_softness = 2
 blur_radius = 10
@@ -40,13 +40,13 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
-# save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/" 
-save_dir = "checkpoints/round_2/"  
-experiment_name = "kaggle_base"
+# save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/"  
 epochs = 30
 batch_size = 32  # 16
 samples_per_class = 4
 seed = 42
+experiment_name = "kaggle_base"
+multiple_seeds = false      # True if multiple seeds are provided as list or if the experiments suite is kaggle_stability.toml
 early_stopping = true
 early_stopping_patience = 5
 # ---Fine-tuning Params---
@@ -93,8 +93,19 @@ random_erasing_p = 0.25
 silhouette_freq = 5         # Compute Silhouette and refresh viz data every x epochs if force_silhouette true
 force_silhouette = false    # Set to true for the mining RQ study
 
+[rare_identity_eval]
+enabled = false
+threshold = 50
+
 [evaluation]
 extra_val_backgrounds = ["original", "gray_bg"]
+apply_tta = true
+tta_modality = "flip"   # Options: "flip", "multiscale" only compatible with backbone_name in ["ConvNeXt-V2", "EfficientNet-B4"]
+apply_qe = true
+top_k_expansion = 3
+apply_rerank = false 
+group_by = "seed"
+build_model_soup = false
 
 [xai]
 seed = 51

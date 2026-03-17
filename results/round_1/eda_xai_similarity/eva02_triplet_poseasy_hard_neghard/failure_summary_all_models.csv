@@ -1,0 +1,2 @@
+model,n_queries,n_failures,failure_rate,median_easy_rank_in_failures,median_sim_gap_wrong_minus_right
+EVA-02,332,1,0.0030120481927710845,170.0,0.22830045223236084

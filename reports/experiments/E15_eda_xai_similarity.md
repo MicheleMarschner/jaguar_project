@@ -1,5 +1,4 @@
 # E15 (Q31) Pairwise Similarity Explanations (Data - Round 1)
-==========================================
 
 **Experiment Group:** Interpretability analyses
 
@@ -8,158 +7,166 @@
 
 Which image regions drive pairwise similarity scores in Jaguar Re-ID, and how do these regions differ across correct, difficult, and incorrect retrieval pairs?
 
-## Sub-experiment 1 — Pairwise Similarity Explanations
----------------------------------------------------
+More specifically, this experiment asks two connected questions:
 
-### Research Question
+1. What visual evidence supports high pairwise similarity for **easy positives**, **hard positives**, and **hard negatives**?
+2. In a retrieval failure, why can a wrong gallery image outrank the best available true match?
 
-Which visual evidence supports high pairwise similarity scores for different query–gallery pair types?
+## Setup / Intervention
+--------------------
 
-### Intervention
+This experiment analyzes **pairwise similarity explanations** for a fixed trained Re-ID model (**EVA-02**) on a reproducible validation subset from **Round 1**. The focus is not on class prediction, but on the learned **query–gallery similarity score** that drives retrieval ranking.
 
-Post-hoc pairwise similarity explanations using GradCAM and Integrated Gradients for selected query–gallery pairs.
+Representative query–reference pairs were selected from three qualitatively different regimes:
 
-### Method / Procedure
+- **easy positives**: same-identity matches with extremely high similarity and near-redundant appearance,
+- **hard positives**: same-identity matches that remain visually challenging because pose, visibility, or scene conditions differ strongly,
+- **hard negatives**: wrong-identity pairs that nevertheless achieve high similarity and are therefore especially diagnostic.
 
-A reproducible subset of validation queries was selected and matched against a curated gallery. Representative pairs were mined for easy positives, hard positives, and hard negatives. For each pair, similarity-target explanations were generated to identify which query regions most increased the similarity score with the reference image.
+For each selected pair, post-hoc pairwise explanations were generated with **Integrated Gradients (IG)**. The displayed panels show the query image, the reference image, the trained saliency overlay, and a randomized-model overlay. The randomized overlay is included only as visual context here; the systematic sanity / faithfulness / complexity evaluation is analyzed separately in **E16**.
 
-### Evaluation
+## Method / Procedure
+------------------
 
-Explanations were compared qualitatively across pair types.
+The analysis proceeded in two steps.
 
-Main outputs to show:
+First, pairwise explanation panels were inspected across the three pair types. The goal was to understand whether the similarity signal is mainly driven by jaguar-centered evidence, which parts of the animal are emphasized, and how discriminative this evidence appears in easy versus difficult matches.
 
-*   query–reference example panels
-*   attribution overlays for easy positives, hard positives, and hard negatives
-*   side-by-side comparison across explainers
-    
+Second, a retrieval failure analysis was performed. For a failed query, the wrong top-1 match was contrasted with the best available true match. This makes it possible to inspect not only where the model looks, but also what kind of visual correspondence is strong enough to produce a ranking error.
 
-### Key Result / Takeaway
+The interpretation is intentionally qualitative and case-based. Quantitative explanation validation is deferred to **[E16 (Q2a) Explainer Comparison for Class Attributions](E16_eda_xai_metrics.md)**, so the present document focuses on what the maps appear to reveal about the similarity signal itself.
 
-Similarity is driven mainly by jaguar appearance, especially coat pattern, body contour, and facial structure, but the specificity of this evidence decreases from easy positives to hard negatives.
-
-## Sub-experiment 2 — Failure Analysis
------------------------------------
-
-### Research Question (RQX.2)
-
-In top-1 retrieval failures, what evidence makes a wrong gallery image outrank the best true match?
-
-### Intervention
-
-Pairwise explanation of failure cases by contrasting the wrong top-1 match with the best true match for the same query.
-
-### Method / Procedure
-
-For each failure query, two comparison pairs were selected: the wrong top-1 hard negative and the best available true-match positive. Pairwise similarity explanations were then generated for both pairs under the same model.
+## Pair-Type Comparison
+--------------------------------
 
 ### Evaluation
 
-Failure cases were evaluated through qualitative comparison panels and simple failure summaries.
+The pair-type comparison shows a clear progression from **highly redundant and stable matches** to **visually plausible but identity-incorrect matches**.
 
-Main outputs to show:
+#### Easy positives
 
-*   query | wrong top-1 | best true match
-*   similarity gap between wrong and correct pair
-*   optional explanation differences between wrong and correct pair
-    
+The easy-positive examples are almost near-duplicate matches. In all three displayed cases, the similarity score is essentially saturated at **0.998**, and the query and reference differ only minimally. The corresponding IG maps are strongly jaguar-centered and align with the same visible structures across both images, especially the exposed coat pattern, body contour, and head region.
+
+This regime is important mainly as a sanity anchor for the qualitative analysis. Because the two images are so visually similar, the model can rely on strong local correspondence that is both easy to recognize and easy to explain. These examples therefore show what pairwise similarity looks like when the retrieval problem is close to redundant matching.
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/easy_pos/easy_pos_01__q1826__r1829.png" width="70%" /></p>
+<p align="center"><em>Figure 1. Easy-positive example: near-redundant same-identity match with similarity 0.998.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/easy_pos/easy_pos_02__q1829__r1826.png" width="70%" /></p>
+<p align="center"><em>Figure 2. Easy-positive example: reversed pairing of the same near-duplicate match.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/easy_pos/easy_pos_03__q1827__r1826.png" width="70%" /></p>
+<p align="center"><em>Figure 3. Easy-positive example with the same highly redundant visual evidence.</em></p>
+
+#### Hard positives
+
+The hard-positive examples are much more informative, because they represent **same-identity matches that no longer look trivially alike**. In the displayed panels, all three queries are matched against the same reference (**idx = 148**), but the similarities are low and even slightly negative: **-0.139**, **-0.144**, and **-0.150**.
+
+This matters because it shows that "positive" in the retrieval sense does not imply strong similarity under the learned embedding. These are true matches, but they are difficult true matches. Compared with the easy positives, the images differ more strongly in viewpoint, pose, body articulation, and scene appearance. The saliency overlays remain focused on the jaguar rather than the background, but the relevant evidence is spread more broadly across the body — especially flank pattern, torso, legs, and body outline. The maps therefore suggest that the model is still using plausible animal-centered evidence, but the correspondence is weaker, more distributed, and less redundant than in the easy-positive regime.
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_pos/hard_pos_01__q1559__r148.png" width="70%" /></p>
+<p align="center"><em>Figure 4. Hard-positive example with similarity -0.150.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_pos/hard_pos_02__q1593__r148.png" width="70%" /></p>
+<p align="center"><em>Figure 5. Hard-positive example with similarity -0.144.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_pos/hard_pos_03__q1558__r148.png" width="70%" /></p>
+<p align="center"><em>Figure 6. Hard-positive example with similarity -0.139.</em></p>
+
+#### Hard negatives
+
+The hard-negative panels are the most diagnostic for retrieval failure. Here the matched gallery image is **not** the same identity, yet the similarity is high: the displayed examples reach **0.659**, **0.669**, and **0.669**. This is a striking contrast to the hard positives above, whose true-match similarities are much lower.
+
+Qualitatively, the maps still emphasize plausible jaguar evidence. In the face-dominated example, the attribution concentrates around facial structure, muzzle, whiskers, and nearby coat pattern. In the full-body example, the map emphasizes the torso outline and flank texture. In the open-mouth example, the model again focuses on salient animal structures rather than empty background.
+
+The important point is therefore not that the model is "looking at the wrong thing" in any obvious sense. Instead, the wrong-identity image can present **very convincing animal-centered correspondence** that is simply not identity-specific enough. Hard negatives thus suggest that the main problem is insufficient discriminability of jaguar evidence, not a complete shift away from the animal.
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_neg/hard_neg_01__q139__r110.png" width="70%" /></p>
+<p align="center"><em>Figure 7. Hard-negative example with similarity 0.669.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_neg/hard_neg_02__q110__r139.png" width="70%" /></p>
+<p align="center"><em>Figure 8. Hard-negative example with similarity 0.669.</em></p>
+
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/trained_vs_randomized_panels/EVA-02__val__n332__seed51__IG/hard_neg/hard_neg_03__q32__r50.png" width="70%" /></p>
+<p align="center"><em>Figure 9. Hard-negative example with similarity 0.659.</em></p>
+
+Across the three pair types, the qualitative transition is therefore quite coherent:
+
+- **easy positives** are supported by highly redundant overlap and almost identical visible structure,
+- **hard positives** rely on broader, weaker, but still correct jaguar evidence,
+- **hard negatives** are driven by plausible jaguar evidence that remains visually strong but is not sufficiently identity-specific.
+
+This is the main qualitative result of the pair-type comparison.
 
 ### Key Result / Takeaway
 
-The shown failure suggests that a wrong gallery image can outrank the true match when it presents stronger overall texture and shape correspondence, even if it is the wrong identity.
+Pairwise similarity is driven primarily by **jaguar-centered appearance cues**, especially coat pattern, body contour, and facial structure. What changes across pair types is not a simple shift from animal to background, but a shift from **highly redundant and discriminative evidence** (easy positives) to **broader and less identity-specific evidence** (hard positives and especially hard negatives).
 
-### Pair-type differences
+## Failure Analysis
+---------------------------
 
-**Easy positives** show the clearest and most stable evidence. In the displayed examples, query and reference are visually very close, sometimes almost near-duplicate, and the maps align with the same visible body regions and contours. These cases mainly show that the model can exploit strong visual redundancy.
+### Evaluation
 
-**Hard positives** are more informative. Here the same identity is matched across more variation in pose and scene context. The maps remain jaguar-centered, but relevance is spread more broadly across flank pattern, torso, legs, and body outline. This suggests that difficult true matches are supported by distributed appearance cues rather than one sharply localized identity marker.
+The failure analysis sharpens the interpretation above by looking at an actual ranking error.
 
-**Hard negatives** are the most diagnostic. In these cases, the maps still emphasize plausible jaguar regions, especially coat texture, facial structure, and body shape, but this evidence is not specific enough to prevent confusion. The model appears to rely on visually convincing animal evidence that is still compatible with the wrong identity.
+Across the evaluated validation subset, **EVA-02 produced only 1 failure among 332 queries**, corresponding to a failure rate of **0.0030**. For that failed query, the median rank of the best true match in the failure set is **170**, and the median similarity gap between the wrong match and the best true match is **0.2283**. Since there is only one failure, these summary values are effectively the statistics of the single displayed case.
 
-**\[Insert Figure: easy / hard positive / hard negative example panels\]**
+**Table 1. Failure summary for EVA-02 on the analyzed validation subset.**
 
-### Failure analysis
+| model | n_queries | n_failures | failure_rate | median_easy_rank_in_failures | median_sim_gap_wrong_minus_right |
+|---|---:|---:|---:|---:|---:|
+| EVA-02 | 332 | 1 | 0.0030 | 170 | 0.2283 |
 
-The EVA-02 failure summary suggests that top-1 errors are rare in the evaluated subset, but the shown failure is still meaningful because it is not a close tie. The wrong top-1 image clearly scores higher than the best true match, while the true match is ranked far lower.
+The failure triptych in **Figure 10** shows the relevant comparison. The query is image **idx = 110**. The wrong top-1 hard negative is **idx = 139** with similarity **0.669** and rank **1**. The best available true match is **idx = 379** with similarity **0.441**, but it appears only at rank **170**.
 
-Qualitatively, the wrong top-1 provides a strong, clean pattern-rich match, whereas the best true match is darker, softer, and less directly aligned to the query. This suggests that the model prefers stronger overall visual correspondence over identity-correct evidence when the latter is weaker or less clearly exposed.
+<p align="center"><img src="../../results/round_1/eda_xai_similarity/eva02_triplet_poseasy_hard_neghard/failure_panels/EVA-02/failure_01__q110.png" width="85%" /></p>
+<p align="center"><em>Figure 10. Failure case for EVA-02: query, wrong top-1 hard negative, and best true match.</em></p>
 
-**\[Insert Table: failure summary across models\]****\[Insert Figure: query | wrong top-1 | best true match\]****\[Insert Figure: failure overlay comparison\]**
+This is not a marginal tie. The wrong image outranks the true match by a substantial similarity margin (**0.669 vs. 0.441**, gap **0.228**), and the true match is pushed far down the ranking. Qualitatively, the wrong top-1 presents a strong, sharp, pattern-rich side view with clear coat texture and body structure. The true match, by contrast, is darker, softer, and visually less aligned to the frontal query.
 
-### Overall interpretation
+This case supports the interpretation from the hard-negative panels: the retrieval error does not appear to come from obvious background distraction. Rather, the model seems to prefer the gallery image that offers the **stronger overall visual correspondence** in terms of texture, shape, and exposed animal structure, even though it is the wrong identity. In other words, the similarity function appears to be plausible but insufficiently identity-specific in this difficult case.
 
-Across pair types, the main shift is not from animal to background, but from more discriminative to less discriminative animal evidence. Easy positives are supported by highly redundant overlap, hard positives by broader but still correct appearance cues, and hard negatives by plausible yet too generic jaguar evidence. Thus, the qualitative results suggest that retrieval errors arise less from obvious background reliance and more from insufficient identity specificity in the learned similarity signal.
+### Key Result / Takeaway
+
+The single observed EVA-02 failure is informative because it is **substantive rather than borderline**. The wrong image clearly outranks the best true match, and it does so because it presents stronger overall jaguar correspondence. This supports the view that retrieval failures arise less from irrelevant background attention than from **confusion between visually convincing but identity-incorrect animal evidence**.
 
 ## Overall Conclusion
 ------------------
 
-The qualitative pairwise explanations indicate that EVA-02 mainly bases similarity on jaguar-centered evidence, especially coat pattern, body contour, and facial regions. Easy positives are driven by strong visual redundancy, while hard positives and hard negatives depend on broader, less specific evidence. The failure case shows that a wrong image can outrank the true match when it offers stronger overall visual correspondence. Overall, the results suggest that the model usually attends to plausible animal evidence, but that this evidence is not always identity-specific enough to separate difficult positives from difficult negatives.
+The qualitative pairwise-similarity analysis suggests that **EVA-02 mainly bases similarity on jaguar-centered evidence**, especially coat pattern, body contour, and facial structure.
+
+Three conclusions are most important.
+
+First, the easy-positive regime shows that the method captures strong true correspondence when two images are almost redundant. These examples behave as expected and provide a useful visual anchor.
+
+Second, the hard-positive and hard-negative regimes are more revealing. Hard positives show that correct same-identity evidence can become weak and spatially distributed under viewpoint and scene changes, while hard negatives show that wrong-identity images can still receive high similarity when they share strong generic jaguar structure.
+
+Third, the failure case confirms that a wrong gallery image can outrank the true match by a **large margin**, not because the model obviously ignores the jaguar, but because the wrong image offers stronger apparent visual correspondence than the true one.
+
+Overall, this experiment supports a cautious but coherent interpretation: the learned pairwise similarity signal is usually based on **plausible animal evidence**, yet that evidence is **not always specific enough to reliably separate difficult positives from hard negatives**. A more systematic validation of explanation quality is deferred to **E16**, where sanity, faithfulness, and complexity are analyzed quantitatively.
 
 ## Main Findings
 -------------
 
-*   Similarity maps are mostly centered on the jaguar rather than the background.
-*   Easy positives show the strongest and most stable correspondence.
-*   Hard positives rely on broader distributed cues across the body.
-*   Hard negatives reveal that plausible jaguar evidence can still support incorrect retrieval.
-*   The shown failure indicates a preference for strong visual similarity over identity-correct matching when the true match is weaker.
-    
+- Pairwise similarity maps are mostly centered on the **jaguar**, not on empty background.
+- **Easy positives** are dominated by near-redundant overlap and have similarity scores of about **0.998** in the shown examples.
+- **Hard positives** remain jaguar-centered, but their evidence is broader and weaker; the shown same-identity pairs have similarities between **-0.150** and **-0.139**.
+- **Hard negatives** receive high similarity despite wrong identity; the shown examples score **0.659–0.669**.
+- The EVA-02 failure analysis contains **1 failure in 332 queries** (**0.3%**), and in that case the wrong top-1 outranks the best true match by a similarity gap of **0.228**.
+- The qualitative results suggest that errors arise mainly from **insufficient identity specificity of plausible jaguar evidence**, rather than from obvious background reliance.
 
 ## Main Results Table
 ------------------
 
-sectionresultEasy positivesstrongest and most stable overlapHard positivesbroader, distributed matching cuesHard negativesplausible but insufficiently specific animal evidenceFailure casewrong top-1 clearly outranks best true matchValidity of explanationsrequires separate quantitative evaluation
-
-**\[Insert Table: per-pair-type summary\]**
-
-
-**\[Insert Figure: pairwise examples by pair type\]****
-\[Insert Figure: failure triptych\]****\
-[Insert Figure: trained vs randomized examples\]**
-
-Limitation
-----------
-
-This section is qualitative and based on a small number of representative examples. The failure analysis is especially limited because it relies on very few failure cases, so the conclusions should be treated as case-based rather than general.
-
-For
-
-
-## Overall Conclusion
-The qualitative pairwise explanations suggest that EVA-02 mainly bases similarity on jaguar-centered evidence, especially coat pattern, body contour, and facial structure. Easy positives are driven by strong visual redundancy, while hard positives and hard negatives rely on broader and less specific evidence. The failure case shows that a wrong image can outrank the true match when it offers stronger overall visual correspondence.
-
-The explanation evaluation tempers this interpretation. Easy positives show the clearest faithfulness signal, but hard negatives do not: in that regime, salient masking is not better than random masking on average. In addition, IG shows almost no sanity effect under randomization, while GradCAM is somewhat more responsive but also much more diffuse in difficult cases. Taken together, the results suggest that pairwise explanations are most interpretable in easy settings, but substantially less reliable for the hard cases that matter most for retrieval errors.
-
----
-
-## Main Findings
-- Similarity maps are mostly centered on the jaguar rather than the background.
-- Easy positives show the strongest and most stable correspondence.
-- Hard positives rely on broader distributed cues across the body.
-- Hard negatives reveal that plausible jaguar evidence can still support incorrect retrieval.
-- The shown failure indicates a preference for strong visual similarity over identity-correct matching when the true match is weaker.
-- IG shows almost no sanity effect in this setup.
-- GradCAM shows somewhat stronger sensitivity to randomization, but becomes much more complex in difficult cases.
-- Faithfulness is strongest for easy positives and weakest for hard negatives.
-
----
-
-## Main Results Table
-
 | section | result |
 |---|---|
-| Easy positives | strongest and most stable overlap; small positive faithfulness gap |
-| Hard positives | broader distributed matching cues; mixed faithfulness evidence |
-| Hard negatives | plausible but insufficiently specific animal evidence; negative faithfulness gap |
-| Failure case | wrong top-1 clearly outranks best true match |
-| IG sanity | near zero across all pair types |
-| GradCAM complexity | low for easy positives, much higher for hard negatives and hard positives |
-
-**[Insert Table: per-pair-type summary]**  
-**[Insert Figure: pairwise examples by pair type]**  
-**[Insert Figure: failure triptych]**  
-
----
+| Easy positives | near-duplicate same-identity matches with similarity ≈ **0.998** and highly stable jaguar-centered evidence |
+| Hard positives | same-identity matches remain difficult; shown similarities **-0.150 to -0.139** with broader distributed evidence across torso, legs, and outline |
+| Hard negatives | wrong-identity matches can still score **0.659–0.669** when coat pattern and body structure align strongly |
+| Failure case | **1 / 332** EVA-02 failures; wrong top-1 similarity **0.669** vs. best true match **0.441**, with the true match only at **rank 170** |
+| Interpretation | similarity is usually based on plausible animal evidence, but this evidence is not always identity-specific enough for difficult retrieval |
 
 ## Limitation
-The qualitative part is based on a small set of representative examples, and the failure analysis relies on very few failure cases. The quantitative validation is more informative, but several effects remain modest. In particular, explanation quality is weakest in the hard-negative regime that is most relevant for understanding retrieval errors.
+----------
+
+This section is intentionally **qualitative** and based on a small set of representative examples. The failure analysis is especially limited because the evaluated subset contains only **one** observed EVA-02 failure. The randomized overlays shown in the panels are included only as visual context; they are **not** interpreted systematically here. Formal explanation evaluation is handled separately in **E16**.

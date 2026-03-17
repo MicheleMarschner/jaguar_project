@@ -71,6 +71,11 @@ def expand_run_variants(run_cfg: dict) -> list[dict]:
     if not isinstance(raw_seed, list):
         return [run_cfg]
 
+    if len(raw_seed) == 1:
+        variant = dict(run_cfg)
+        variant["seed"] = raw_seed[0]
+        return [variant]
+
     experiment_name = run_cfg["experiment_name"]
     variants = []
 

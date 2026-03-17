@@ -1,39 +1,45 @@
-In the task of animal Re-IDentification (ReID), a substantial body of literature relies on deep descriptors, which represent an image as a feature vector produced by a neural network optimized for visual similarity. A major challenge in this domain is the limited availability of high-quality labeled images for the target species. This scarcity makes it difficult to train robust models from scratch. At the same time, most existing re-identification models have been developed primarily for person or vehicle re-identification. Although these tasks share methodological similarities with animal re-identification, models trained in those domains often require fine-tuning or adaptation to perform effectively on wildlife datasets. A recent and increasingly popular strategy is to leverage large publicly available foundation models that have been pre-trained on massive datasets for a wide range of computer vision tasks (e.g., DINO or DINOv3). These models can serve as powerful feature extraction backbones, enabling strong performance even with limited domain-specific data.
+# Backbone Ablation (Data - Round 2)
 
-In this project, we aim to build a robust pipeline for the Kaggle Jaguar Re-Identification Challenge and evaluate the impact of different pretrained backbones on overall performance.
+**Experiment Group:** Backbone and training ablations
 
-The model used throughout our experiments is implemented in `src/jaguar/models/jaguarid_models.py` and defined by the class `JaguarIDModel`. The model is initialized with the following parameters:
+## Main Research Question
 
-- `backbone_name` 
-  Specifies the pretrained backbone architecture. Backbones are loaded through the `timm` library and registered in `src/jaguar/models/foundation_models.py`.
-- `num_classes`
-  Since the challenge operates in a closed-set identification setting, this parameter is always set to the number of identities present in the training data (31 jaguars).
-- `head_type`
-  Determines the head architecture placed on top of the pretrained backbone. Different heads correspond to different loss functions used during training. The losses we extensively ablate include:
-  - Cross Entropy (standard baseline for classification tasks)
-  - **ArcFace** (commonly used baseline in the Kaggle challenge)
-  - **CosFace** and **SphereFace** (variants of margin-based metric learning losses)
-  - **Triplet Loss**, combined with either **Cross Entropy** or **Focal Loss**
-- `emb_dim`
-  The dimensionality of the intermediate embedding produced by the head, which maps backbone features into the embedding space used for re-identification.
-- `freeze_backbone`
-  Boolean flag (default: `False`) controlling whether the backbone weights are frozen or fine-tuned during training.
-- `loss_s` and `loss_m` 
-  Scale and margin hyperparameters used in margin-based losses such as **ArcFace** and **Triplet Loss**.
-- `use_gem` 
-  Enables **Generalized Mean Pooling (GeM)** instead of the default max pooling layer.
-- `use_projection` and `use_forward_features`  
-  These flags determine how features are extracted from the backbone:
-  - `use_projection`: uses the backbone output and maps it through a learnable projection layer.
-  - `use_forward_features`: extracts features directly via the `forward_features` method provided by `timm`.
+How do different pretrained backbones perform when integrated into the same jaguar-specific re-identification pipeline, and which backbone provides the strongest retrieval performance for the Kaggle Jaguar Re-Identification task?
 
-Only one of these options is enabled at a time.
-- `mining_type`
-  Defines the mining strategy used in Triplet Loss-based training, specifying how positive and negative pairs are selected.
-- `label_smooth`
-  Applies label smoothing to Cross Entropy losses to reduce overfitting and improve generalization during training.
+## Motivation
 
-The full Re-ID pipeline implemented in our codebase is summarized in the diagram below. Most of the ablation experiments performed during benchmarking are conducted with respect to this modular architecture, where we systematically vary backbone models, pooling strategies, embedding projections, and loss functions.
+In animal re-identification, images are typically represented by deep descriptors, i.e. feature vectors produced by a neural network optimized for visual similarity. A central challenge in this setting is the limited availability of high-quality labeled data for the target species. This makes it difficult to train robust models from scratch and increases the importance of transfer learning.
+
+Many established re-identification models were originally developed for person or vehicle re-identification. Although these tasks are methodologically related to animal re-identification, models trained in those domains often require adaptation before they perform well on wildlife data. A more recent strategy is to use large pretrained foundation models as feature extraction backbones. These models, for example from the DINO or EVA families, are trained on massive image collections and can provide strong visual representations even when only limited target-domain data are available.
+
+The goal of this experiment is therefore to compare a diverse set of pretrained backbones within one fixed Jaguar Re-ID pipeline and to identify which backbone transfers best to the masked-background jaguar benchmark.
+
+## Model and Pipeline
+
+The model used throughout these experiments is implemented in `src/jaguar/models/jaguarid_models.py` as `JaguarIDModel`. The architecture is modular and allows the backbone, feature extraction strategy, pooling, projection, and loss head to be varied within one common framework.
+
+The main configurable components are:
+
+- `backbone_name`: pretrained backbone architecture loaded through `timm` and registered in `src/jaguar/models/foundation_models.py`
+- `num_classes`: number of jaguar identities in the closed-set training split (**31**)
+- `head_type`: head architecture and associated loss family
+- `emb_dim`: dimensionality of the learned embedding
+- `freeze_backbone`: whether the pretrained backbone is frozen initially
+- `loss_s`, `loss_m`: scale and margin parameters for margin-based losses
+- `use_gem`: whether GeM pooling is used instead of the default pooling layer
+- `use_projection`, `use_forward_features`: alternative feature extraction and projection modes
+- `mining_type`: sampling/mining strategy for triplet-based training
+- `label_smooth`: label smoothing for cross-entropy-based losses
+
+The head variants used across the broader project include:
+
+- Cross Entropy
+- ArcFace
+- CosFace
+- SphereFace
+- Triplet Loss combined with Cross Entropy or Focal Loss
+
+The full Re-ID pipeline is summarized below.
 
 ```mermaid
 flowchart LR
@@ -54,140 +60,175 @@ I --> J2[Marg.] --> L2[Loss]
 I --> J3[Triplet] --> L3[Triplet+CE]
 ```
 
-Hence, in this first experiment we aim to answer the following **Research Question**: *How do different pretrained backbones perform when integrated into a species-specific re-identification pipeline? In particular, which backbone achieves the best performance for the jaguar re-identification task?*
+Most benchmarking experiments are carried out within this modular design by varying the backbone while keeping the rest of the training and evaluation pipeline as consistent as possible.
 
-The backbones that we ablate are the following:
-1. EVA-02: 
-A transformer-based vision model trained using masked image modeling to learn strong and robust language-aligned visual representations. EVA models are designed to scale large self-supervised pretraining for vision tasks.
-2. MegaDescriptor-L-384:  
-A state-of-the-art foundational model for animal re-identification, explicitly trained and evaluated on curated multi-species wildlife datasets. It is widely considered a strong baseline for wildlife Re-ID tasks.
-3. MiewID: 
-A multi-species animal re-identification model based on an EfficientNet-B2 backbone, trained on curated wildlife datasets and designed to reach performance comparable to MegaDescriptor on several benchmarks.
-4. DINO-Small: 
-A self-supervised Vision Transformer trained with knowledge distillation using the DINO framework. The Small variant refers to a smaller transformer architecture with fewer parameters and embedding dimensions than the Base or Large variants.
-5. DINOv2-Base: 
-A large-scale self-supervised vision model trained on massive curated datasets. The Base variant corresponds to a mid-sized Vision Transformer architecture with higher capacity than Small models but lower computational cost than Large variants.
-6. ConvNeXt-V2: 
-An improved version of ConvNeXt that combines modern convolutional design with self-supervised learning techniques, providing competitive performance with transformer-based models.
-7. EfficientNet-B4: 
-A convolutional neural network designed using compound scaling to balance network depth, width, and resolution, providing strong performance on image classification and visual recognition tasks.
-8. Swin-Transformer: 
-A hierarchical Vision Transformer architecture that computes attention locally using shifted, non-overlapping windows, enabling efficient modeling of high-resolution images.
+## Backbone Families Under Comparison
 
-The selected backbones cover a diverse spectrum of architectural paradigms, including:
+We ablate the following pretrained backbones:
 
-- Vision Transformers (EVA, DINO, DINOv2, Swin)
-- Specialized Animal Re-ID Models (MegaDescriptor, MiewID)
-- Modern Convolutional Networks (ConvNeXt, EfficientNet)
+1. **EVA-02**  
+   Transformer-based vision model trained with masked image modeling.
+2. **MegaDescriptor-L-384**  
+   Wildlife-focused foundation model explicitly designed for animal re-identification.
+3. **MiewID**  
+   Multi-species animal re-identification model based on an EfficientNet-B2 backbone.
+4. **DINO-Small**  
+   Smaller self-supervised Vision Transformer trained with DINO.
+5. **DINOv2-Base**  
+   Mid-sized self-supervised Vision Transformer trained on large curated datasets.
+6. **ConvNeXt-V2**  
+   Modern convolutional architecture with strong self-supervised pretraining.
+7. **EfficientNet-B4**  
+   Convolutional backbone based on compound scaling.
+8. **Swin-Transformer**  
+   Hierarchical Vision Transformer with shifted-window attention.
 
-In addition to architectural diversity, these models also differ significantly in their pretraining strategies and training data, including:
+These models span three main categories:
 
-- Self-supervised learning on large-scale image collections (e.g., DINO, DINOv2), where models learn representations by enforcing consistency between augmented views of images without labels
-- Masked image modeling approaches (e.g., EVA), where models learn to reconstruct missing parts of images
-- Supervised training on general-purpose vision datasets (e.g., EfficientNet, Swin)
-- Task-specific training on curated wildlife re-identification datasets (e.g., MegaDescriptor, MiewID)
+- **Vision Transformers:** EVA, DINO, DINOv2, Swin
+- **Specialized Animal Re-ID models:** MegaDescriptor, MiewID
+- **Modern convolutional networks:** ConvNeXt, EfficientNet
 
-This combination of architectural and training diversity allows us to systematically analyze how general-purpose foundation models compare against models specifically designed for wildlife re-identification, when integrated into the same training and evaluation pipeline for the jaguar re-identification task.
+They also differ in pretraining strategy, ranging from large-scale self-supervised learning and masked image modeling to supervised pretraining and wildlife-specific Re-ID training. This makes the comparison informative not only architecturally, but also in terms of how general-purpose foundation models compare against domain-specialized wildlife models inside the same downstream jaguar pipeline.
 
-For additional details on the architectures and training schemes, we refer the reader to the respective reference papers for each model.
+For architectural and pretraining details beyond the scope of this report, we refer to the original model papers.
 
-To compare the different backbones, we follow a standardized training and evaluation procedure based on the configuration that previously achieved the highest score on the Kaggle leaderboard. The baseline configuration used in this experiment corresponds to the best-performing plug-and-play setup, which achieved ~90.1% mAP (+3%) (with the EVA backbone). The performance gain was largely due to the improved data split obtained during the EDA experiments (<insert link here>).
+## Experimental Setup
 
-One example of such hyperparameter tuning is the **embedding dimension**: while originally tested with 512, we found that increasing it to **1024** yielded the best performance on the test set, whereas further increases did not lead to measurable gains.
+### Dataset and split
 
-In this split, a 20% validation set is first created using stratification to preserve class balance. Images are then grouped by bursts and by near-duplicate content, sorted by resolution, and the top-k images from each group are selected for both the training and validation sets. This strategy ensures sufficient visual variability for each jaguar while minimizing overfitting to duplicates or low-quality images.
+The backbone ablation is performed on the **Round 2** dataset, i.e. the masked-background version released for the second Jaguar Re-Identification Challenge in order to reduce spurious environmental correlations.
 
-The backbone ablation presented here is performed on the Round 2 dataset, which contains images with masked backgrounds released for the Second Jaguar Re-ID Challenge in order to reduce spurious correlations with the environment.
+The train/validation split follows the duplicate-aware protocol developed earlier in the project. A **20% validation split** is created with class stratification. Images are then grouped by bursts and near-duplicate structure, sorted by resolution, and the top-`k` images from each group are retained in train and validation. This aims to preserve visual variability per jaguar while reducing redundancy and limiting overfitting to duplicates or low-quality frames.
 
-The training setup is fixed across all backbone experiments.
-- Loss function
-  We use Triplet Loss with margin 0.7 (see detailed ablation here: <insert link>).  
-  The hard mining strategy selects the *hardest positive* (most dissimilar image of the same identity) and the *hardest negative* (most similar image of a different identity) within the batch, encouraging the model to focus on the most challenging examples during training.
+### Fixed training configuration
 
-- Batch sampling
-  We employ a `BalancedSampler`, ensuring that each batch of the set 32 contains 4 images per identity so that valid positive and negative pairs can be formed for triplet-based learning.
+To compare backbones as fairly as possible, the training setup is held fixed across the main backbone experiments.
 
-- Optimizer  
-  The optimizer used is Adam, with an initial learning rate of 1e-5.
+- **Loss:** Triplet Loss with margin **0.7**
+- **Mining:** hardest positive and hardest negative within the batch
+- **Batch sampler:** balanced sampler with batch size **32** and **4 images per identity**
+- **Optimizer:** Adam with initial learning rate **1e-5**
+- **Scheduler:** `JaguarIdScheduler` with warm-up, sustain, and exponential decay phases
 
-- Learning rate scheduler  
-  We use a custom `JaguarIdScheduler`, adapted from the MiewID training pipeline.  
-  The scheduler implements a three-stage schedule:
-  1. Linear warm-up: the learning rate increases gradually from `lr_start` to `lr_max` during the first `lr_ramp_ep` epochs.  
-  2. Sustain phase: the learning rate is kept constant at `lr_max` for a short period.  
-  3. Exponential decay: the learning rate progressively decreases towards `lr_min` using a decay factor (`lr_decay`).
-  This schedule stabilizes early training while enabling fine-grained adaptation in later epochs.
+All models are first trained with frozen backbone weights. After **5 epochs**, the last two layers or blocks of the backbone are unfrozen and fine-tuned with:
 
-All models are initially trained with frozen backbone weights. After 5 epochs, we unfreeze the last two layers or blocks of the backbone (depending on its internal structure) and continue training with:
+- learning rate **2e-6**
+- weight decay **1e-3**
 
-- learning rate: 2e-6
-- weight decay: 1e-3
+This keeps the pretrained representation stable in early training while still allowing limited jaguar-specific adaptation later.
 
-This approach allows the pretrained representations to remain stable while enabling limited task-specific adaptation for the jaguar dataset.
+### Augmentation setup
 
-We apply a carefully designed augmentation suite evaluated in a dedicated experiment (<insert link here>):
+The augmentation pipeline follows the strongest configuration identified in the dedicated augmentation study. It includes:
 
-- Horizontal flips (despite jaguars having asymmetric flank patterns, this improves generalization)
-- Small geometric rotations / translations
-- Mild color jitter to account for lighting variation and occlusions from camera traps
-- Random erasing (p = 0.25)
+- horizontal flips
+- small rotations and translations
+- mild color jitter
+- random erasing (`p = 0.25`)
 
-We deliberately exclude Gaussian blur and random resize cropping, which were found to degrade performance in our ablation studies.
+Gaussian blur and random resized cropping were excluded from the default setup because earlier ablations indicated that they reduced performance.
 
-All experiments use a fixed random seed of 42 (except in the stability and model soup sensitivity experiments, see <insert link>).
+### Checkpoint selection and validation monitoring
 
-Although training runs for 30 epochs and the prediliged metric is the Idenity mAP, we monitor Pairwise Average Precision (Pairwise AP) during validation, given that during runs on the round_1 data, it was evident that more trianing dat were needed at the expenses of images in the validation set, causing the mAP to massively drop if one identity had only one correpsonding image which was missed by the model
+All experiments use random seed **42** except for dedicated stability and sensitivity analyses elsewhere in the project.
 
-- **Pairwise AP** evaluates performance on **individual image-to-image pairs**.
-- **Identity mAP**, used in the Kaggle evaluation, measures retrieval performance across **all identities**, averaging precision across the ranked retrieval lists for each query.
+Training runs for **30 epochs**. Although Kaggle evaluates models with identity-level mAP, internal checkpoint selection monitors **pairwise AP** during validation. This was motivated by observations on Round 1: when more data were shifted into training and the validation set became smaller, identity-level mAP became unstable because a missed query could disproportionately affect identities with very few valid positives.
 
-To avoid selecting unstable checkpoints, we early stop if Pairwise AP does not improve for 5 consecutive epochs.
+- **Pairwise AP** evaluates image-to-image matching quality
+- **Identity mAP** evaluates retrieval quality across ranked lists and averages AP across identities
 
-All other hyperparameters are defined in `configs/kaggle/base_config` and are consistently loaded and overridden for each experiment via `experiments/experiment_runner.py`.
+To avoid unstable checkpoint selection, training is early-stopped if pairwise AP does not improve for **5 consecutive epochs**.
 
-Special Considerations for CNN Backbones: Although the backbone ablation aims to keep training conditions identical across all models, preliminary experiments revealed that ConvNeXt-v2 and EfficientNet-B4 performed significantly worse than the other backbones when trained with the standard configuration using ArcFace loss.
+All remaining hyperparameters are defined in `configs/kaggle/base_config` and loaded via `experiments/experiment_runner.py`.
 
-To obtain more competitive and comparable results, we introduced several adjustments specifically for these purely convolutional architectures. Unlike Vision Transformers, CNNs rely primarily on local feature extractors and lack global attention mechanisms, which can limit their ability to capture long-range spatial dependencies relevant for animal re-identification.
+## Special Considerations for CNN Backbones
 
-To mitigate this limitation, we applied the following modifications:
+Although the backbone ablation is designed to keep training conditions as similar as possible, preliminary experiments showed that **ConvNeXt-V2** and **EfficientNet-B4** performed substantially worse under the standard setup.
 
-- Random Resize Cropping was enabled in the augmentation pipeline to increase spatial variability and improve robustness to local feature shifts.
-- The ArcFace margin was increased to encourage greater separation between identity clusters in the embedding space. CNN-based models often exhibit lower intra-class variation during training, quickly driving the training loss close to zero. At this stage, they tend to spread embeddings in the feature space and start fitting noisy labels, leading to overfitting.
-- The entire backbone was unfrozen earlier (after 3 epochs) and fully fine-tuned to allow stronger adaptation to the jaguar dataset.
+To obtain more competitive and comparable CNN results, three adjustments were introduced specifically for these architectures:
 
-These adjustments help compensate for the absence of global attention mechanisms and the fact that these models were not pretrained on animal re-identification datasets**, unlike some of the other backbones considered in this study.
+- **Random resized cropping** was enabled to increase spatial variability
+- the **ArcFace margin** was increased to encourage stronger cluster separation
+- the **entire backbone** was unfrozen earlier, after **3 epochs**, to allow stronger task-specific adaptation
 
-Model evaluation is performed using a lightweight ReID evaluation bundle (`ReIDEvalBundle`) that computes retrieval and embedding-quality metrics directly from the learned embeddings. The primary metric is the identity-balanced mean Average Precision (mAP), which evaluates retrieval performance for each identity and averages the resulting AP scores across identities, ensuring that identities with more images do not dominate the metric. In addition, we monitor Pairwise Average Precision (pairwise AP), which treats every pair of images as a binary classification problem (same identity vs different identity) and provides a complementary view of how well the embedding space separates identities. Standard ReID retrieval metrics such as Rank-1 and Rank-5 accuracy are also computed, measuring whether the correct identity appears among the top retrieved matches.
+The rationale was that these purely convolutional models rely primarily on local receptive fields and do not have the same global attention mechanisms as transformer backbones. These modifications were intended to partly compensate for that limitation and for the fact that the CNNs considered here were not pretrained specifically for wildlife re-identification.
 
-To further analyze the embedding space, the bundle includes ranking-quality metrics (e.g., Normalized Discounted Cumulative Gain (nDCG) which evaluates the quality of the ranking by giving higher weight to correct identities appearing at the top of the retrieval list), retrieval diagnostics (Recall@K, the proportion of queries for which the correct identity appears within the top K retrieved results), and embedding-space diagnostics such as the similarity gap, intra- vs inter-class distance, and optionally the Silhouette score, which measures clustering quality of identity embeddings. All metrics are computed from a cached cosine similarity matrix between embeddings to ensure efficient and consistent evaluation across experiments.
+## Evaluation
 
-While Kaggle evaluates submissions using identity-level mAP on the test set, our internal validation additionally monitors pairwise AP and embedding diagnostics to detect overfitting and analyze the structure of the learned embedding space during training.
+Model evaluation is based on a lightweight `ReIDEvalBundle`, which computes retrieval and embedding-quality metrics directly from the learned embeddings. The primary metric is **identity-balanced mAP**, which averages AP across identities so that jaguars with more images do not dominate the score.
 
-< insert here wandb screenshot >
-< insert here wandb screenshot grouped >
+We additionally monitor:
 
-Based on the experimental results shown in the Weights & Biases dashboard, a clear hierarchy emerges among the architectures:
+- **pairwise AP**
+- **Rank-1** and **Rank-5** retrieval accuracy
+- **nDCG**
+- **Recall@K**
+- **similarity gap**
+- **intra- vs inter-class distance**
+- optionally **silhouette score**
 
-- EVA-02 (dark blue dashed line) and MegaDescriptor-L-384 (purple dotted line) are the top performers. Both consistently outperform the others across all metrics, reaching a validation mAP above 0.7 and Rank-1 accuracy exceeding 94%. This confirms that massive-scale masked image modeling (EVA-02) and domain-specific pretraining on wildlife (MegaDescriptor) provide the most robust starting features for jaguar identification.
+All metrics are derived from a cached cosine-similarity matrix to ensure efficient and consistent evaluation across runs.
 
-- DINOv2-Base (purple solid line) follows closely behind the leaders. Its strong performance demonstrates the effectiveness of self-supervised distillation on large datasets for fine-grained animal recognition tasks.
+While Kaggle evaluates submissions with identity-level mAP on the hidden test set, these internal validation metrics are useful for monitoring overfitting and for understanding the structure of the learned embedding space.
 
-- MiewID (magenta line) and Swin-Transformer (dark green line) show competitive results. MiewID, despite being specialized for animal Re-ID, is limited by its EfficientNet-B2 backbone compared to larger Transformer-based foundational models trained with Triplet Loss. Conversely, when trained with the stable ArcFace loss and head (refer to previous runs in the project workspace on Weights & Biases), MiewID and Swin-Transformer reached performance comparable to EVA-02. The configuration reported here achieved the highest identity mAP on the test set.
+## Main Results
 
-- EfficientNet-B4 (light blue) and ConvNeXt-V2 (orange) exhibit the lowest performance despite the specialized adjustments (increased margin, earlier unfreezing, and Random Resize Cropping). This suggests that global attention mechanisms in Transformers are more effective at capturing the subtle, spatially distributed flank patterns of jaguars than the local receptive fields of traditional CNNs. Notably, in round_1 of the challenge (refer to previous runs in Weights & Biases), these results were less clear when images included the background, highlighting that global attention can be affected by distracting elements or jaguar pose in the image patches. For simplicity, comparisons with round_1 are omitted here, but it is important to note that background context can interfere with Transformer attention in this task.
+The Weights & Biases curves show a clear performance hierarchy across the backbone families.
 
-The diagnostic metrics provide deeper insight into why certain models perform better:
-- In the val/silhouette plot, EVA-02 shows a significantly higher silhouette score (~0.5) compared to the others. This indicates that EVA-02 creates much tighter clusters for individual jaguars, creating clearer boundaries between different identities.
-- The val/sim_gap (Similarity Gap) plot shows that EVA-02 and MegaDescriptor-L maintain the largest margin between intra-class similarity and inter-class similarity. This explains their superior performance in Triplet Loss training, as they provide a cleaner feature space for the hard-mining strategy to operate within.
-- The val/loss plot reveals that the Top Tier models (EVA-02, MegaDescriptor) achieve the lowest validation loss and reach stability faster than the CNN counterparts.
-- The val/pairwise_AP trend mirrors the mAP results but shows smoother improvement. It is worth noting that while most models start at a similar baseline (around epoch 0), the foundational Transformers exhibit a much steeper "learning curve" in the first 10 epochs, likely due to the high quality of their frozen representations.
+<p align="center"><img src="../../results/round_2/baseline/Bildschirmfoto 2026-03-17 um 22.51.03.png" width="90%" /></p>
+<p align="center"><em>Figure 1. Validation metrics across epochs for the different pretrained backbones.</em></p>
 
-The results highlight that general-purpose foundation models can match or exceed specialized wildlife models. EVA-02, which was not specifically trained on animals, slightly edges out MegaDescriptor-L, which was curated specifically for wildlife Re-ID. This suggests that the scale and diversity of pretraining in modern foundation models (like EVA and DINOv2) result in "universal" visual features that are highly transferable to niche domains like jaguar identification.
+Two models form the top tier: **EVA-02** and **MegaDescriptor-L-384**. Across the displayed validation metrics, both outperform the remaining backbones and reach the strongest final retrieval quality. In the curves shown here, both exceed roughly **0.7 validation sim-gap**, **0.5 silhouette**, **0.8 pairwise AP**, and **0.94 Rank-1**, with the strongest validation mAP trajectories among all compared models.
 
-< insert here wandb screenshot on time per epoch >
+The next tier consists of **DINOv2-Base** and **MiewID**, which remain competitive but do not match the two strongest backbones under this configuration. **Swin-Transformer** achieves clearly lower validation performance across the main retrieval metrics in the displayed setup.
 
-Looking carefully at the timing/epoch_time_sec Figure, while accuracy is the primary goal for the Kaggle competition, EVA-02 is the most computationally expensive model, taking approximately 44.2 seconds per epoch. This represents a ~37% increase in training time compared to the fastest models. However, given its superior mAP and Rank-1 results, this "overhead" is justified for the competition setting.
+At the bottom of the comparison are **EfficientNet-B4** and **ConvNeXt-V2**. Even with the additional CNN-specific adjustments, both remain behind the transformer-based and wildlife-specialized top performers.
 
-A standout result in the efficiency analysis is MegaDescriptor-L-384. Despite being one of the top two performers in terms of accuracy, its epoch time is remarkably low at ~34 seconds. It is faster than the smaller DINO-Small and MiewID models. Swin-Transformer (~32.3s) and EfficientNet-B4 (~33.3s) are the fastest architectures. However, as noted in the accuracy analysis, their performance was significantly lower. This indicates that for the Jaguar Re-ID task, the time saved during training (roughly 10-12 seconds per epoch) does not compensate for the loss in identification accuracy.
+### Validation-metric interpretation
 
-Recommendation for the pipeline: Moving forward, EVA-02 is used as the default backbone to achieve 90%+ target observed on the leaderboard. 
+The diagnostic metrics help explain these differences.
+
+- In the **validation silhouette** plot, **EVA-02** achieves the highest score, indicating tighter identity clusters and clearer separation between jaguars.
+- In **validation sim-gap**, **EVA-02** and **MegaDescriptor-L** maintain the largest separation between intra-class and inter-class similarity, which is consistent with their strong retrieval performance.
+- The **validation loss** curves show that the top-performing backbones also converge to lower and more stable validation loss values than the weaker CNN baselines.
+- The **pairwise AP** plot broadly mirrors the mAP ranking, but evolves more smoothly over epochs, which is why it is useful for checkpoint selection.
+
+Overall, the trends suggest that strong backbones do not merely improve one retrieval metric in isolation. Rather, they produce a more structured embedding space, which is reflected jointly in mAP, pairwise AP, sim-gap, silhouette, and validation loss.
+
+### Training-loss comparison
+
+The train-loss curves provide a complementary view of optimization behavior.
+
+<p align="center"><img src="../../results/round_2/baseline/W&B Chart 17.3.2026, 22_50_15.png" width="90%" /></p>
+<p align="center"><em>Figure 2. Training loss across epochs for the different pretrained backbones.</em></p>
+
+Most backbones show the expected rapid drop in loss during the first epochs, followed by a flatter late-training regime. However, the trajectories differ markedly in level and stability. **EVA-02** and **MegaDescriptor-L** reach very low final train loss while also maintaining the strongest validation metrics, suggesting that their good validation performance is not simply a consequence of unstable optimization. By contrast, **Swin-Transformer** remains at a much higher training-loss plateau and also underperforms in validation, which indicates weaker fitting under this setup rather than better regularization.
+
+### Architectural interpretation
+
+A notable result of this experiment is that large general-purpose foundation models can match or exceed specialized wildlife models. **EVA-02**, despite not being trained specifically for animal re-identification, performs at least on par with and in several diagnostics slightly ahead of **MegaDescriptor-L-384**, which was explicitly developed for wildlife Re-ID.
+
+This suggests that large-scale pretraining and representation quality can transfer extremely well to jaguar identification, even without species-specific supervision during pretraining.
+
+At the same time, the results also indicate that architecture matters. The strongest models in this experiment are transformer-based or wildlife-specialized descriptors with very strong pretrained representations. The weaker CNN results suggest that local convolutional features alone may be less effective for capturing the subtle, spatially distributed flank-pattern cues required for jaguar identification, at least under the present training setup.
+
+The project notes also indicate that this ranking was less clear on **Round 1**, where backgrounds were still present. That observation should be interpreted cautiously, but it is compatible with the idea that background context can interact with global attention and partly obscure the underlying backbone comparison.
+
+## Practical Implication
+
+From a competition perspective, **EVA-02** is the strongest default backbone choice for the pipeline and is therefore used as the main backbone in later experiments. The reason is straightforward: under the standardized Round 2 setup, it delivers the strongest overall validation profile across mAP, Rank-1, similarity gap, silhouette, and loss dynamics.
+
+At the same time, **MegaDescriptor-L-384** emerges as a highly competitive alternative. It remains very close to EVA-02 in the main retrieval metrics and is especially interesting because it combines strong wildlife-specific pretraining with strong downstream transfer to the jaguar benchmark.
+
+## Limitation
+
+This experiment isolates backbone choice within one shared training pipeline, but it does not fully separate architecture from all backbone-specific tuning effects. In particular, the CNN backbones required additional adjustments to remain reasonably competitive, which means the comparison is standardized but not perfectly identical in every detail.
+
+In addition, the results are internal validation results on the Round 2 masked-background benchmark. They are highly informative for model selection within this project, but they should not be interpreted as universal rankings across all animal Re-ID datasets or all training regimes.
+
+## Conclusion
+
+The backbone ablation shows a clear hierarchy among the pretrained descriptors considered in this study. **EVA-02** and **MegaDescriptor-L-384** are the strongest backbones under the standardized Round 2 jaguar pipeline, with **DINOv2-Base** and **MiewID** forming a competitive middle tier and the CNN backbones remaining clearly behind.
+
+The broader conclusion is that large pretrained foundation models transfer extremely well to jaguar re-identification. In this experiment, strong general-purpose transformer representations can match or even slightly exceed specialized wildlife models. Based on this result, **EVA-02** is used as the default backbone in the later stages of the pipeline.

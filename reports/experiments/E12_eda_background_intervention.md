@@ -60,6 +60,8 @@ This pattern suggests that the model is not equally sensitive to all background 
 
 To assess whether the degradation is broad-based or driven only by a subset of unstable queries, we also analyzed per-query changes relative to the original condition. The results are summarized in **Table 2** and visualized in **Figure 3**.
 
+Importantly, this section does **not** introduce a second independent aggregate metric. The **mean ΔAP vs original** is simply the query-wise view of the same mAP drop already reported in **Table 1**. Its value here is not that it changes the aggregate conclusion, but that it shows how the degradation is distributed across queries. The genuinely additional information comes from the **median ΔAP**, the **rank-1 flip rate**, the **mean shift in first-positive rank**, and the **ΔAP distribution** in the boxplot.
+
 | setting | mean ΔAP vs original | median ΔAP vs original | rank-1 flip rate | mean Δ first positive rank |
 |----------|---------------------:|-----------------------:|-----------------:|---------------------------:|
 | blur_bg | -0.006 | 0.000 | 0.006 | 0.046 |
@@ -85,6 +87,8 @@ At the other extreme, **random_bg** causes the clearest systematic failures. Its
 The remaining settings fall between these two extremes. **black_bg** produces broader instability, with both a more negative mean and a slightly negative median ΔAP. **gray_bg** and **mixed_original_random_bg** show a more mixed pattern: many queries remain stable, but a substantial subset deteriorates strongly. This is why their median ΔAP remains at **0.000** while their mean ΔAP is still clearly negative.
 
 The **mean first-positive rank** supports the same interpretation. It worsens only negligibly for **blur_bg**, moderately for **mixed_original_random_bg**, **gray_bg**, and **black_bg**, and most strongly for **random_bg**. Taken together, **Table 2** and **Figure 3** show that severe interventions do not merely lower similarity scores slightly; they often change the retrieval outcome itself.
+
+A similar clarification applies to rank-1. Here, the **rank-1 flip rate** is numerically equal to the aggregate **ΔRank-1 vs original** from **Table 1**. This indicates that the rank-1 drop is almost entirely explained by queries that flip from correct under `original` to incorrect under the manipulated setting, with essentially no compensating improvements in the opposite direction. The added value of the query-wise view is therefore again distributional: it helps distinguish settings where degradation is widespread from settings where it is concentrated in a subset of unstable queries.
 
 ## Interpretation
 --------------

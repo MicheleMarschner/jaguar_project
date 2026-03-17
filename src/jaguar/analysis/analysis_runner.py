@@ -68,7 +68,6 @@ def main() -> None:
     experiment_group = resolve_experiment_group(config)
     save_dir = build_results_out_dir(experiment_group)
 
-    #!TODO wie kann man dass auslagern??
     if experiment_group == "kaggle_deduplication":
         run_dir = root_dir / "closed_curated_traink_3_valk_3_p4"
 

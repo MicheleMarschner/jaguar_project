@@ -14,24 +14,29 @@ This README is intentionally limited to setup and reproducibility. Detailed desc
 
 The project follows a `src` layout to keep source code, configuration, and outputs clearly separated and to support reproducible execution.
 
-!TODO ADAPT
-
 ```text
-JAGUAR_PROJECT
-├── src/
-│   └── jaguar/
-├── configs/
-├── checkpoints/
+JAGUAR_PROJECT/
+├── .vscode/                     
+├── checkpoints/                 # Saved model checkpoints and training states
+├── configs/                     # Configs for running experiments
 ├── data/
-├── documentation/
-├── experiments/
-├── results/
-├── slurm_scripts/
-├── tests/
-├── pyproject.toml
-├── requirements-captum-nodeps.txt
-└── README.md
-```
+│   ├── round_1/                 # Round 1 dataset files and derived assets.
+│   └── round_2/                 # Round 2 dataset files and derived assets.
+├── documentation/              # Supporting project notes and writeups
+├── experiments/                # Experiment outputs, run folders, and intermediate artifacts
+├── reports/                    # Final reports of experiments
+├── results/                    # Processed results, plots, tables, and evaluation outputs
+├── slurm_scripts/              # HPC / SLURM job example scripts for cluster execution
+├── src/
+│   ├── jaguar/                 # Main project source code
+│   └── jaguar_project.egg-info/ # Package metadata generated during installation/build
+├── .env.sample                 # Example environment variable template
+├── .gitattributes              
+├── .gitignore                  
+├── pyproject.toml              # Project/package configuration and dependencies
+├── README.md                   # Project overview and usage instructions
+└── requirements-captum-nodeps.txt # Optional dependency list for Captum-related setup
+
 ---
 
 ## Setup Guide
@@ -206,10 +211,6 @@ PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
   --experiment_config experiments/kaggle_deduplication
 ```
 
-PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
-  --base_config base/ensemble_base \
-  --experiment_config experiments/kaggle_ensemble
-
 This command generates an executable configuration for each run defined in the experiment configuration under `configs/_generated/<experiment_group>` and executes them sequentially.
 The commands need to be started from the project root directory
 
@@ -221,20 +222,19 @@ The base config defines the common defaults for training, model setup, preproces
 
 After training or evaluation runs are complete, the corresponding analysis scripts can be executed to recreate summary tables, comparisons, and visualizations.
 
+Use `--experiment_group` to select **which analysis pipeline** should be run.  
+Use `--run_name` to analyze **one specific run**. If `--run_name` is omitted, the runner processes **all runs** found for that experiment group and creates aggregate outputs.
+
+```bash
+PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group kaggle_deduplication
+```
+
+**Single-run analysis**
+Recreates analysis artifacts for one specific run only
+
 ```bash
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_background_intervention --run_name eva02_triplet_bg_orig_gray_black_rdn_blur_mixed
 ```
-
-!TODO Anpassung!
-PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_foreground_contribution
-
-PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group baseline
-PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_xai_similarity
-jaguar_project % PYTHONPATH=src python -m jaguar.analysis.analysis_runner \
-   --experiment_group eda_xai_class_attribution \
-  --run_name eva02_val_n332_all_groups
-
-PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group kaggle_deduplication
 
 ---
 
@@ -291,8 +291,6 @@ These projects contain the logged training runs, configurations, metrics, and ar
 
 ## Limitations
 
-- Reproducibility depends on matching the original environment as closely as possible.
-- Some external services, paths, or credentials may require local adaptation.
-- Hardware differences can affect runtime and, in rare cases, small numerical details.
-
-!TODO make it meaningful
+- Full reproducibility depends on matching the original software and hardware environment as closely as possible
+- Some external services, file paths, or credentials may require local adaptation
+- Running the code in more resource-intensive environments such as HPC clusters may require small code or configuration adjustments

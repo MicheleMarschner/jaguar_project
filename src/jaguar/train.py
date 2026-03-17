@@ -208,7 +208,7 @@ class JaguarTrainer:
         return running_loss / len(self.train_loader)
 
     @torch.no_grad()
-    def validate(self, epoch=None):
+    def validate(self, epoch=None, loader=None):
         """Extract validation embeddings and compute Re-ID metrics, with optional heavy mining analysis."""
         # self.model.eval()
         eval_model = self.ema_model.module if self.use_ema and hasattr(self.ema_model, "module") else self.model

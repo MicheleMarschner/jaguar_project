@@ -1,194 +1,40 @@
 import argparse
 from pathlib import Path
+
 import pandas as pd
-from jaguar.utils.utils_ensemble import build_ensemble_results_long_df, build_protocol_comparison_df
-import numpy as np
 
 from jaguar.config import PATHS
-from jaguar.utils.utils_experiments import deep_update, load_toml_config
-from jaguar.logging.wandb_logger import finish_wandb_run, init_wandb_run, log_wandb_ensemble_config, log_wandb_ensemble_results
-from jaguar.models.ensemble import create_simple_ensemble
 from jaguar.utils.utils import ensure_dir
+from jaguar.utils.utils_experiments import deep_update, load_toml_config
 from jaguar.utils.utils_evaluation import (
     build_query_gallery_retrieval_state_from_sim,
     evaluate_query_gallery_retrieval,
 )
+from jaguar.logging.wandb_logger import (
+    finish_wandb_run,
+    init_wandb_run,
+    log_wandb_ensemble_config,
+    log_wandb_ensemble_results,
+)
+from jaguar.models.ensemble import create_simple_ensemble
 from jaguar.models.fusion_suite import build_fusion_suite_results
-from jaguar.analysis.kaggle_ensemble.ensemble_analysis import build_topk_candidates_df, build_qualitative_review_df
-
-
-def build_per_query_comparison_df(
-    per_model_query_dfs: dict[str, pd.DataFrame],
-    fusion_query_dfs: dict[str, pd.DataFrame],
-) -> pd.DataFrame:
-    """Merge per-query results from single models and fusion methods into one comparison table."""
-    model_names = list(per_model_query_dfs.keys())
-    fusion_names = list(fusion_query_dfs.keys())
-
-    if not model_names:
-        raise ValueError("per_model_query_dfs must not be empty")
-
-    base = per_model_query_dfs[model_names[0]][["query_idx", "query_label"]].copy()
-
-    for name, df in per_model_query_dfs.items():
-        base = base.merge(
-            df[["query_idx", "ap", "rank1_correct", "first_pos_rank", "top1_idx", "top1_label", "top1_sim"]].rename(
-                columns={
-                    "ap": f"ap__{name}",
-                    "rank1_correct": f"rank1__{name}",
-                    "first_pos_rank": f"first_pos_rank__{name}",
-                    "top1_idx": f"top1_idx__{name}",
-                    "top1_label": f"top1_label__{name}",
-                    "top1_sim": f"top1_sim__{name}",
-                }
-            ),
-            on="query_idx",
-            how="left",
-        )
-
-    for name, df in fusion_query_dfs.items():
-        base = base.merge(
-            df[["query_idx", "ap", "rank1_correct", "first_pos_rank", "top1_idx", "top1_label", "top1_sim"]].rename(
-                columns={
-                    "ap": f"ap__{name}",
-                    "rank1_correct": f"rank1__{name}",
-                    "first_pos_rank": f"first_pos_rank__{name}",
-                    "top1_idx": f"top1_idx__{name}",
-                    "top1_label": f"top1_label__{name}",
-                    "top1_sim": f"top1_sim__{name}",
-                }
-            ),
-            on="query_idx",
-            how="left",
-        )
-
-    model_ap_cols = [f"ap__{name}" for name in model_names]
-    model_rank1_cols = [f"rank1__{name}" for name in model_names]
-
-    base["oracle_ap"] = base[model_ap_cols].max(axis=1, skipna=True)
-    base["oracle_rank1"] = base[model_rank1_cols].any(axis=1)
-
-    base["best_model"] = base[model_ap_cols].idxmax(axis=1).str.replace("ap__", "", regex=False)
-    base["best_model_ap"] = base[model_ap_cols].max(axis=1, skipna=True)
-
-    if "score_fusion" in fusion_query_dfs:
-        base["score_fusion_delta_vs_best_model"] = base["ap__score_fusion"] - base["best_model_ap"]
-        base["score_fusion_delta_vs_oracle"] = base["ap__score_fusion"] - base["oracle_ap"]
-        base["score_fusion_beats_best_model"] = base["ap__score_fusion"] > base["best_model_ap"]
-        base["score_fusion_matches_best_model"] = np.isclose(
-            base["ap__score_fusion"], base["best_model_ap"], atol=1e-12
-        )
-
-    return base
-
-
-def compute_oracle_from_query_dfs(
-    per_model_query_dfs: dict[str, pd.DataFrame],
-) -> tuple[pd.DataFrame, dict]:
-    model_names = list(per_model_query_dfs.keys())
-
-    base = per_model_query_dfs[model_names[0]][["query_idx", "query_label"]].copy()
-
-    for name, df in per_model_query_dfs.items():
-        base = base.merge(
-            df[["query_idx", "ap", "rank1_correct"]].rename(
-                columns={
-                    "ap": f"ap__{name}",
-                    "rank1_correct": f"rank1__{name}",
-                }
-            ),
-            on="query_idx",
-            how="left",
-        )
-
-    ap_cols = [f"ap__{name}" for name in model_names]
-    rank1_cols = [f"rank1__{name}" for name in model_names]
-
-    base["oracle_ap"] = base[ap_cols].max(axis=1, skipna=True)
-    base["oracle_rank1"] = base[rank1_cols].any(axis=1)
-
-    summary = {
-        "oracle_mAP": float(base["oracle_ap"].mean()),
-        "oracle_rank1": float(base["oracle_rank1"].mean()),
-    }
-
-    return base, summary
-
-def build_per_identity_gain_df(
-    query_df_base: pd.DataFrame,
-    query_df_target: pd.DataFrame,
-    identity_col: str = "query_label",
-    base_name: str = "best_single",
-    target_name: str = "ensemble",
-) -> pd.DataFrame:
-    """Aggregate per-query gains to per-identity comparison."""
-    base = query_df_base[[identity_col, "ap", "rank1_correct"]].rename(
-        columns={
-            "ap": f"ap__{base_name}",
-            "rank1_correct": f"rank1__{base_name}",
-        }
-    )
-    target = query_df_target[[identity_col, "ap", "rank1_correct"]].rename(
-        columns={
-            "ap": f"ap__{target_name}",
-            "rank1_correct": f"rank1__{target_name}",
-        }
-    )
-
-    df = pd.concat([base, target.drop(columns=[identity_col])], axis=1)
-    grouped = df.groupby(identity_col, dropna=False).agg(
-        queries=(identity_col, "size"),
-        base_ap_mean=(f"ap__{base_name}", "mean"),
-        target_ap_mean=(f"ap__{target_name}", "mean"),
-        base_rank1_mean=(f"rank1__{base_name}", "mean"),
-        target_rank1_mean=(f"rank1__{target_name}", "mean"),
-    ).reset_index()
-
-    grouped["delta_ap"] = grouped["target_ap_mean"] - grouped["base_ap_mean"]
-    grouped["delta_rank1"] = grouped["target_rank1_mean"] - grouped["base_rank1_mean"]
-    return grouped.sort_values("delta_ap", ascending=False)
-
-
-def build_compute_summary_df(
-    out: dict,
-    fusion_results: list[dict[str, any]],
-    members_cfg: list[dict],
-) -> pd.DataFrame:
-    """Save simple compute/latency proxy information for later reporting."""
-    member_rows = []
-    for member_cfg in members_cfg:
-        name = member_cfg["name"]
-        member_out = out["member_outputs"][name]
-        member_rows.append(
-            {
-                "kind": "member",
-                "method_name": name,
-                "family": "single_model",
-                "n_members_used": 1,
-                "embedding_dim": int(member_out["query_embeddings"].shape[1]),
-                "query_count": int(member_out["query_embeddings"].shape[0]),
-                "gallery_count": int(member_out["gallery_embeddings"].shape[0]),
-            }
-        )
-
-    fusion_rows = []
-    for res in fusion_results:
-        fusion_rows.append(
-            {
-                "kind": "fusion",
-                "method_name": res["name"],
-                "family": res["meta"].get("family"),
-                "n_members_used": int(res["meta"].get("n_members_used", len(out["member_outputs"]))),
-                "embedding_dim": res["meta"].get("embedding_dim"),
-                "query_count": int(out["query_labels"].shape[0]),
-                "gallery_count": int(out["gallery_labels"].shape[0]),
-            }
-        )
-
-    return pd.DataFrame(member_rows + fusion_rows)
+from jaguar.analysis.kaggle_ensemble.ensemble_analysis import (
+    build_qualitative_review_df,
+    build_topk_candidates_df,
+)
+from jaguar.utils.utils_ensemble import (
+    build_compute_summary_df,
+    build_ensemble_results_long_df,
+    build_per_identity_gain_df,
+    build_per_query_comparison_df,
+    build_protocol_comparison_df,
+    compute_oracle_from_query_dfs,
+    rank1_overlap_from_query_dfs,
+)
 
 
 def parse_args():
+    """Parse command-line arguments for the ensemble runner."""
     parser = argparse.ArgumentParser(description="Run ensemble experiment")
     parser.add_argument(
         "--base_config",
@@ -206,6 +52,43 @@ def parse_args():
         help="Optional name of the experiment (used for logging/checkpoints)",
     )
     return parser.parse_args()
+
+
+def evaluate_method_from_sim(
+    sim_matrix,
+    query_global_indices,
+    gallery_global_indices,
+    query_labels,
+    gallery_labels,
+    split_df,
+):
+    """Evaluate one method from a query-gallery similarity matrix."""
+    retrieval = build_query_gallery_retrieval_state_from_sim(
+        sim_matrix=sim_matrix,
+        query_global_indices=query_global_indices,
+        gallery_global_indices=gallery_global_indices,
+        query_labels=query_labels,
+        gallery_labels=gallery_labels,
+        split_df=split_df,
+    )
+    query_df, metrics = evaluate_query_gallery_retrieval(retrieval)
+    topk_df = build_topk_candidates_df(retrieval, top_k=3)
+    return retrieval, query_df, metrics, topk_df
+
+
+def save_fusion_artifacts(
+    run_dir: Path,
+    gallery_protocol: str,
+    fusion_name: str,
+    artifacts: dict,
+) -> None:
+    """Save tabular fusion artifacts to disk."""
+    for artifact_name, artifact_value in artifacts.items():
+        if isinstance(artifact_value, pd.DataFrame):
+            artifact_value.to_csv(
+                run_dir / f"{artifact_name}__{fusion_name}__{gallery_protocol}.csv",
+                index=False,
+            )
 
 
 def run_one_ensemble_protocol(
@@ -235,7 +118,7 @@ def run_one_ensemble_protocol(
     per_model_topk_dfs = {}
 
     for name, member_out in out["member_outputs"].items():
-        retrieval = build_query_gallery_retrieval_state_from_sim(
+        _, query_df, metrics, topk_df = evaluate_method_from_sim(
             sim_matrix=member_out["sim_matrix"],
             query_global_indices=query_global_indices,
             gallery_global_indices=gallery_global_indices,
@@ -243,17 +126,12 @@ def run_one_ensemble_protocol(
             gallery_labels=gallery_labels,
             split_df=split_df,
         )
-        query_df, metrics = evaluate_query_gallery_retrieval(retrieval)
 
         per_model_query_dfs[name] = query_df
         per_model_metrics[name] = metrics
-        per_model_topk_dfs[name] = build_topk_candidates_df(retrieval, top_k=3)
+        per_model_topk_dfs[name] = topk_df
 
-        print(
-            f"{name:20s} "
-            f"mAP={metrics['mAP']:.4f} "
-            f"rank1={metrics['rank1']:.4f}"
-        )
+        print(f"{name:20s} mAP={metrics['mAP']:.4f} rank1={metrics['rank1']:.4f}")
 
     oracle_df, oracle_summary = compute_oracle_from_query_dfs(per_model_query_dfs)
 
@@ -267,14 +145,14 @@ def run_one_ensemble_protocol(
 
     fusion_query_dfs = {}
     fusion_metrics = {}
+    fusion_topk_dfs = {}
     fusion_artifacts = {}
     fusion_summary_rows = []
-    fusion_topk_dfs = {}
 
     for fusion_res in fusion_results:
         fusion_name = fusion_res["name"]
 
-        retrieval = build_query_gallery_retrieval_state_from_sim(
+        _, query_df, metrics, topk_df = evaluate_method_from_sim(
             sim_matrix=fusion_res["sim_matrix"],
             query_global_indices=query_global_indices,
             gallery_global_indices=gallery_global_indices,
@@ -282,11 +160,10 @@ def run_one_ensemble_protocol(
             gallery_labels=gallery_labels,
             split_df=split_df,
         )
-        query_df, metrics = evaluate_query_gallery_retrieval(retrieval)
 
         fusion_query_dfs[fusion_name] = query_df
         fusion_metrics[fusion_name] = metrics
-        fusion_topk_dfs[fusion_name] = build_topk_candidates_df(retrieval, top_k=3)
+        fusion_topk_dfs[fusion_name] = topk_df
         fusion_artifacts[fusion_name] = fusion_res.get("artifacts", {})
 
         fusion_summary_rows.append({
@@ -296,19 +173,18 @@ def run_one_ensemble_protocol(
             **fusion_res["meta"],
         })
 
-        print(
-            f"{fusion_name:20s} "
-            f"mAP={metrics['mAP']:.4f} "
-            f"rank1={metrics['rank1']:.4f}"
-        )
+        print(f"{fusion_name:20s} mAP={metrics['mAP']:.4f} rank1={metrics['rank1']:.4f}")
 
     fusion_summary_df = pd.DataFrame(fusion_summary_rows)
-    
     fusion_summary_df.to_csv(
         run_dir / f"fusion_summary__{gallery_protocol}.csv",
         index=False,
     )
 
+    method_topk_dfs = {
+        **per_model_topk_dfs,
+        **fusion_topk_dfs,
+    }
     for method_name, topk_df in method_topk_dfs.items():
         topk_df.to_csv(
             run_dir / f"topk_candidates__{method_name}__{gallery_protocol}.csv",
@@ -316,16 +192,20 @@ def run_one_ensemble_protocol(
         )
 
     for fusion_name, artifacts in fusion_artifacts.items():
-        for artifact_name, artifact_value in artifacts.items():
-            if isinstance(artifact_value, pd.DataFrame):
-                artifact_value.to_csv(
-                    run_dir / f"{artifact_name}__{fusion_name}__{gallery_protocol}.csv",
-                    index=False,
-                )
+        save_fusion_artifacts(
+            run_dir=run_dir,
+            gallery_protocol=gallery_protocol,
+            fusion_name=fusion_name,
+            artifacts=artifacts,
+        )
 
     per_query_comparison_df = build_per_query_comparison_df(
         per_model_query_dfs=per_model_query_dfs,
         fusion_query_dfs=fusion_query_dfs,
+    )
+    per_query_comparison_df.to_csv(
+        run_dir / f"per_query_comparison__{gallery_protocol}.csv",
+        index=False,
     )
 
     best_single_name = max(per_model_metrics.items(), key=lambda x: x[1]["mAP"])[0]
@@ -348,10 +228,6 @@ def run_one_ensemble_protocol(
         **per_model_query_dfs,
         **fusion_query_dfs,
     }
-    method_topk_dfs = {
-        **per_model_topk_dfs,
-        **fusion_topk_dfs,
-    }
 
     if "score_fusion" in fusion_query_dfs:
         review_df = build_qualitative_review_df(
@@ -362,7 +238,6 @@ def run_one_ensemble_protocol(
             target_method="score_fusion",
             worst_n=10,
         )
-
         review_df.to_csv(
             run_dir / f"qualitative_review_worst_score_fusion__{gallery_protocol}.csv",
             index=False,
@@ -377,27 +252,6 @@ def run_one_ensemble_protocol(
                 ]
             ].mean(numeric_only=True)
         )
-
-        print("\nWorst score-fusion losses vs best single:")
-        cols = [
-            "query_idx",
-            "query_label",
-            "best_model",
-            "best_model_ap",
-            "ap__score_fusion",
-            "score_fusion_delta_vs_best_model",
-            "score_fusion_delta_vs_oracle",
-        ]
-        print(
-            per_query_comparison_df.sort_values("score_fusion_delta_vs_best_model")[cols]
-            .head(10)
-            .to_string(index=False)
-        )
-
-    per_query_comparison_df.to_csv(
-        run_dir / f"per_query_comparison__{gallery_protocol}.csv",
-        index=False,
-    )
 
     results_long_df = build_ensemble_results_long_df(
         exp_name=exp_name,
@@ -421,13 +275,11 @@ def run_one_ensemble_protocol(
 
     return {
         "gallery_protocol": gallery_protocol,
-        "out": out,
         "compute_summary_df": compute_summary_df,
         "per_model_query_dfs": per_model_query_dfs,
         "per_model_metrics": per_model_metrics,
         "fusion_query_dfs": fusion_query_dfs,
         "fusion_metrics": fusion_metrics,
-        "fusion_artifacts": fusion_artifacts,
         "oracle_df": oracle_df,
         "oracle_summary": oracle_summary,
         "per_query_comparison_df": per_query_comparison_df,
@@ -436,9 +288,8 @@ def run_one_ensemble_protocol(
     }
 
 
-
-
 def main():
+    """Run one or more ensemble gallery protocols and save evaluation outputs."""
     args = parse_args()
 
     base_config = load_toml_config(args.base_config)
@@ -469,15 +320,10 @@ def main():
 
     experiment_group = config.get("output", {}).get("experiment_group")
 
-    print(exp_name)
-    print(experiment_group)
-    print(gallery_protocols)
-
     if experiment_group:
         run_dir = PATHS.runs / experiment_group / exp_name
     else:
         run_dir = PATHS.runs / exp_name
-
     ensure_dir(run_dir)
 
     use_wandb = len(gallery_protocols) == 1
@@ -519,7 +365,6 @@ def main():
 
     print("\nProtocol comparison:")
     print(comparison_df.to_string(index=False))
-        
 
     if use_wandb:
         protocol_result = all_protocol_results[0]
@@ -529,6 +374,9 @@ def main():
         oracle_summary = protocol_result["oracle_summary"]
         per_model_query_dfs = protocol_result["per_model_query_dfs"]
         fusion_query_dfs = protocol_result["fusion_query_dfs"]
+
+        if "score_fusion" not in fusion_query_dfs or "embedding_concat" not in fusion_query_dfs:
+            raise KeyError("Expected score_fusion and embedding_concat in fusion_query_dfs for W&B logging.")
 
         score_query_df = fusion_query_dfs["score_fusion"]
         score_metrics = fusion_metrics["score_fusion"]
@@ -580,92 +428,6 @@ def main():
             total_train_time_sec=0.0,
         )
 
-
-    """
-    # Jaju query ids from your analysis
-    target_query_ids = [555, 556]
-
-    # per_model_query_dfs should already exist in run_ensemble.py
-    # e.g. {"EVA-02": df1, "MiewID": df2, "ConvNeXt-V2": df3}
-    rows = []
-
-    for model_name, df in per_model_query_dfs.items():
-        sub = df[df["query_idx"].isin(target_query_ids)].copy()
-        sub = sub[["query_idx", "query_label", "rank1_correct", "first_pos_rank", "ap", "top1_label", "top1_idx"]]
-        sub["model"] = model_name
-        rows.append(sub)
-
-    jaju_rank_df = pd.concat(rows, ignore_index=True)
-    jaju_rank_df = jaju_rank_df.sort_values(["query_idx", "first_pos_rank", "model"])
-
-    print(jaju_rank_df.to_string(index=False))
-
-    rows = []
-
-    for method_name, df in {**per_model_query_dfs, **fusion_query_dfs}.items():
-        sub = df[df["query_idx"].isin(target_query_ids)].copy()
-        sub = sub[["query_idx", "query_label", "rank1_correct", "first_pos_rank", "ap", "top1_label", "top1_idx"]]
-        sub["method"] = method_name
-        rows.append(sub)
-
-    jaju_rank_df = pd.concat(rows, ignore_index=True)
-    jaju_rank_df = jaju_rank_df.sort_values(["query_idx", "first_pos_rank", "method"])
-
-    print(jaju_rank_df.to_string(index=False))
-    
-    pivot = jaju_rank_df.pivot_table(
-        index=["query_idx", "query_label"],
-        columns="method",
-        values="first_pos_rank",
-        aggfunc="first",
-    )
-
-    print(pivot)
-
-
-    target_query_ids = [1144, 1213, 1217, 1221, 1215, 1214]
-
-    rows = []
-
-    for method_name, df in {**per_model_query_dfs, **fusion_query_dfs}.items():
-        sub = df[df["query_idx"].isin(target_query_ids)].copy()
-        sub = sub[
-            [
-                "query_idx",
-                "query_label",
-                "rank1_correct",
-                "first_pos_rank",
-                "ap",
-                "top1_label",
-                "top1_idx",
-            ]
-        ]
-        sub["method"] = method_name
-        rows.append(sub)
-
-    medrosa_rank_df = pd.concat(rows, ignore_index=True)
-    medrosa_rank_df = medrosa_rank_df.sort_values(["query_idx", "first_pos_rank", "method"])
-
-    print(medrosa_rank_df.to_string(index=False))
-
-    pivot_first_pos = medrosa_rank_df.pivot_table(
-        index=["query_idx", "query_label"],
-        columns="method",
-        values="first_pos_rank",
-        aggfunc="first",
-    )
-
-    print(pivot_first_pos)
-
-    pivot_ap = medrosa_rank_df.pivot_table(
-        index=["query_idx", "query_label"],
-        columns="method",
-        values="ap",
-        aggfunc="first",
-    )
-
-    print(pivot_ap)
-    """
 
 if __name__ == "__main__":
     main()

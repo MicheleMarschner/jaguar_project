@@ -172,7 +172,25 @@ def run_background_intervention(config, save_dir):
             )
         """
 
-        query_df, summary = evaluate_query_gallery_retrieval(retrieval)
+        #query_df, summary = evaluate_query_gallery_retrieval(retrieval)
+        query_df, summary, skipped_df = evaluate_query_gallery_retrieval(retrieval)
+        print(f"\n[DEBUG] setting={setting}")
+        print(f"[DEBUG] summary={summary}")
+
+        if not skipped_df.empty:
+            print("[DEBUG] skipped query counts by reason:")
+            print(skipped_df["skip_reason"].value_counts())
+
+        if not query_df.empty:
+            print("[DEBUG] query_df head:")
+            print(query_df.head())
+
+        debug_dir = PATHS.results / "debug_val_only_retrieval"
+        debug_dir.mkdir(parents=True, exist_ok=True)
+
+        query_df.to_csv(debug_dir / f"{setting}_query_df.csv", index=False)
+        skipped_df.to_csv(debug_dir / f"{setting}_skipped_df.csv", index=False)
+        pd.DataFrame([summary]).to_csv(debug_dir / f"{setting}_summary.csv", index=False)
         
         #query_df, summary = evaluate_query_gallery_retrieval(retrieval)
         result = save_retrieval_results(save_dir, setting, query_df, summary)

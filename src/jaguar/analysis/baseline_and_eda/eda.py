@@ -24,8 +24,6 @@ from jaguar.utils.utils_eda import (
     merge_sharpness_with_image_stats,
     get_top_bottom_by_column,
     plot_bg_label_counts,
-)
-from jaguar.utils.utils_visualization import (
     plot_identity_distribution, 
     plot_image_dimensions, 
     sharpness_histogramm, 

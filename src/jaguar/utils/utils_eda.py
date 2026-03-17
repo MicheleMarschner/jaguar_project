@@ -2,11 +2,18 @@ from pathlib import Path
 import re
 from PIL import Image
 import numpy as np
-import pandas as pd
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import pandas as pd
+import seaborn as sns
+import math
 
-from typing import Iterable
+from jaguar.utils.utils import ensure_dir
+from typing import Iterable, Optional
+
+sns.set_theme(style="whitegrid", palette="muted")
 
 
 def print_section(title: str) -> None:
@@ -325,3 +332,209 @@ def plot_bg_label_counts(alpha_df, save_path):
     plt.tight_layout()
     plt.savefig(save_path, dpi=150)
     plt.close()
+
+
+# ============================================================
+# EDA Plots
+# ============================================================
+
+def plot_image_dimensions(stats_df: pd.DataFrame, save_path: Optional[Path] = None, show: bool = False) -> None:
+    fig = plt.figure(figsize=(8, 4))
+    plt.hist(stats_df["width"], bins=50, alpha=0.6, label="width")
+    plt.hist(stats_df["height"], bins=50, alpha=0.6, label="height")
+    plt.legend()
+    plt.title("Distribution of image widths and heights (train)")
+    plt.xlabel("Pixels")
+    plt.ylabel("Count")
+    plt.tight_layout()
+
+    if save_path is not None:
+        ensure_dir(save_path.parent)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show()
+    plt.close(fig)
+
+
+# Left: per-identity counts (sorted) to reveal long-tail imbalance.
+# Right: histogram of class sizes to summarize the distribution shape.
+def plot_identity_distribution(counts: pd.Series, save_path: Path) -> None:
+    plt.figure(figsize=(12, 6))
+
+    # Bar chart
+    ax = plt.subplot(1, 2, 1)
+    color_palette = ['red' if x < 20 else 'skyblue' for x in counts.values]
+    sns.barplot(x=counts.values, y=counts.index, palette=color_palette, ax=ax)
+
+    ax.set_title("Training Data: Image Count per Jaguar", fontsize=14)
+    ax.set_xlabel("Number of Images")
+    ax.set_ylabel("Class index (sorted)")
+    ax.tick_params(axis='y', rotation=30)
+
+    # for horizontal bars, median count should be a VERTICAL line (x-axis), not hline
+    ax.axvline(x=counts.median(), color='red', linestyle='--', label=f'Median: {counts.median():.1f}')
+    for p in ax.patches:
+        w = p.get_width()   # horizontal bar length
+        y = p.get_y() + p.get_height() / 2
+        ax.annotate(
+            f"{int(w)}",
+            (w, y),
+            ha="left",
+            va="center",
+            fontsize=8,
+            xytext=(3, 0),
+            textcoords="offset points",
+        )
+    ax.legend()
+
+    # Histogram
+    plt.subplot(1, 2, 2)
+    sns.histplot(counts.values, bins=15, kde=True, color="darkgreen", alpha=0.5)
+    plt.title("Distribution of Class Sizes", fontsize=14)
+    plt.xlabel("Images per Jaguar")
+    plt.ylabel("Count")
+
+    plt.tight_layout()
+
+    ensure_dir(save_path.parent)
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
+
+
+# Sharpness spans orders of magnitude, so we use a log-scaled x-axis and log-spaced bins.
+def sharpness_histogramm(artifacts_dir, save_dir, filename="sharpness_histogram.png"):
+    df = pd.read_parquet(artifacts_dir / "meta_img_features.parquet").copy()
+
+    x = df["sharpness"].dropna()
+    x = x[x >= 0]  
+    median = x.median()
+    p95 = x.quantile(0.95)
+
+    bins = np.logspace(np.log10(x.min()), np.log10(x.max()), 70)  
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(x, bins=bins, kde=False, ax=ax)
+
+    ax.set_xscale("log")
+    ax.set_title("Sharpness Histogram (log x-scale)")
+    ax.set_xlabel("Sharpness (log scale)")
+    ax.set_ylabel("Count")
+
+    ax.axvline(median, color="green", linestyle="--", linewidth=2, label=f"median={median:.1f}")
+    ax.axvline(p95, color="green", linestyle=":", linewidth=2, label=f"p95={p95:.1f}")
+    ax.legend(frameon=False)
+
+    ax.xaxis.set_major_locator(mticker.LogLocator(base=10))
+    ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda v, pos: f"{v:g}"))
+    ax.xaxis.set_minor_locator(mticker.LogLocator(base=10, subs=(2, 3, 5)))
+    ax.xaxis.set_minor_formatter(mticker.FuncFormatter(lambda v, pos: f"{v:g}"))
+
+    ax.tick_params(axis="x", which="major", labelsize=10, length=4)
+    ax.tick_params(axis="x", which="minor", labelsize=10, length=2)
+
+    ax.grid(False)
+
+    plt.tight_layout()
+    plt.savefig(save_dir/filename, dpi=200, bbox_inches="tight")
+
+
+# Resolution also spans a wide range; log-x avoids compressing low-resolution bins.
+def plot_resolution_histogram(
+    values: pd.Series,
+    title: str,
+    xlabel: str,
+    save_path: str | Path | None = None,
+    bins_n: int = 50,
+    add_quantile_lines: bool = False,
+):
+    """
+    Log-x histogram with log-spaced bins.
+    """
+    x = pd.to_numeric(values, errors="coerce").dropna()
+    x = x[x > 0]
+    if len(x) == 0:
+        raise ValueError("No positive values to plot on log scale.")
+
+    bins = np.logspace(np.log10(x.min()), np.log10(x.max()), bins_n)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.histplot(x, bins=bins, kde=False, ax=ax)
+
+    ax.set_xscale("log")
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Count")
+
+    # log ticks
+    ax.xaxis.set_major_locator(mticker.LogLocator(base=10))
+    ax.xaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda v, pos: f"{int(v):,}" if v >= 1 else f"{v:g}")
+    )
+    ax.xaxis.set_minor_locator(mticker.LogLocator(base=10, subs=(2, 3, 5)))
+    ax.xaxis.set_minor_formatter(mticker.NullFormatter())
+
+    ax.grid(False)
+
+    if add_quantile_lines:
+        median = float(x.median())
+        p95 = float(x.quantile(0.95))
+        ax.axvline(median, color="green", linestyle="--", linewidth=2, label=f"median={median:.1f}")
+        ax.axvline(p95, color="green", linestyle=":", linewidth=2, label=f"p95={p95:.1f}")
+        ax.legend(frameon=False)
+
+    plt.tight_layout()
+
+    fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    print(f"[Plot] Saved to: {save_path}")
+
+    return fig, ax
+
+
+# Qualitative inspection helper: visualize extreme examples with identity + size metadata.
+def show_image_gallery(
+    df_subset: pd.DataFrame,
+    image_root: str | Path | None = None,   # NEW
+    title: str = "",
+    n_cols: int = 5,
+    figsize_per_img: float = 3.2,
+    save_path: str | Path | None = None,
+):
+    df_subset = df_subset.reset_index(drop=True)
+    n_rows = math.ceil(len(df_subset) / n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * figsize_per_img, n_rows * figsize_per_img))
+
+    if n_rows == 1 and n_cols == 1:
+        axes = [axes]
+    elif n_rows == 1 or n_cols == 1:
+        axes = list(axes)
+    else:
+        axes = axes.flatten()
+
+    for ax in axes[len(df_subset):]:
+        ax.axis("off")
+
+    for i, (_, row) in enumerate(df_subset.iterrows()):
+        ax = axes[i]
+        fname = str(row.get("filename"))
+        fp = image_root / fname
+
+        with Image.open(fp) as img:
+            img = img.convert("RGB")
+            ax.imshow(img)
+
+        fname = str(row.get("filename", fp.name))
+        jag_id = str(row.get("identity_id", "NA"))
+
+        title_line = jag_id
+        title_line += f" | {int(row['width'])}×{int(row['height'])}"
+        title_line += f" | {int(row['resolution_px']):,} px"
+
+        ax.set_title(title_line, fontsize=9)
+        ax.axis("off")
+
+    if title:
+        fig.suptitle(title, fontsize=14)
+    fig.subplots_adjust(top=0.88, wspace=0.05, hspace=0.35)
+
+    fig.savefig(save_path, dpi=200, bbox_inches="tight")
+    print(f"[Gallery] Saved to: {save_path}")
+

@@ -5,21 +5,36 @@ import torch
 import numpy as np
 import pandas as pd
 import re
+import cv2
 
 
-def normalize_heatmap(h):
-    """
-    Normalize a heatmap to the [0, 1] range for stable downstream comparison or display.
-    """
-    if isinstance(h, torch.Tensor):
-        h = h.detach().cpu().float().numpy()
-    h = h.astype(np.float32)
+def overlay_heatmap(
+    img_rgb: np.ndarray,
+    saliency_2d: np.ndarray,
+    alpha: float = 0.45,
+    percentile: float = 99.0,
+    threshold: float = 0.25,
+) -> np.ndarray:
+    s = np.abs(saliency_2d).astype(np.float32)
 
-    h_min = h.min()
-    h_max = h.max()
-    if h_max - h_min < 1e-12:
-        return np.zeros_like(h, dtype=np.float32)
-    return (h - h_min) / (h_max - h_min)
+    if s.shape != img_rgb.shape[:2]:
+        s = cv2.resize(s, (img_rgb.shape[1], img_rgb.shape[0]))
+
+    hi = np.percentile(s, percentile)
+    if hi <= 1e-8:
+        hi = float(s.max())
+
+    s = np.clip(s / (hi + 1e-8), 0, 1)
+    s[s < threshold] = 0.0
+
+    heat = cv2.applyColorMap(np.uint8(255 * s), cv2.COLORMAP_TURBO)
+    heat = cv2.cvtColor(heat, cv2.COLOR_BGR2RGB)
+
+    if img_rgb.dtype != np.uint8:
+        img_rgb = np.clip(img_rgb, 0, 1)
+        img_rgb = (img_rgb * 255).astype(np.uint8)
+
+    return cv2.addWeighted(img_rgb, 1 - alpha, heat, alpha, 0)
 
 
 def find_module_name(model: torch.nn.Module, target_module: torch.nn.Module) -> str:

@@ -226,7 +226,9 @@ PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_
 
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group baseline
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_xai_similarity
-
+jaguar_project % PYTHONPATH=src python -m jaguar.analysis.analysis_runner \
+   --experiment_group eda_xai_class_attribution \
+  --run_name eva02_val_n332_all_groups
 
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group kaggle_deduplication
 

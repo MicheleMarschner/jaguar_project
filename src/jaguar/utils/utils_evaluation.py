@@ -206,8 +206,8 @@ def build_query_gallery_retrieval_state(
     q_global = np.asarray(query_global_indices, dtype=np.int64)
     g_global = np.asarray(gallery_global_indices, dtype=np.int64)
 
-    emb_q = _l2_normalize(query_embeddings)
-    emb_g = _l2_normalize(gallery_embeddings)
+    emb_q = l2_normalize(query_embeddings)
+    emb_g = l2_normalize(gallery_embeddings)
 
     # Rectangular Similarity [N, M]: Row i = query i, Col j = gallery item j
     sim_matrix = emb_q @ emb_g.T
@@ -217,9 +217,12 @@ def build_query_gallery_retrieval_state(
     labels_g = np.asarray(gallery_labels)
 
     # burst filtering: Skip same-burst matches so “easy positives” aren’t just near-duplicate frames.
+    #bg = split_df.set_index("emb_row")["burst_group_id"]
+    #burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
+    #burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
     bg = split_df.set_index("emb_row")["burst_group_id"]
-    burst_q = bg.reindex(q_global).fillna(-1).to_numpy()
-    burst_g = bg.reindex(g_global).fillna(-1).to_numpy()
+    burst_q = bg.reindex(q_global).to_numpy()
+    burst_g = bg.reindex(g_global).to_numpy()
 
     return RetrievalState(
         q_global=q_global,
@@ -319,8 +322,14 @@ def evaluate_query_gallery_retrieval(
     query_rows = []
     ap_list = []
     rank1_hits = []
+    skipped_rows = []
 
     n_queries = len(retrieval.q_global)
+    n_queries_no_valid_gallery = 0
+    n_queries_no_valid_positive = 0
+    n_queries_with_query_burst = 0
+    n_queries_without_query_burst = 0
+    total_same_burst_candidates_found = 0
 
     for i in tqdm(range(n_queries), desc="Evaluating Retrieval"):
         q_idx_global = int(retrieval.q_global[i])
@@ -333,16 +342,41 @@ def evaluate_query_gallery_retrieval(
         g_bursts = retrieval.burst_g
 
         # Strict validity mask
+        #valid_mask = np.ones(len(g_idx), dtype=bool)
         valid_mask = np.ones(len(g_idx), dtype=bool)
 
-        # 1) remove exact same sample / original counterpart
-        valid_mask &= (g_idx != q_idx_global)
+        # remove exact same sample / original counterpart
+        #valid_mask &= (g_idx != q_idx_global)
+        same_index_mask = (g_idx == q_idx_global)
+        valid_mask &= ~same_index_mask
 
-        # 2) remove same-burst samples
-        valid_mask &= (g_bursts != q_burst)
+        # remove same-burst samples
+        #valid_mask &= (g_bursts != q_burst)
+        q_burst_present = pd.notna(q_burst)
+        g_burst_present = pd.notna(g_bursts)
+        same_burst_mask = q_burst_present & g_burst_present & (g_bursts == q_burst)
+        valid_mask &= ~same_burst_mask
+        n_same_burst_candidates = int(np.sum(same_burst_mask & ~same_index_mask))
+        total_same_burst_candidates_found += n_same_burst_candidates
+
+
+        #valid_positions = np.where(valid_mask)[0]
+        #if len(valid_positions) == 0:
+        #    continue
 
         valid_positions = np.where(valid_mask)[0]
         if len(valid_positions) == 0:
+            n_queries_no_valid_gallery += 1
+            skipped_rows.append({
+                "query_idx": q_idx_global,
+                "query_label": q_label,
+                "query_burst": q_burst,
+                "skip_reason": "no_valid_gallery",
+                "n_gallery_total": int(len(g_idx)),
+                "n_excluded_same_index": int(np.sum(same_index_mask)),
+                "n_excluded_same_burst": n_same_burst_candidates,
+                "query_burst_present": bool(pd.notna(q_burst)),
+            })
             continue
 
         sims_valid = sims[valid_positions]
@@ -352,8 +386,24 @@ def evaluate_query_gallery_retrieval(
         ranked_labels = g_labels[ranked_positions]
         rels = (ranked_labels == q_label).astype(np.int64)
 
+        #num_rel = int(rels.sum())
+        #if num_rel == 0:
+        #    continue
+
         num_rel = int(rels.sum())
         if num_rel == 0:
+            n_queries_no_valid_positive += 1
+            skipped_rows.append({
+                "query_idx": q_idx_global,
+                "query_label": q_label,
+                "query_burst": q_burst,
+                "skip_reason": "no_valid_positive",
+                "n_gallery_total": int(len(g_idx)),
+                "n_gallery_valid": int(len(valid_positions)),
+                "n_excluded_same_index": int(np.sum(same_index_mask)),
+                "n_excluded_same_burst": n_same_burst_candidates,
+                "query_burst_present": bool(pd.notna(q_burst)),
+            })
             continue
 
         precision_at_k = np.cumsum(rels) / (np.arange(len(rels)) + 1)
@@ -370,7 +420,12 @@ def evaluate_query_gallery_retrieval(
         query_rows.append({
             "query_idx": q_idx_global,
             "query_label": q_label,
+            "query_burst": q_burst,
+            "query_burst_present": bool(pd.notna(q_burst)),
+            "n_gallery_total": int(len(g_idx)),
             "n_gallery_valid": int(len(ranked_positions)),
+            "n_excluded_same_index": int(np.sum(same_index_mask)),
+            "n_excluded_same_burst": n_same_burst_candidates,
             "n_relevant": num_rel,
             "rank1_correct": rank1_correct,
             "ap": ap,
@@ -381,14 +436,49 @@ def evaluate_query_gallery_retrieval(
         })
 
     query_df = pd.DataFrame(query_rows)
+    skipped_df = pd.DataFrame(skipped_rows)
+
+    summary = {
+        "mAP": float(np.mean(ap_list)) if ap_list else 0.0,
+        "rank1": float(np.mean(rank1_hits)) if rank1_hits else 0.0,
+        "n_queries_total": int(n_queries),
+        "n_queries_eval": int(len(ap_list)),
+        "n_queries_no_valid_gallery": int(n_queries_no_valid_gallery),
+        "n_queries_no_valid_positive": int(n_queries_no_valid_positive),
+        "n_queries_with_query_burst": int(n_queries_with_query_burst),
+        "n_queries_without_query_burst": int(n_queries_without_query_burst),
+        "total_same_burst_candidates_found": int(total_same_burst_candidates_found),
+    }
+
+    return query_df, summary, skipped_df
+
+    """
+        query_rows.append({
+            "query_idx": q_idx_global,
+            "query_label": q_label,
+            "n_gallery_valid": int(len(ranked_positions)),
+            "n_relevant": num_rel,
+            "rank1_correct": rank1_correct,
+            "ap": ap,
+            "first_pos_rank": first_pos_rank,
+            "top1_idx": int(retrieval.g_global[top1_pos]),
+            "top1_label": retrieval.labels_g[top1_pos],
+            "top1_sim": float(retrieval.sim_matrix[i, top1_pos]),
+        })
+
+        
+        
+    query_df = pd.DataFrame(query_rows)
 
     summary = {
         "mAP": float(np.mean(ap_list)) if ap_list else 0.0,
         "rank1": float(np.mean(rank1_hits)) if rank1_hits else 0.0,
         "n_queries_eval": len(ap_list),
     }
+    
 
     return query_df, summary
+    """
 
 
 def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir: Path):
@@ -413,7 +503,6 @@ def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir
         cache_prefix="original_train",
     )
 
-    ##  !TODO klären welchen background die haben sollten
     val_embeddings_orig = load_or_extract_jaguarid_embeddings(
         model=ctx_orig.model,
         torch_ds=ctx_orig.val_ds,
@@ -442,13 +531,6 @@ def build_original_gallery_base(config: dict, train_config: dict, checkpoint_dir
     train_files = [str(s["filename"]) for s in ctx_orig.train_ds.samples]
     val_files = [str(s["filename"]) for s in ctx_orig.val_ds.samples]
     gallery_files_orig = train_files + val_files
-
-    #query_emb_rows = get_val_query_indices(
-    #    split_df=ctx_orig.split_df,
-    #    out_root=save_dir,
-    #    n_samples=config["evaluation"]["n_queries"],
-    #    seed=config["evaluation"]["seed"],
-    #)
 
     return {
         "ctx_orig": ctx_orig,
@@ -562,6 +644,8 @@ def build_val_query_for_setting(
         split="val",
     )
 
+    print("[DEBUG] build_val_query_for_setting before embeddings: setting: {setting}")
+
     query_embeddings = load_or_extract_jaguarid_embeddings(
         model=ctx_val.model,
         torch_ds=val_ds,
@@ -645,6 +729,9 @@ def build_val_gallery_base(
     val_global_indices = ctx_val.val_local_to_emb_row
     val_files = [str(s["filename"]) for s in ctx_val.val_ds.samples]
 
+    print(f"[DEBUG] val ds length in buidl_val_gallery-base: {len(ctx_val.val_ds)}")
+    print(f"[DEBUG] global indices in buidl_val_gallery-base: {val_global_indices}")
+
     return {
         "ctx_val": ctx_val,
         "val_embeddings": val_embeddings,
@@ -672,6 +759,11 @@ def build_retrieval_diagnostics_per_query(
         q_idx_global = int(retrieval.q_global[i])
         q_label = retrieval.labels_q[i]
         q_burst = retrieval.burst_q[i]
+
+        if pd.notna(q_burst):
+            n_queries_with_query_burst += 1
+        else:
+            n_queries_without_query_burst += 1
 
         sims = retrieval.sim_matrix[i]
         g_idx = retrieval.g_global

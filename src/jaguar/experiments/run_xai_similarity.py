@@ -45,7 +45,7 @@ def main():
         ig_internal_bs=config["xai"]["ig_internal_bs"],
         ig_batch_size=config["xai"]["ig_batch_size"],
         pair_types=tuple(config["xai"]["pair_types"]),
-        out_root=out_root,     ### TODO ISt das verhalten nur write oder auch read?
+        out_root=out_root,
     )
 
     artifact_paths = run_xai(

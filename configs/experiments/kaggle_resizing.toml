@@ -6,47 +6,23 @@ mode = "kaggle"
 setup_name = "kaggle_base"
 output_profile = "resizing"
 
-# [[experiment.runs]]
-# experiment_name = "fixed_cnv2_unfreeze_4"
-# backbone_name = "ConvNeXt-V2"
-# s = 40    # higher scale and lower intra-margin class variation 
+[[experiment.runs]]
+experiment_name = "no_progressive_cnv2"
+backbone_name = "ConvNeXt-V2"
+#unfreeze_epoch = 3
+unfreeze_blocks = 100  
+pr_enabled = false
+epochs = 50
+# s = 40    # parameters for Arcface only
 # m = 0.40
-# pr_enabled = false
-# unfreeze_epoch = 3
-# unfreeze_blocks = 4
-# epochs = 50
-# random_resized_crop = true
-
-# [[experiment.runs]]
-# experiment_name = "fixed_cnv2_unfreeze_all_largerlr"
-# backbone_name = "ConvNeXt-V2"
-# s = 40
-# m = 0.40
-# pr_enabled = false
-# unfreeze_epoch = 3
-# unfreeze_blocks = 100
-# scheduler_lr_start = 3e-4
-# optimizer_backbone_lr = 3e-5
-# epochs = 50
-# random_resized_crop = true
-
-# [[experiment.runs]]
-# experiment_name = "fixed_cnv2_unfreeze_all"
-# backbone_name = "ConvNeXt-V2"
-# s = 40
-# m = 0.40
-# pr_enabled = false
-# unfreeze_epoch = 3
-# unfreeze_blocks = 100  
-# # optimizer_backbone_lr = 1e-5 
-# epochs = 50
-# random_resized_crop = true
+m = 0.7
+random_resized_crop = true
+# split_data_path = "/splits/default_kaggle/full_split.parquet" # only for round_1 !
 
 [[experiment.runs]]
 experiment_name = "progressive_epochs_10_cnv2"
-split_data_path = "/splits/default_kaggle/full_split.parquet"
 backbone_name = "ConvNeXt-V2"
-# s = 40
+# s = 40 # higher scale and lower intra-margin class variation 
 # m = 0.40
 m = 0.7 
 pr_enabled = true
@@ -56,17 +32,18 @@ unfreeze_blocks = 100
 # optimizer_backbone_lr = 1e-5 
 epochs = 30
 random_resized_crop = true
+# split_data_path = "/splits/default_kaggle/full_split.parquet" # only for round_1 !
 
-# [[experiment.runs]]
-# experiment_name = "progressive_varying_epochs_cnv2"
-# backbone_name = "ConvNeXt-V2"
-# head_type = "arcface"
+[[experiment.runs]]
+experiment_name = "progressive_varying_epochs_cnv2"
+backbone_name = "ConvNeXt-V2"
 # s = 40
 # m = 0.40
-# pr_enabled = true
-# pr_stage_epochs = [5, 10, 15]
-# unfreeze_epoch = 3
-# unfreeze_blocks = 100  
-# # optimizer_backbone_lr = 1e-5 
-# epochs = 30
-# random_resized_crop = true
+pr_enabled = true
+pr_stage_epochs = [5, 10, 15]
+unfreeze_epoch = 3
+unfreeze_blocks = 100  
+# optimizer_backbone_lr = 1e-5 
+epochs = 30
+#random_resized_crop = true
+# split_data_path = "/splits/default_kaggle/full_split.parquet" # only for round_1 !

@@ -1,17 +1,19 @@
 [training]
-experiment_name = "progressive_varying_epochs_cnv2"
-unfreeze_epoch = 3
+experiment_name = "no_progressive_cnv2"
 unfreeze_blocks = 100
-epochs = 30
+epochs = 50
 seed = 42
 multiple_seeds = false
 
 [model]
 backbone_name = "ConvNeXt-V2"
+m = 0.7
 
 [progressive_resizing]
-enabled = true
-stage_epochs = [5, 10, 15]
+enabled = false
+
+[augmentation]
+random_resized_crop = true
 
 [output]
 profile = "resizing"

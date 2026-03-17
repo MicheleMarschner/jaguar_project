@@ -95,7 +95,7 @@ To compare the different backbones, we follow a standardized training and evalua
 
 One example of such hyperparameter tuning is the **embedding dimension**: while originally tested with 512, we found that increasing it to **1024** yielded the best performance on the test set, whereas further increases did not lead to measurable gains.
 
-In this split, the top 3 bursts for each identity are selected for the training set, while the remaining top 3 bursts are assigned to the validation set. This strategy ensures that the model sees sufficient visual variability for each jaguar while preventing overfitting to near-duplicate images from the same burst. The resulting validation set corresponds to roughly 20% of the training data (~370 images).
+In this split, a 20% validation set is first created using stratification to preserve class balance. Images are then grouped by bursts and by near-duplicate content, sorted by resolution, and the top-k images from each group are selected for both the training and validation sets. This strategy ensures sufficient visual variability for each jaguar while minimizing overfitting to duplicates or low-quality images.
 
 The backbone ablation presented here is performed on the Round 2 dataset, which contains images with masked backgrounds released for the Second Jaguar Re-ID Challenge in order to reduce spurious correlations with the environment.
 

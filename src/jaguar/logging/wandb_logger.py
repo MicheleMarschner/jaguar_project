@@ -487,7 +487,28 @@ def log_wandb_table(
     if run is None:
         return
 
-    run.log({name: wandb.Table(dataframe=dataframe)})
+    df = dataframe.copy()
+
+    for col in df.columns:
+        series = df[col]
+
+        # Convert pandas extension dtypes / object columns to stable Python types
+        if pd.api.types.is_object_dtype(series) or pd.api.types.is_string_dtype(series):
+            df[col] = series.where(series.notna(), None)
+            df[col] = df[col].map(lambda x: str(x) if x is not None else None)
+
+        elif pd.api.types.is_bool_dtype(series):
+            df[col] = series.where(series.notna(), None)
+
+        elif pd.api.types.is_integer_dtype(series) or pd.api.types.is_float_dtype(series):
+            df[col] = series.where(series.notna(), None)
+
+        else:
+            # Fallback for categorical / mixed / extension dtypes
+            df[col] = series.astype("object").where(series.notna(), None)
+            df[col] = df[col].map(lambda x: str(x) if x is not None else None)
+
+    run.log({name: wandb.Table(dataframe=df)})
 
 
 def log_wandb_image(

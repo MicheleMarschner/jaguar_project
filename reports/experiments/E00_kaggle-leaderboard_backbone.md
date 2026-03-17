@@ -28,10 +28,8 @@ The model used throughout our experiments is implemented in `src/jaguar/models/j
   - `use_forward_features`: extracts features directly via the `forward_features` method provided by `timm`.
 
 Only one of these options is enabled at a time.
-
 - `mining_type`
   Defines the mining strategy used in Triplet Loss-based training, specifying how positive and negative pairs are selected.
-
 - `label_smooth`
   Applies label smoothing to Cross Entropy losses to reduce overfitting and improve generalization during training.
 

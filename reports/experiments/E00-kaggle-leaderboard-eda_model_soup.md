@@ -10,13 +10,13 @@ The following table compares the model soup against the best individual model an
 
 Comparing the Model Soup against the mean of individuals:
 
-| Model | mAP | Rank-1 | Pairwise AP | Sim Gap | Silhouette |
-|------|------|------|------|------|------|
-| Best Individual (Seed 42) | 0.6639 | 0.9422 | 0.9025 | 0.7972 | 0.6539 |
-| Model Soup (Seeds 42 + 123) | 0.6547 | 0.9286 | 0.8772 | 0.6361 | 0.5896 |
-| Mean Individual | 0.6509 | 0.9367 | 0.9005 | 0.7863 | 0.6479 |
+| Model | mAP | Δ vs Mean | Δ vs Best | Rank-1 | Δ vs Mean | Δ vs Best |
+|------|------|-----------|-----------|--------|-----------|-----------|
+| Best Individual (Seed 42) | 0.6639 | +0.0130 | 0.0000 | 0.9422 | +0.0055 | 0.0000 |
+| Model Soup (42 + 123) | 0.6547 | +0.0038 | -0.0092 | 0.9286 | -0.0081 | -0.0136 |
+| Mean Individual | 0.6509 | 0.0000 | -0.0130 | 0.9367 | 0.0000 | -0.0055 |
 
-The Model Soup achieved an mAP of 0.6547, which is slightly above the average performance of the individual models but below the single best seed. Interestingly, the soup's diagnostic metrics (similarity gap and silhouette score) are lower than those of the individual models. This suggests that while weight averaging can help stabilize retrieval ranking performance (mAP), it may also transform the embedding clusters into less compact structures in the latent space.
+The Table shows that the Model Soup achieved an mAP of 0.6547, which is slightly above the average performance of the individual models but below the single best seed. Interestingly, the soup's diagnostic metrics (similarity gap and silhouette score) are lower than those of the individual. Overall, the soupr does not surpass the best individual model, but improves over the mean. This suggests that while weight averaging can help stabilize retrieval ranking performance (mAP), it may also transform the embedding clusters into less compact structures in the latent space.
 
 We additionally compared the errors of the Model Soup against a representative individual model (Seed 512) by logging a table of the top 20 errors into the Weights & Biases dashboard.
 - For the EVA-02 + Triplet Loss model trained with Seed 512, errors often occurred on queries where the jaguar appeared in significantly different poses or lighting conditions (for example, Query train_0057.png vs Pred train_0108.png). The individual model sometimes hyper-focuses on global shape rather than spot patterns, confirming issues previously observed in the animal re-identification literature.

@@ -1,0 +1,22 @@
+[evaluation]
+apply_qe = true
+top_k_expansion = [
+    5,
+    7,
+]
+apply_rerank = true
+k1 = [
+    20,
+    30,
+    50,
+]
+k2 = [
+    6,
+    8,
+    10,
+]
+lambda_value = [
+    0.3,
+    0.5,
+]
+experiment_group = "kaggle_retrieval"

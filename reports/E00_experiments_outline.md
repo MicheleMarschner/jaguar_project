@@ -51,35 +51,28 @@ Together, these experiment groups move from baseline model development to deeper
 
 ## Leaderboard Experiments
 
-| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior?  | `reports/experiments/E02_kaggle_deduplication.md` |
-| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? (X models) | `reports/experiments/E03_backbone_comparison.md` |
-| E04; Q11 | Loss comparison | (X loss types + X combinations) | `reports/experiments/.md` |
-|  | Augmentation  |  | `reports/experiments/.md` |
-|  | Scheduler and Optimizer |  | `reports/experiments/.md` |
-|  | Resizing |  | `reports/experiments/.md` |
-
-| E0X | Ensemble | Can complementary models be combined to outperform the best single model? | `reports/experiments/E0X_kaggle_ensemble.md` |
-
-### 4.2 Traceability map
-
-| ID | Code | Kaggle | W&B |
+| ID | Experiment | Research question | README |
 |---|---|---|---|
-| E01 | `src/jaguar/...` | `kaggle/outputs/...` | `project / group / tag` |
-| E02 | `src/jaguar/preprocessing/` | `kaggle/outputs/...` | `project / group / tag` |
-| E03 | `src/jaguar/...` | `kaggle/outputs/...` | `project / group / tag` |
-| E04 | `src/jaguar/...` | `kaggle/outputs/...` | `project / group / tag` |
-| E05 | `src/jaguar/...` | `kaggle/outputs/...` | `project / group / tag` |
-| E06 | `src/jaguar/...` | `kaggle/outputs/...` | `project / group / tag` |
+| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior? | `reports/experiments/E02_kaggle_deduplication.md` |
+| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? | `reports/experiments/E03_kaggle_backbone.md` |
+| E04; Q11 | Loss comparison | How do different loss functions and head architectures shape embedding quality and retrieval performance in low-data jaguar Re-ID? | `reports/experiments/E04_kaggle_losses.md` |
+| E05 | Mining strategy | How does the choice of triplet mining strategy affect convergence and final retrieval performance? | `reports/experiments/E05_kaggle_mining.md` |
+| E06 | Scheduler and optimizer | Which optimizer and learning-rate scheduler combination yields the strongest and most robust retrieval performance? | `reports/experiments/E06_kaggle_optim_sched.md` |
+| E07 | Augmentation | Which augmentation strategy best regularizes jaguar Re-ID without destroying identity-defining pattern information? | `reports/experiments/E07_kaggle_augmentation.md` |
+| E08 | Progressive resizing | Does a progressive resolution curriculum improve retrieval performance and efficiency for convolutional backbones? | `reports/experiments/E08_kaggle_resizing.md` |
+| E09 | Retrieval post-processing | To what extent can inference-time techniques such as TTA, query expansion, and re-ranking improve retrieval precision? | `reports/experiments/E09_kaggle_retrieval.md` |
+| E10 | Statistical stability | Are the observed gains robust across random seeds, or are they dependent on favorable initializations? | `reports/experiments/E10_kaggle_stability.md` |
+| E11 | Ensemble | Can complementary models be combined to outperform the best single model, and are the gains coherent across gallery protocols? | `reports/experiments/E11_kaggle_ensemble.md` |
 
-## 5. Experimental Logic and Dependency Structure
+## EDA Experiments
 
-The experiments followed a staged structure rather than a set of isolated runs. The project began with baseline development and exploratory data analysis (EDA) to establish an initial retrieval setup and understand the dataset. It then moved to data and protocol experiments, including split design, burst analysis, curation, and duplicate handling, since these choices define the basis for all later comparisons.
+| ID | Experiment | Research question | README |
+|---|---|---|---|
+| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/E01_baseline_and_eda.md` |
+| E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E12_eda_background_intervention.md` |
+| E13; Q0 | Foreground contribution | How much of the retrieval signal comes from the jaguar foreground versus the background, and does this differ across backbones? | `reports/experiments/E13_eda_foreground_contribution.md` |
+| E14; Q2 | XAI class attribution | Which image regions drive identity-class predictions, and are these class-attribution explanations meaningful? | `reports/experiments/E14_eda_xai_class_attribution.md` |
+| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | `reports/experiments/E15_eda_xai_similarity.md` |
+| E16 | XAI metrics follow-up | Are the generated explanations quantitatively trustworthy in terms of sanity, faithfulness, and complexity, and how much do conclusions depend on explainer choice? | `reports/experiments/E16_eda_xai_metrics.md` |
+| E17 | Model soup | Can interpolating checkpoints from different seeds improve generalization and refine error patterns over individual models? | `reports/experiments/E17-eda_model_soup.md` |
 
-On this basis, the project proceeded to model and training experiments, followed by robustness and interpretability analyses to study failure modes, sensitivity factors, and model decision behavior. The final stage was ensemble construction, which used the earlier results to combine complementary models.
-
-Overall, the dependency structure was:
-baseline and EDA → data and protocol experiments → model and training experiments → robustness and interpretability analyses → ensemble experiments
-
-## 6. Evaluation Protocols
-## 7. Where to Find the Evidence / Reproducibility Notes
-## 8. Key Findings Summary

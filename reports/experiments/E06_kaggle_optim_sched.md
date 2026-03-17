@@ -42,10 +42,10 @@ This yields two complementary perspectives:
 
 These two views do not necessarily rank the methods identically.
 
-<p align="center"><img src="./optimizer_scheduler_dashboard.png" width="95%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_optim_sched/Bildschirmfoto 2026-03-17 um 23.49.32.png" width="95%" /></p>
 <p align="center"><em>Figure 1. Validation trajectories for the optimizer–scheduler grid, including similarity gap, silhouette, Rank-1, PW-AP, mAP, and validation loss.</em></p>
 
-<p align="center"><img src="./optimizer_scheduler_train_loss.png" width="80%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_optim_sched/W&B Chart 17.3.2026, 23_49_05.png" width="80%" /></p>
 <p align="center"><em>Figure 2. Training-loss trajectories for the optimizer–scheduler grid.</em></p>
 
 ## Main Results

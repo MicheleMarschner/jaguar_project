@@ -1,9 +1,0 @@
-[evaluation]
-experiment_name = "eva02_val_n332_all_groups"
-
-[xai_metrics]
-source_run_dir = "eda_foreground_contribution/fg_contribution_eva02_base"
-
-[output]
-profile = "xai"
-experiment_group = "eda_xai_class_attribution"

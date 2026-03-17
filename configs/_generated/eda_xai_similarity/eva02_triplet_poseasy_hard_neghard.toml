@@ -1,6 +1,0 @@
-[evaluation]
-experiment_name = "eva02_triplet_poseasy_hard_neghard"
-
-[output]
-profile = "xai"
-experiment_group = "eda_xai_similarity"

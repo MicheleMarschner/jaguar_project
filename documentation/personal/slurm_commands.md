@@ -4,8 +4,8 @@
 ssh hpi
 
 ## zippen
-tar -czf eda_xai_class_attribution.tar.gz eda_xai_class_attribution
-tar -xzf eda_xai_class_attribution.tar.gz
+tar -czf results.tar.gz results
+tar -xzf experiments.tar.gz
 
 tar -xzf ~/Downloads/final_round_1.tar.gz
 
@@ -63,7 +63,7 @@ rsync -avz --progress michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.mar
 
 rsync -avz --progress ~/Downloads/kaggle_ensemble michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/configs/_generated/
 
-rsync -avz --progress ~/Downloads/round_1_triplet_loss michele.marschner@lx01.hpc.sci.hpi.de:/sc/home/michele.marschner/project/jaguar_project/checkpoints/round_1/
+rsync -avz --progress experiments.tar.gz michele.marschner@hpc.sci.hpi.de:/sc/projects/sci-demelo/computer-vision/vanessaemanuela.guarino/michele.marschner/
 
 
 rsync -avz michele.marschner@hpc.sci.hpi.de:/sc/projects/sci-demelo/computer-vision/vanessaemanuela.guarino/michele.marschner/round_1.tar.gz .

@@ -23,7 +23,7 @@ use_fiftyone = true
 
 [split]
 include_duplicates = true
-seed = [51]
+seed = 51
 
 [xai]
 dataset_name = "jaguar_splits_curated"

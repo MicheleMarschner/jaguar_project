@@ -13,7 +13,7 @@ mining_type = "hard"
 strategy = "closed_set"
 val_split_size = 0.2   #0.2 round_2, 0.05 round_1
 include_duplicates = false
-seed = [42]
+seed = 42
 
 [data]
 # split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"
@@ -40,7 +40,6 @@ key_for_seed = "filename"
 
 [training]
 monitor_metric = "pairwise_AP"      # Options: "mAP"; "pairwise_AP"
-# save_dir = "/fast/AG_Kainmueller/data/jaguar_project/jaguar_checkpoints/round_2/"  
 epochs = 30
 batch_size = 32  # 16
 samples_per_class = 4

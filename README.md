@@ -186,7 +186,6 @@ cp .env.example .env
 ```
 
 ```env
-Weights & Biases
 WANDB_API_KEY=your_wandb_api_key_here
 WANDB_ENTITY=your_wandb_username_or_team
 WANDB_PROJECT=jaguar-reid

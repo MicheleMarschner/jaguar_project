@@ -32,3 +32,18 @@ The results confirm that Triplet Loss with Hard Mining, especially when paired w
 Looking at the val/loss curves, Triplet-based runs are noisier than Softmax. This is expected, as mining dynamically selects hard samples as the embedding space evolves. SphereFace shows severe convergence issues, likely due to its aggressive multiplicative margin, which is too strong for subtle jaguars differences. While ArcFace achieves the highest Rank-1 accuracy (0.9524), it struggles to retrieve all relevant instances of the same identity across the dataset. In contrast, Triplet + Focal (Hard) achieves the highest mAP (0.6705) and Similarity Gap (0.7818), indicating superior global ranking quality. This improved embedding structure enabled the model to reach 90.08% mAP on the public Kaggle test set.
 
 Overall, these results suggest that for fine-grained wildlife Re-ID in low-data regimes, carefully stabilized metric learning objectives outperform purely classification-based angular margin losses. A more detailed analysis of mining strategies is provided in `E00_kaggle-leaderboard_mining.md`, where we isolate the effect of sample selection within the Triplet framework.
+
+Notation & Parameters Note. Let $x$ be the input image, $f(x) \in \mathbb{R}^d$ the L2-normalized embedding, and $W_j \in \mathbb{R}^d$ the L2-normalized class weight for class $j$. The angle between them is $\theta_j$, such that $\cos(\theta_j) = W_j^\top f(x)$. For the ground-truth class $y$, $\theta = \theta_y$.  
+- $m$: margin parameter controlling the enforced separation between classes (larger $m$ ⇒ stricter separation).  
+- $s$: scale factor applied to logits to stabilize optimization.  
+
+Thus:
+- Softmax (CE): logits are $s \cdot \cos(\theta_j)$  
+- ArcFace: modifies the target logit as $s \cdot \cos(\theta + m)$  
+- CosFace: modifies the target logit as $s \cdot (\cos(\theta) - m)$  
+- SphereFace: modifies the target logit as $s \cdot \cos(m \cdot \theta)$  
+
+For metric learning:
+- Triplet Loss: operates on triplets $(a, p, n)$ (anchor, positive, negative), enforcing $d(a,p) + m < d(a,n)$, where $d(\cdot,\cdot)$ is typically cosine or Euclidean distance.  
+- Hard Mining: selects the most difficult positives (largest distance) and negatives (smallest distance) within a batch.  
+- Focal Loss: adds a modulating factor $(1 - p_y)^\gamma$ to focus on hard samples (where $p_y$ is the predicted probability for the true class).  

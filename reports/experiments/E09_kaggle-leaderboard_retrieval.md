@@ -36,3 +36,17 @@ While k-reciprocal re-ranking is a valid and well-established post-processing te
 For the final Kaggle Leaderboard submission, we selected the TTA (Flip) + QE (k=3) configuration. Although the validation mAP gains are modest, this combination consistently improves Rank-1 accuracy and cluster separability. It achieves the strongest Similarity Gap (0.7363) and a Silhouette score around 0.60, indicating better-structured embeddings. These improvements translated into a ~2–3% mAP gain on the test set (~90% mAP overall).
 
 In conclusion, this experiment demonstrates that inference-time post-processing is a valuable component of the Jaguar Re-ID pipeline. TTA with flipping is essential for handling pose variability, and Query Expansion with a conservative k provides effective local refinement of the embedding manifold. In contrast, k-reciprocal re-ranking, while theoretically sound and widely used, proves too aggressive for this low-data regime and is therefore excluded from the final model. This study not only validates re-ranking as a meaningful experiment but also shows that its effectiveness is strongly dependent on dataset scale and embedding density.
+
+Notation & Parameters Note. Let $q \in \mathbb{R}^d$ be a query embedding and $\{g_i\}_{i=1}^N$ the gallery embeddings, all L2-normalized. Similarity is computed using cosine similarity $s(q, g_i) = q^\top g_i$, and ranking is obtained by sorting gallery samples in descending similarity.
+- Test-Time Augmentation (TTA): Let $q^{(0)}$ be the original embedding and $q^{(1)}$ the embedding of the horizontally flipped image. The final query embedding is:
+  $$\hat{q} = \frac{q^{(0)} + q^{(1)}}{\|q^{(0)} + q^{(1)}\|_2}$$
+- Query Expansion (QE): Let $\mathcal{N}_k(q)$ denote the top-$k$ nearest neighbors of $q$ in the gallery. The expanded query is:
+  $$\tilde{q} = \frac{1}{k+1} \left(q + \sum_{g_j \in \mathcal{N}_k(q)} g_j \right), \quad \tilde{q} \leftarrow \frac{\tilde{q}}{\|\tilde{q}\|_2}$$  
+  where $k$ controls the size of the local neighborhood (small $k$ is more robust to noise).
+- k-reciprocal Re-ranking: Let $\mathcal{R}_{k_1}(q)$ be the k-reciprocal neighbor set of $q$, defined as the set of samples that are among the top-$k_1$ neighbors of $q$ and for which $q$ is also among their top-$k_1$ neighbors. A Jaccard distance $d_J(q, g_i)$ is computed based on the overlap between reciprocal sets. The final distance is:
+  $$d_{\text{final}} = (1 - \lambda)\, d_{\text{orig}} + \lambda\, d_J$$  
+  where:
+  - $k_1$: size of the reciprocal neighborhood (controls global context),
+  - $k_2$: number of neighbors used for local query expansion within re-ranking,
+  - $\lambda$: weighting between original distance and Jaccard distance.
+In practice, cosine distance (or Euclidean distance on normalized features) is used for $d_{\text{orig}}$, and typical values are $k_1 \in [10,30]$, $k_2 \in [3,10]$, and $\lambda \in [0.2,0.5]$.

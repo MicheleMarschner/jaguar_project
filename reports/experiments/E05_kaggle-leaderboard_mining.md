@@ -18,7 +18,7 @@ As implemented in `src/utils/utils_losses.py`, we ablate four distinct mining st
 To ensure stability and enable a fair comparison, we modified the configuration from `E00_leaderboard-kaggle_backbone.md` as follows:
 
 - Training and validation `batch_size`: increased to 128. This allows the model to observe nearly all 31 identities in each batch, ensuring the presence of meaningful hard triplets at every step
-- Learning rate `lr_start`: adjusted to 3.5e-5 using the JaguarIDScheduler to account for the larger batch size
+- Learning rate `lr_start`: adjusted to 3.5e-5 using the `JaguarIDScheduler` to account for the larger batch size
 - Margin `m`: set to 0.7. A higher margin is required for fine-grained identification, where identities appear visually similar. This forces the embedding space to separate identities more aggressively
 - Loss formulation: we used `F.margin_ranking_loss` (hinge loss). Preliminary tests with Softplus (ln(1 + e^x)) did not converge. Our intuition is that Softplus provided insufficient gradient for already well-separated triplets, while hinge loss maintains a constant gradient until the margin is satisfied
 - No `early_stopping`: training was run for the full 30 epochs to observe whether hard mining leads to late-stage overfitting

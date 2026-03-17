@@ -1,322 +1,510 @@
-import pandas as pd
-import matplotlib.pyplot as plt
-from PIL import Image
+from __future__ import annotations
+
+from itertools import combinations
 from pathlib import Path
 
+from jaguar.analysis.kaggle_ensemble.plot_ensemble_analysis import create_ensemble_plots
+import numpy as np
+import pandas as pd
 
-from jaguar.config import PATHS
-from jaguar.utils.utils_evaluation import get_ranked_candidates_for_query
-
-
-def _build_embrow_to_filename(split_df: pd.DataFrame) -> dict[int, str]:
-    """Map global emb_row ids to filenames."""
-    if "emb_row" not in split_df.columns or "filename" not in split_df.columns:
-        raise ValueError("split_df must contain 'emb_row' and 'filename'.")
-    return dict(zip(split_df["emb_row"].astype(int), split_df["filename"].astype(str)))
+from jaguar.utils.utils import ensure_dir
 
 
-def _topk_strings_from_query_df(
-    query_df: pd.DataFrame,
-    topk_df: pd.DataFrame | None,
-    embrow_to_filename: dict[int, str],
-    prefix: str,
-) -> pd.DataFrame:
-    """
-    Build compact top-k string columns for one method.
-    Expects:
-      - query_df with query_idx, ap, rank1_correct, first_pos_rank, top1_idx, top1_label
-      - topk_df optionally with columns: query_idx, rank_in_gallery, gallery_global_idx, gallery_label, sim
-    """
-    out = query_df[
-        ["query_idx", "ap", "rank1_correct", "first_pos_rank", "top1_idx", "top1_label", "top1_sim"]
-    ].copy()
-
-    out = out.rename(columns={
-        "ap": f"ap__{prefix}",
-        "rank1_correct": f"rank1__{prefix}",
-        "first_pos_rank": f"first_pos_rank__{prefix}",
-        "top1_idx": f"top1_idx__{prefix}",
-        "top1_label": f"top1_label__{prefix}",
-        "top1_sim": f"top1_sim__{prefix}",
-    })
-
-    out[f"top1_file__{prefix}"] = out[f"top1_idx__{prefix}"].map(embrow_to_filename)
-
-    if topk_df is not None and len(topk_df) > 0:
-        topk_sub = topk_df[topk_df["rank_in_gallery"] <= 3].copy()
-        topk_sub["gallery_file"] = topk_sub["gallery_global_idx"].map(embrow_to_filename)
-        topk_sub["entry"] = topk_sub.apply(
-            lambda r: f"{int(r['rank_in_gallery'])}:{r['gallery_label']}|{r['gallery_file']}|{r['sim']:.4f}",
-            axis=1,
-        )
-        top3 = (
-            topk_sub.groupby("query_idx")["entry"]
-            .apply(lambda s: " || ".join(s.tolist()))
-            .reset_index()
-            .rename(columns={"entry": f"top3__{prefix}"})
-        )
-        out = out.merge(top3, on="query_idx", how="left")
-    else:
-        out[f"top3__{prefix}"] = None
-
-    return out
+def find_run_dirs(group_dir: Path) -> list[Path]:
+    """Find run directories that contain ensemble result summaries."""
+    return sorted(
+        p.parent
+        for p in group_dir.rglob("results_long_all_protocols.csv")
+        if p.is_file()
+    )
 
 
-def build_qualitative_review_df(
-    per_query_comparison_df: pd.DataFrame,
-    split_df: pd.DataFrame,
-    method_query_dfs: dict[str, pd.DataFrame],
-    method_topk_dfs: dict[str, pd.DataFrame] | None = None,
-    target_method: str = "score_fusion",
-    worst_n: int = 10,
-) -> pd.DataFrame:
-    """
-    Build a compact qualitative review table for the worst losses of one fusion method.
+def load_results_long(run_dir: Path) -> pd.DataFrame:
+    """Load the per-run long results table across protocols."""
+    path = run_dir / "results_long_all_protocols.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
 
-    method_query_dfs:
-      dict like {
-        "EVA-02": eva_query_df,
-        "MiewID": miewid_query_df,
-        "score_fusion": score_query_df,
-      }
+    df = pd.read_csv(path)
+    df["run_dir"] = str(run_dir)
+    df["run_name"] = run_dir.name
+    return df
 
-    method_topk_dfs:
-      optional dict with precomputed ranked-candidate rows per method.
-      Each df should contain:
-        query_idx, rank_in_gallery, gallery_global_idx, gallery_label, sim
-    """
-    method_topk_dfs = method_topk_dfs or {}
-    embrow_to_filename = _build_embrow_to_filename(split_df)
 
-    if f"ap__{target_method}" not in per_query_comparison_df.columns:
-        raise ValueError(f"Missing ap__{target_method} in per_query_comparison_df")
+def load_per_query_comparison(run_dir: Path, protocol: str) -> pd.DataFrame:
+    """Load per-query comparison table for one run and protocol."""
+    path = run_dir / f"per_query_comparison__{protocol}.csv"
+    if not path.exists():
+        raise FileNotFoundError(f"Missing: {path}")
+    return pd.read_csv(path)
 
-    review = per_query_comparison_df.copy()
 
-    query_file_map = embrow_to_filename
-    review["query_file"] = review["query_idx"].map(query_file_map)
+def get_single_and_fusion_methods(
+    results_long_df: pd.DataFrame,
+) -> tuple[list[str], list[str]]:
+    """Extract single-model and fusion method names from one results-long slice."""
+    singles = (
+        results_long_df.loc[
+            results_long_df["method_type"] == "single", "method_name"
+        ]
+        .dropna()
+        .tolist()
+    )
+    fusions = (
+        results_long_df.loc[
+            results_long_df["method_type"] == "fusion", "method_name"
+        ]
+        .dropna()
+        .tolist()
+    )
+    return singles, fusions
 
-    loss_col = f"{target_method}_delta_vs_best_model"
-    if loss_col not in review.columns:
-        raise ValueError(f"Missing column: {loss_col}")
 
-    review = review.sort_values(loss_col).head(worst_n).copy()
-
-    keep_cols = [
-        "query_idx",
-        "query_label",
-        "query_file",
-        "best_model",
-        "best_model_ap",
-        f"ap__{target_method}",
-        loss_col,
-        f"{target_method}_delta_vs_oracle",
+def build_run_protocol_summary_df(all_results_long_df: pd.DataFrame) -> pd.DataFrame:
+    """Summarize best single, best fusion, and oracle performance per run and protocol."""
+    rows = []
+    group_cols = [
+        "run_name",
+        "run_dir",
+        "experiment_name",
+        "experiment_group",
+        "gallery_protocol",
     ]
-    review = review[keep_cols]
 
-    for method_name, query_df in method_query_dfs.items():
-        method_block = _topk_strings_from_query_df(
-            query_df=query_df,
-            topk_df=method_topk_dfs.get(method_name),
-            embrow_to_filename=embrow_to_filename,
-            prefix=method_name,
+    for keys, df_sub in all_results_long_df.groupby(group_cols, dropna=False):
+        run_name, run_dir, experiment_name, experiment_group, protocol = keys
+
+        singles = df_sub[df_sub["method_type"] == "single"].copy()
+        fusions = df_sub[df_sub["method_type"] == "fusion"].copy()
+        oracle = df_sub[df_sub["method_type"] == "oracle"].copy()
+
+        if singles.empty:
+            continue
+
+        best_single = singles.sort_values("mAP", ascending=False).iloc[0]
+        best_fusion = (
+            fusions.sort_values("mAP", ascending=False).iloc[0]
+            if not fusions.empty
+            else None
         )
-        review = review.merge(method_block, on="query_idx", how="left")
+        oracle_row = oracle.iloc[0] if not oracle.empty else None
 
-    return review
+        row = {
+            "run_name": run_name,
+            "run_dir": run_dir,
+            "experiment_name": experiment_name,
+            "experiment_group": experiment_group,
+            "gallery_protocol": protocol,
+            "n_single_models": len(singles),
+            "n_fusions": len(fusions),
+            "best_single_name": best_single["method_name"],
+            "best_single_mAP": float(best_single["mAP"]),
+            "best_single_rank1": float(best_single["rank1"]),
+        }
 
-def build_topk_candidates_df(
-    retrieval,
-    top_k: int = 3,
+        if best_fusion is not None:
+            row.update(
+                {
+                    "best_fusion_name": best_fusion["method_name"],
+                    "best_fusion_mAP": float(best_fusion["mAP"]),
+                    "best_fusion_rank1": float(best_fusion["rank1"]),
+                    "fusion_gain_vs_best_single_mAP": float(
+                        best_fusion["mAP"] - best_single["mAP"]
+                    ),
+                    "fusion_gain_vs_best_single_rank1": float(
+                        best_fusion["rank1"] - best_single["rank1"]
+                    ),
+                }
+            )
+        else:
+            row.update(
+                {
+                    "best_fusion_name": None,
+                    "best_fusion_mAP": np.nan,
+                    "best_fusion_rank1": np.nan,
+                    "fusion_gain_vs_best_single_mAP": np.nan,
+                    "fusion_gain_vs_best_single_rank1": np.nan,
+                }
+            )
+
+        if oracle_row is not None:
+            row.update(
+                {
+                    "oracle_mAP": float(oracle_row["mAP"]),
+                    "oracle_rank1": float(oracle_row["rank1"]),
+                    "oracle_gap_vs_best_single_mAP": float(
+                        oracle_row["mAP"] - best_single["mAP"]
+                    ),
+                    "oracle_gap_vs_best_fusion_mAP": (
+                        float(oracle_row["mAP"] - best_fusion["mAP"])
+                        if best_fusion is not None
+                        else np.nan
+                    ),
+                }
+            )
+
+        rows.append(row)
+
+    return pd.DataFrame(rows).sort_values(
+        ["gallery_protocol", "best_fusion_mAP", "best_single_mAP"],
+        ascending=[True, False, False],
+    )
+
+
+def build_global_method_leaderboard_df(
+    all_results_long_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Export top-k ranked candidates per query from a RetrievalState."""
+    """Aggregate method performance across runs for coarse comparison."""
+    grouped = (
+        all_results_long_df.groupby(
+            ["gallery_protocol", "method_type", "method_name"],
+            dropna=False,
+        )
+        .agg(
+            runs=("experiment_name", "nunique"),
+            mean_mAP=("mAP", "mean"),
+            median_mAP=("mAP", "median"),
+            max_mAP=("mAP", "max"),
+            mean_rank1=("rank1", "mean"),
+            max_rank1=("rank1", "max"),
+        )
+        .reset_index()
+    )
+    return grouped.sort_values(["gallery_protocol", "mean_mAP"], ascending=[True, False])
+
+
+def build_error_overlap_df(
+    run_dir: Path,
+    protocol: str,
+    single_names: list[str],
+) -> pd.DataFrame:
+    """Compute pairwise rank-1 overlap statistics between single models."""
+    df = load_per_query_comparison(run_dir, protocol)
     rows = []
 
-    for i in range(len(retrieval.q_global)):
-        q_idx_global, q_label, ranked_candidates = get_ranked_candidates_for_query(retrieval, i)
+    for name_a, name_b in combinations(single_names, 2):
+        col_a = f"rank1__{name_a}"
+        col_b = f"rank1__{name_b}"
 
-        for cand in ranked_candidates[:top_k]:
-            rows.append({
-                "query_idx": q_idx_global,
-                "query_label": q_label,
-                "rank_in_gallery": cand["rank_in_gallery"],
-                "gallery_global_idx": cand["gallery_global_idx"],
-                "gallery_label": cand["gallery_label"],
-                "sim": cand["sim"],
-            })
+        if col_a not in df.columns or col_b not in df.columns:
+            continue
+
+        a = df[col_a].fillna(False).astype(bool)
+        b = df[col_b].fillna(False).astype(bool)
+        n = len(df)
+
+        both_correct = int((a & b).sum())
+        only_a = int((a & ~b).sum())
+        only_b = int((~a & b).sum())
+        both_wrong = int((~a & ~b).sum())
+
+        rows.append(
+            {
+                "run_name": run_dir.name,
+                "gallery_protocol": protocol,
+                "model_a": name_a,
+                "model_b": name_b,
+                "n_queries": n,
+                "both_correct": both_correct,
+                "only_a_correct": only_a,
+                "only_b_correct": only_b,
+                "both_wrong": both_wrong,
+                "fraction_both_correct": both_correct / n if n else np.nan,
+                "fraction_only_a_correct": only_a / n if n else np.nan,
+                "fraction_only_b_correct": only_b / n if n else np.nan,
+                "fraction_both_wrong": both_wrong / n if n else np.nan,
+                "fraction_disagree": (only_a + only_b) / n if n else np.nan,
+            }
+        )
 
     return pd.DataFrame(rows)
 
 
-def build_singles_group_summary(experiment_root_dir: str | Path) -> pd.DataFrame:
-    """
-    Aggregate protocol_comparison.csv files from all single-model runs in one
-    experiment group into one summary table with one row per model.
-    """
-    experiment_root_dir = Path(experiment_root_dir)
-
+def build_all_error_overlaps_df(all_results_long_df: pd.DataFrame) -> pd.DataFrame:
+    """Build pairwise single-model error-overlap table across all runs."""
     rows = []
+    group_cols = ["run_name", "run_dir", "gallery_protocol"]
 
-    for run_dir in sorted(experiment_root_dir.iterdir()):
-        if not run_dir.is_dir():
-            continue
+    for _, df_sub in all_results_long_df.groupby(group_cols, dropna=False):
+        run_dir = Path(df_sub["run_dir"].iloc[0])
+        protocol = df_sub["gallery_protocol"].iloc[0]
+        singles, _ = get_single_and_fusion_methods(df_sub)
 
-        comp_path = run_dir / "protocol_comparison.csv"
-        if not comp_path.exists():
-            continue
-
-        df = pd.read_csv(comp_path)
-
-        # Keep only the actual single-model row, not oracle/fusion rows
-        # For single runs this should be the row where method_type == "single"
-        df = df[df["method_type"] == "single"].copy()
-        if df.empty:
-            continue
-
-        if len(df) != 1:
-            print(f"[WARN] Expected exactly 1 single row in {comp_path}, found {len(df)}")
-            continue
-
-        row = df.iloc[0].to_dict()
-
-        row["run_name"] = run_dir.name
-        row["model_name"] = row.get("method_name")
-        rows.append(row)
+        overlap_df = build_error_overlap_df(run_dir, protocol, singles)
+        if not overlap_df.empty:
+            rows.append(overlap_df)
 
     if not rows:
-        raise ValueError(f"No usable protocol_comparison.csv files found in {experiment_root_dir}")
+        return pd.DataFrame()
 
-    out_df = pd.DataFrame(rows)
+    out = pd.concat(rows, ignore_index=True)
+    return out.sort_values(["gallery_protocol", "fraction_disagree"], ascending=[True, False])
 
-    # Nice default ordering for inspection
-    sort_cols = [
-        c for c in [
-            "mAP__valonly_gallery",
-            "mAP__mean_across_protocols",
-            "mAP__delta_protocols",
-        ]
-        if c in out_df.columns
+
+def build_per_identity_gain_df_for_best_fusion(
+    run_dir: Path,
+    protocol: str,
+    best_single_name: str,
+    best_fusion_name: str,
+) -> pd.DataFrame:
+    """Aggregate per-identity gains for the best fusion vs the best single model."""
+    df = load_per_query_comparison(run_dir, protocol)
+
+    required_cols = [
+        "query_label",
+        f"ap__{best_single_name}",
+        f"rank1__{best_single_name}",
+        f"ap__{best_fusion_name}",
+        f"rank1__{best_fusion_name}",
     ]
-    ascending = [False, False, True][:len(sort_cols)]
+    missing = [c for c in required_cols if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns in {run_dir.name} / {protocol}: {missing}")
 
-    if sort_cols:
-        out_df = out_df.sort_values(sort_cols, ascending=ascending).reset_index(drop=True)
+    grouped = (
+        df.groupby("query_label", dropna=False)
+        .agg(
+            queries=("query_label", "size"),
+            best_single_ap_mean=(f"ap__{best_single_name}", "mean"),
+            best_fusion_ap_mean=(f"ap__{best_fusion_name}", "mean"),
+            best_single_rank1_mean=(f"rank1__{best_single_name}", "mean"),
+            best_fusion_rank1_mean=(f"rank1__{best_fusion_name}", "mean"),
+        )
+        .reset_index()
+    )
 
-    return out_df
-    
+    grouped["delta_ap"] = grouped["best_fusion_ap_mean"] - grouped["best_single_ap_mean"]
+    grouped["delta_rank1"] = (
+        grouped["best_fusion_rank1_mean"] - grouped["best_single_rank1_mean"]
+    )
+    grouped["run_name"] = run_dir.name
+    grouped["gallery_protocol"] = protocol
+    grouped["best_single_name"] = best_single_name
+    grouped["best_fusion_name"] = best_fusion_name
+
+    return grouped.sort_values("delta_ap", ascending=False)
+
+
+def build_all_per_identity_gains_df(summary_df: pd.DataFrame) -> pd.DataFrame:
+    """Build per-identity gain tables for the best fusion in each run and protocol."""
+    rows = []
+
+    for _, row in summary_df.iterrows():
+        best_fusion_name = row["best_fusion_name"]
+        if pd.isna(best_fusion_name):
+            continue
+
+        df_gain = build_per_identity_gain_df_for_best_fusion(
+            run_dir=Path(row["run_dir"]),
+            protocol=row["gallery_protocol"],
+            best_single_name=row["best_single_name"],
+            best_fusion_name=best_fusion_name,
+        )
+        rows.append(df_gain)
+
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.concat(rows, ignore_index=True)
+    return out.sort_values(["gallery_protocol", "delta_ap"], ascending=[True, False])
+
+
+def build_interesting_cases_df(
+    run_dir: Path,
+    protocol: str,
+    best_single_name: str,
+    best_fusion_name: str,
+    top_n: int = 10,
+) -> pd.DataFrame:
+    """Extract qualitative cases for the best fusion vs the best single model."""
+    df = load_per_query_comparison(run_dir, protocol).copy()
+
+    single_ap_col = f"ap__{best_single_name}"
+    single_rank1_col = f"rank1__{best_single_name}"
+    fusion_ap_col = f"ap__{best_fusion_name}"
+    fusion_rank1_col = f"rank1__{best_fusion_name}"
+    fusion_first_pos_col = f"first_pos_rank__{best_fusion_name}"
+    fusion_top1_label_col = f"top1_label__{best_fusion_name}"
+    single_top1_label_col = f"top1_label__{best_single_name}"
+
+    needed = [single_ap_col, single_rank1_col, fusion_ap_col, fusion_rank1_col, "oracle_ap", "best_model", "best_model_ap"]
+    missing = [c for c in needed if c not in df.columns]
+    if missing:
+        raise KeyError(f"Missing columns in {run_dir.name} / {protocol}: {missing}")
+
+    df["delta_ap__fusion_vs_best_single"] = df[fusion_ap_col] - df[single_ap_col]
+    df["delta_rank1__fusion_vs_best_single"] = (
+        df[fusion_rank1_col].astype(float) - df[single_rank1_col].astype(float)
+    )
+    df["oracle_gap__fusion"] = df["oracle_ap"] - df[fusion_ap_col]
+
+    keep_cols = [
+        "query_idx",
+        "query_label",
+        "best_model",
+        "best_model_ap",
+        "oracle_ap",
+        single_ap_col,
+        single_rank1_col,
+        fusion_ap_col,
+        fusion_rank1_col,
+        "delta_ap__fusion_vs_best_single",
+        "delta_rank1__fusion_vs_best_single",
+        "oracle_gap__fusion",
+    ]
+    optional_cols = [
+        single_top1_label_col,
+        fusion_top1_label_col,
+        fusion_first_pos_col,
+    ]
+    keep_cols = [c for c in keep_cols + optional_cols if c in df.columns]
+
+    top_gains = df.sort_values("delta_ap__fusion_vs_best_single", ascending=False).head(top_n).copy()
+    top_gains["case_type"] = "top_gain"
+
+    top_losses = df.sort_values("delta_ap__fusion_vs_best_single", ascending=True).head(top_n).copy()
+    top_losses["case_type"] = "top_loss"
+
+    disagreement_cases = (
+        df.loc[df["best_model"] != best_single_name]
+        .sort_values("delta_ap__fusion_vs_best_single", ascending=False)
+        .head(top_n)
+        .copy()
+    )
+    disagreement_cases["case_type"] = "model_disagreement_gain"
+
+    out = pd.concat(
+        [
+            top_gains[keep_cols + ["case_type"]],
+            top_losses[keep_cols + ["case_type"]],
+            disagreement_cases[keep_cols + ["case_type"]],
+        ],
+        ignore_index=True,
+    )
+
+    out["run_name"] = run_dir.name
+    out["gallery_protocol"] = protocol
+    out["best_single_name"] = best_single_name
+    out["best_fusion_name"] = best_fusion_name
+
+    front_cols = [
+        "run_name",
+        "gallery_protocol",
+        "case_type",
+        "best_single_name",
+        "best_fusion_name",
+    ]
+    other_cols = [c for c in out.columns if c not in front_cols]
+    return out[front_cols + other_cols]
+
+
+def build_all_interesting_cases_df(summary_df: pd.DataFrame, top_n: int = 10) -> pd.DataFrame:
+    """Build qualitative interesting-case tables for the best fusion in each run and protocol."""
+    rows = []
+
+    for _, row in summary_df.iterrows():
+        best_fusion_name = row["best_fusion_name"]
+        if pd.isna(best_fusion_name):
+            continue
+
+        df_cases = build_interesting_cases_df(
+            run_dir=Path(row["run_dir"]),
+            protocol=row["gallery_protocol"],
+            best_single_name=row["best_single_name"],
+            best_fusion_name=best_fusion_name,
+            top_n=top_n,
+        )
+        rows.append(df_cases)
+
+    if not rows:
+        return pd.DataFrame()
+
+    out = pd.concat(rows, ignore_index=True)
+    return out.sort_values(
+        ["gallery_protocol", "case_type", "delta_ap__fusion_vs_best_single"],
+        ascending=[True, True, False],
+    )
+
 
 def run(
-    config: dict, 
-    save_dir: Path, 
-    root_dir: Path | None = None, 
-    run_dir: Path | None = None, 
-    **kwargs
+    config: dict,
+    root_dir: Path,
+    run_dir: Path,
+    save_dir: Path,
 ) -> None:
-    img_root = PATHS.data_train
-    singles_df = build_singles_group_summary(root_dir)
+    """Run sweep-level analysis across all ensemble runs in one experiment group."""
+    del config, run_dir
 
-    print(singles_df.to_string(index=False))
-    singles_df.to_csv(root_dir / "singles_group_summary.csv", index=False)
+    ensure_dir(save_dir)
 
+    run_dirs = find_run_dirs(root_dir)
+    if not run_dirs:
+        raise FileNotFoundError(
+            f"No run dirs with results_long_all_protocols.csv found in {root_dir}"
+        )
+
+    all_results = [load_results_long(rd) for rd in run_dirs]
+    all_results_long_df = pd.concat(all_results, ignore_index=True)
+    all_results_long_df.to_csv(save_dir / "results_long_all_runs.csv", index=False)
+
+    summary_df = build_run_protocol_summary_df(all_results_long_df)
+    summary_df.to_csv(save_dir / "run_protocol_summary.csv", index=False)
+
+    leaderboard_df = build_global_method_leaderboard_df(all_results_long_df)
+    leaderboard_df.to_csv(save_dir / "global_method_leaderboard.csv", index=False)
+
+    overlap_df = build_all_error_overlaps_df(all_results_long_df)
+    if not overlap_df.empty:
+        overlap_df.to_csv(save_dir / "single_model_error_overlaps.csv", index=False)
+
+    per_identity_gain_df = build_all_per_identity_gains_df(summary_df)
+    if not per_identity_gain_df.empty:
+        per_identity_gain_df.to_csv(
+            save_dir / "best_fusion_per_identity_gains.csv",
+            index=False,
+        )
+
+    interesting_cases_df = build_all_interesting_cases_df(summary_df, top_n=10)
+    if not interesting_cases_df.empty:
+        interesting_cases_df.to_csv(
+            save_dir / "interesting_cases_best_fusion.csv",
+            index=False,
+        )
+
+    print("\nSaved:")
+    print(save_dir / "results_long_all_runs.csv")
+    print(save_dir / "run_protocol_summary.csv")
+    print(save_dir / "global_method_leaderboard.csv")
+    if not overlap_df.empty:
+        print(save_dir / "single_model_error_overlaps.csv")
+    if not per_identity_gain_df.empty:
+        print(save_dir / "best_fusion_per_identity_gains.csv")
+    if not interesting_cases_df.empty:
+        print(save_dir / "interesting_cases_best_fusion.csv")
+
+    create_ensemble_plots(
+        summary_df=summary_df,
+        leaderboard_df=leaderboard_df,
+        overlap_df=overlap_df,
+        per_identity_gain_df=per_identity_gain_df,
+        interesting_cases_df=interesting_cases_df,
+        save_dir=save_dir,
+    )
+
+    print("\nTop run/protocol summaries:")
     cols = [
         "run_name",
-        "model_name",
-        "mAP__trainval_gallery",
-        "mAP__valonly_gallery",
-        "mAP__mean_across_protocols",
-        "mAP__delta_protocols",
-        "rank1__trainval_gallery",
-        "rank1__valonly_gallery",
+        "gallery_protocol",
+        "best_single_name",
+        "best_single_mAP",
+        "best_fusion_name",
+        "best_fusion_mAP",
+        "fusion_gain_vs_best_single_mAP",
+        "oracle_gap_vs_best_fusion_mAP",
     ]
-
-    cols = [c for c in cols if c in singles_df.columns]
-    print(singles_df[cols].to_string(index=False))
-
-    """
-    Fall: gute Query, aber schlechte Positives
-    22 Bilder aus 3 Bursts, nur 1 Burst gut - alle Modelle falsch, aber anders falsch
-    """
-
-    paths = {
-        "Query\nBororo": img_root / "train_0118.png",
-        "EVA-02 wrong Top1\nJaju": img_root / "train_0128.png",
-        "MiewID wrong Top1\nOusado": img_root / "train_1394.png",
-        "Score fusion wrong Top1\nTi": img_root / "train_0160.png",
-        "Correct Bororo ref": img_root / "train_0018.png",
-    }
-
-    fig, axes = plt.subplots(1, len(paths), figsize=(20, 5))
-
-    for ax, (title, path) in zip(axes, paths.items()):
-        img = Image.open(path).convert("RGB")
-        ax.imshow(img)
-        ax.set_title(f"{title}\n{path.name}", fontsize=10)
-        ax.axis("off")
-    out_path = PATHS.results /"img"/"query.png"
-    #ensure_dir(out_path)
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.2)
-    plt.tight_layout()
-    plt.show()
-
-
-    """
-    Fall: schwache, unvollständige Query-Information
-    Wenn EVA-02 bei Jaju besser war als die anderen, könnte das heißen:
-    es nutzt lokale Texturmuster besser
-    es ist robuster gegen starke partielle Sichtbarkeit
-    es braucht weniger globalen Kontext
-
-    Jaju appears to be a partial-visibility case: the query images contain only fragmented flank regions with little global body context. The main difficulty is therefore incomplete query evidence rather than poor gallery support.
-    """
-
-    paths = {
-        "Query\nJaju": img_root / "train_0556.png",
-        "ConvNeXt wrong Top1\nSaseka": img_root / "train_1673.png",
-        "Score fusion Top1\nJaju": img_root / "train_0558.png",
-    }
-
-    fig, axes = plt.subplots(1, len(paths), figsize=(18, 6), dpi=200)
-
-    for ax, (title, path) in zip(axes, paths.items()):
-        img = Image.open(path).convert("RGB")
-        ax.imshow(img)
-        ax.set_title(f"{title}\n{path.name}", fontsize=11)
-        ax.axis("off")
-    out_path = PATHS.results /"img"/ "jaju_case_comparison.png"
-    plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.2)
-    print(f"Saved to: {out_path.resolve()}")
-    
-
-    """
-    Also:
-    MiewID erkennt Medrosa extrem stabil und praktisch perfekt.
-
-    EVA-02
-
-    Für mehrere Medrosa-Queries:
-
-    first_pos_rank = 3, 6, 14
-
-    AP nur ~0.38 bis 0.49, EVA-02 verwechselt Medrosa teils systematisch mit Marcela.
-    Medrosa is a model-specific confusion case rather than a general hard identity. MiewID retrieves correct positives at rank 1 consistently with near-perfect AP, whereas EVA-02 often confuses Medrosa with Marcela and ranks the first correct positive lower. Fixed score fusion remains correct at rank 1 but slightly dilutes the stronger MiewID ranking.
-    """
-
-    paths = {
-        "Query\nMedrosa": img_root / "train_1214.png",
-        "MiewID Top1\nMedrosa": img_root / "train_1268.png",
-        "Score fusion Top1\nMedrosa": img_root / "train_1248.png",
-        "Wrong other model\nMarcela": img_root / "train_1074.png",
-    }
-
-    fig, axes = plt.subplots(1, len(paths), figsize=(20, 6), dpi=200)
-
-    for ax, (title, path) in zip(axes, paths.items()):
-        img = Image.open(path).convert("RGB")
-        ax.imshow(img)
-        ax.set_title(f"{title}\n{path.name}", fontsize=11)
-        ax.axis("off")
-    out_path = PATHS.results /"img"/ "medrosa_case_comparison.png"
-    plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.2)
-    print(f"Saved to: {out_path.resolve()}")
+    print(
+        summary_df[cols]
+        .sort_values(["gallery_protocol", "best_fusion_mAP"], ascending=[True, False])
+        .head(20)
+        .to_string(index=False)
+    )

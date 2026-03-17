@@ -374,7 +374,6 @@ def main():
         artifact_name=f"{exp_name}-outputs",
     )
 
-    print(f"[DEBUG BEST checkpoint path: {best_checkpoint_path}]")
     log_wandb_checkpoint_artifact(
         run=wandb_run,
         checkpoint_path=best_checkpoint_path,

@@ -125,13 +125,6 @@ def run_background_intervention(config, save_dir):
     )
     ctx_val = base["ctx_val"]
 
-    #base = build_original_gallery_base(config=config, train_config=train_config, checkpoint_dir=checkpoint_dir)
-
-    #ctx_orig = base["ctx_orig"]
-    #gallery_embeddings_orig = base["gallery_embeddings_orig"]
-    #gallery_labels_orig = base["gallery_labels_orig"]
-    #gallery_global_indices_orig = base["gallery_global_indices_orig"]
-
     settings = ["original", "gray_bg", "black_bg", "blur_bg", "random_bg", "mixed_original_random_bg"]
 
     if "original" not in settings:
@@ -143,14 +136,6 @@ def run_background_intervention(config, save_dir):
     all_summaries = []
 
     for setting in settings:
-        """
-        query = build_query_for_setting(
-            config=config,
-            ctx_orig=ctx_orig,
-            setting=setting,
-        )
-        """
-
         retrieval, _ = build_val_only_retrieval_for_setting(
             config=config,
             ctx_val=ctx_val,
@@ -160,39 +145,7 @@ def run_background_intervention(config, save_dir):
             setting=setting,
         )
 
-        """
-        retrieval = build_query_gallery_retrieval_state(
-                query_embeddings=query["query_embeddings"],
-                gallery_embeddings=gallery_embeddings_orig,
-                query_global_indices=query["query_global_indices"],
-                gallery_global_indices=gallery_global_indices_orig,
-                query_labels=query["query_labels"],
-                gallery_labels=gallery_labels_orig,
-                split_df=ctx_orig.split_df,
-            )
-        """
-
-        #query_df, summary = evaluate_query_gallery_retrieval(retrieval)
-        query_df, summary, skipped_df = evaluate_query_gallery_retrieval(retrieval)
-        print(f"\n[DEBUG] setting={setting}")
-        print(f"[DEBUG] summary={summary}")
-
-        if not skipped_df.empty:
-            print("[DEBUG] skipped query counts by reason:")
-            print(skipped_df["skip_reason"].value_counts())
-
-        if not query_df.empty:
-            print("[DEBUG] query_df head:")
-            print(query_df.head())
-
-        debug_dir = PATHS.results / "debug_val_only_retrieval"
-        debug_dir.mkdir(parents=True, exist_ok=True)
-
-        query_df.to_csv(debug_dir / f"{setting}_query_df.csv", index=False)
-        skipped_df.to_csv(debug_dir / f"{setting}_skipped_df.csv", index=False)
-        pd.DataFrame([summary]).to_csv(debug_dir / f"{setting}_summary.csv", index=False)
-        
-        #query_df, summary = evaluate_query_gallery_retrieval(retrieval)
+        query_df, summary = evaluate_query_gallery_retrieval(retrieval)
         result = save_retrieval_results(save_dir, setting, query_df, summary)
         
         all_query_dfs.append(result["query_df"])

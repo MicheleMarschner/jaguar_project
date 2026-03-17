@@ -206,6 +206,10 @@ PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
   --experiment_config experiments/kaggle_deduplication
 ```
 
+PYTHONPATH=src python -m jaguar.experiments.experiment_runner \
+  --base_config base/ensemble_base \
+  --experiment_config experiments/kaggle_ensemble
+
 This command generates an executable configuration for each run defined in the experiment configuration under `configs/_generated/<experiment_group>` and executes them sequentially.
 The commands need to be started from the project root directory
 

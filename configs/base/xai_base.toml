@@ -19,7 +19,7 @@ key_for_seed = "filename"
 [data]
 num_workers = 4
 split_data_path = "splits/strclosed_set__dupTrue__kTrain1__kVal50__p4/full_split.parquet"
-use_fiftyone = false
+use_fiftyone = true
 
 [split]
 include_duplicates = true

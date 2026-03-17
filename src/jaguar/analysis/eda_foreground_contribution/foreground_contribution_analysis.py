@@ -292,8 +292,6 @@ def plot_backbone_bg_better_share(
             + list(df[f"stability__{group_name}__share_bg_more_stable"])
         ),
     })
-
-    print(f"\n[DEBUG plot_backbone_bg_better_share] group={group_name}")
     print(plot_df)
 
     plt.figure(figsize=(10, 5))

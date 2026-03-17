@@ -535,18 +535,11 @@ def run(
     if root_dir is not None and run_dir is None:
         raise NotImplementedError("Group-mode analysis not implemented yet.")
     
-    print(f"[DEBUG] {run_dir}")
-    print(f"[DEBUG] {root_dir}")
-
-    
     dataset_name = config["xai"]["dataset_name"]
     n_samples = config["xai"]["n_samples"]
     explainer = config["xai"]["explainer_names"][0]
 
     df_vec = load_all_vectors(run_root)
-
-    print("[DEBUG] df_vec columns:", df_vec.columns.tolist())
-    print("[DEBUG] df_vec shape:", df_vec.shape)
     print(df_vec.head())
     refs_all = load_all_refs(run_root)
     print(refs_all.head())

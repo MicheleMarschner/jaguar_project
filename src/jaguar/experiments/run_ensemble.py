@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 
 from jaguar.config import PATHS
+from jaguar.experiments.experiment_output import save_requested_outputs
 from jaguar.utils.utils import ensure_dir
 from jaguar.utils.utils_experiments import deep_update, load_toml_config
 from jaguar.utils.utils_evaluation import (
@@ -18,10 +19,6 @@ from jaguar.logging.wandb_logger import (
 )
 from jaguar.models.ensemble import create_simple_ensemble
 from jaguar.models.fusion_suite import build_fusion_suite_results
-from jaguar.analysis.kaggle_ensemble.ensemble_analysis import (
-    build_qualitative_review_df,
-    build_topk_candidates_df,
-)
 from jaguar.utils.utils_ensemble import (
     build_compute_summary_df,
     build_ensemble_results_long_df,
@@ -72,8 +69,7 @@ def evaluate_method_from_sim(
         split_df=split_df,
     )
     query_df, metrics = evaluate_query_gallery_retrieval(retrieval)
-    topk_df = build_topk_candidates_df(retrieval, top_k=3)
-    return retrieval, query_df, metrics, topk_df
+    return retrieval, query_df, metrics
 
 
 def save_fusion_artifacts(
@@ -115,10 +111,9 @@ def run_one_ensemble_protocol(
 
     per_model_query_dfs = {}
     per_model_metrics = {}
-    per_model_topk_dfs = {}
 
     for name, member_out in out["member_outputs"].items():
-        _, query_df, metrics, topk_df = evaluate_method_from_sim(
+        _, query_df, metrics = evaluate_method_from_sim(
             sim_matrix=member_out["sim_matrix"],
             query_global_indices=query_global_indices,
             gallery_global_indices=gallery_global_indices,
@@ -129,7 +124,6 @@ def run_one_ensemble_protocol(
 
         per_model_query_dfs[name] = query_df
         per_model_metrics[name] = metrics
-        per_model_topk_dfs[name] = topk_df
 
         print(f"{name:20s} mAP={metrics['mAP']:.4f} rank1={metrics['rank1']:.4f}")
 
@@ -145,14 +139,13 @@ def run_one_ensemble_protocol(
 
     fusion_query_dfs = {}
     fusion_metrics = {}
-    fusion_topk_dfs = {}
     fusion_artifacts = {}
     fusion_summary_rows = []
 
     for fusion_res in fusion_results:
         fusion_name = fusion_res["name"]
 
-        _, query_df, metrics, topk_df = evaluate_method_from_sim(
+        _, query_df, metrics = evaluate_method_from_sim(
             sim_matrix=fusion_res["sim_matrix"],
             query_global_indices=query_global_indices,
             gallery_global_indices=gallery_global_indices,
@@ -163,7 +156,6 @@ def run_one_ensemble_protocol(
 
         fusion_query_dfs[fusion_name] = query_df
         fusion_metrics[fusion_name] = metrics
-        fusion_topk_dfs[fusion_name] = topk_df
         fusion_artifacts[fusion_name] = fusion_res.get("artifacts", {})
 
         fusion_summary_rows.append({
@@ -180,16 +172,6 @@ def run_one_ensemble_protocol(
         run_dir / f"fusion_summary__{gallery_protocol}.csv",
         index=False,
     )
-
-    method_topk_dfs = {
-        **per_model_topk_dfs,
-        **fusion_topk_dfs,
-    }
-    for method_name, topk_df in method_topk_dfs.items():
-        topk_df.to_csv(
-            run_dir / f"topk_candidates__{method_name}__{gallery_protocol}.csv",
-            index=False,
-        )
 
     for fusion_name, artifacts in fusion_artifacts.items():
         save_fusion_artifacts(
@@ -224,25 +206,8 @@ def run_one_ensemble_protocol(
             index=False,
         )
 
-    method_query_dfs = {
-        **per_model_query_dfs,
-        **fusion_query_dfs,
-    }
-
     if "score_fusion" in fusion_query_dfs:
-        review_df = build_qualitative_review_df(
-            per_query_comparison_df=per_query_comparison_df,
-            split_df=split_df,
-            method_query_dfs=method_query_dfs,
-            method_topk_dfs=method_topk_dfs,
-            target_method="score_fusion",
-            worst_n=10,
-        )
-        review_df.to_csv(
-            run_dir / f"qualitative_review_worst_score_fusion__{gallery_protocol}.csv",
-            index=False,
-        )
-
+        
         print("\nScore fusion vs best single:")
         print(
             per_query_comparison_df[
@@ -272,6 +237,58 @@ def run_one_ensemble_protocol(
         run_dir / f"compute_summary__{gallery_protocol}.csv",
         index=False,
     )
+
+    best_single_name, best_single_metrics = max(
+        per_model_metrics.items(),
+        key=lambda x: x[1]["mAP"],
+    )
+
+    final_results = {
+        "gallery_protocol": gallery_protocol,
+        "best_single_name": best_single_name,
+        "best_single_mAP": float(best_single_metrics["mAP"]),
+        "best_single_rank1": float(best_single_metrics["rank1"]),
+        "oracle_mAP": float(oracle_summary["oracle_mAP"]),
+        "oracle_rank1": float(oracle_summary["oracle_rank1"]),
+    }
+
+    if fusion_metrics:
+        best_fusion_name, best_fusion_metrics = max(
+            fusion_metrics.items(),
+            key=lambda x: x[1]["mAP"],
+        )
+        final_results["best_fusion_name"] = best_fusion_name
+        final_results["best_fusion_mAP"] = float(best_fusion_metrics["mAP"])
+        final_results["best_fusion_rank1"] = float(best_fusion_metrics["rank1"])
+
+    overlap_payload = {}
+    member_names = list(per_model_query_dfs.keys())
+    if len(member_names) == 2:
+        overlap_summary = rank1_overlap_from_query_dfs(
+            per_model_query_dfs[member_names[0]],
+            per_model_query_dfs[member_names[1]],
+            name_a=member_names[0],
+            name_b=member_names[1],
+        )
+        overlap_payload = overlap_summary.to_dict(orient="records")
+
+    artifacts = {
+            "run_dir": run_dir,
+            "config": protocol_config,
+            "final_results": final_results,
+            "ensemble_stats": {
+                "fusion_components": {
+                    "gallery_protocol": gallery_protocol,
+                    "member_names": list(per_model_metrics.keys()),
+                    "fusion_names": list(fusion_metrics.keys()),
+                    "per_model_metrics": per_model_metrics,
+                    "fusion_metrics": fusion_metrics,
+                    "oracle_summary": oracle_summary,
+                },
+                "error_overlap": overlap_payload,
+            },
+        }
+    save_requested_outputs(protocol_config, artifacts)
 
     return {
         "gallery_protocol": gallery_protocol,

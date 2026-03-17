@@ -63,17 +63,18 @@ def save_params_flops(*, run_dir, backbone_stats, **kwargs):
     write_json(backbone_stats, run_dir / "params_flops.json")
 
 def save_fusion_components(*, run_dir, ensemble_stats, **kwargs):
-    """Write ensemble component statistics to the run directory."""
-    write_json(ensemble_stats, run_dir / "fusion_components.json")
+    """Write ensemble fusion-component statistics to the run directory."""
+    payload = ensemble_stats.get("fusion_components", ensemble_stats)
+    write_json(payload, run_dir / "fusion_components.json")
 
 def save_error_overlap(*, run_dir, ensemble_stats, **kwargs):
     """Write ensemble error-overlap statistics to the run directory."""
-    write_json(ensemble_stats, run_dir / "error_overlap.json")
+    payload = ensemble_stats.get("error_overlap", ensemble_stats)
+    write_json(payload, run_dir / "error_overlap.json")
 
 def save_timing(*, run_dir, timing_stats, **kwargs):
     """Write runtime timing statistics for a run to a JSON file."""
     write_json(timing_stats, run_dir / "timing.json")
-
 
 def save_requested_outputs(config: dict, artifacts: dict[str, Any]) -> None:
     """Save all per-run artifacts requested by the configured output profile."""

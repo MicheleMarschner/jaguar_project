@@ -43,6 +43,14 @@ def main() -> None:
 
         config = load_run_config(run_dir, args.config_name)
         experiment_group = resolve_experiment_group(config)
+
+        if experiment_group == "kaggle_ensemble":
+            raise ValueError(
+                "Single-run analysis is not supported for 'kaggle_ensemble'. "
+                "Run the analysis on the whole experiment group instead."
+            )
+
+
         save_dir = build_results_out_dir(experiment_group, args.run_name)
         REGISTRY[experiment_group](config=config, run_dir=run_dir, save_dir=save_dir)
         return

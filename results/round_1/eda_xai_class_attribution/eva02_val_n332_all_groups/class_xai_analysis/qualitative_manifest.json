@@ -1,0 +1,16 @@
+{
+  "groups": [
+    "all",
+    "orig_rank1_correct",
+    "orig_rank1_wrong"
+  ],
+  "explainers": [
+    "GradCAM",
+    "IG"
+  ],
+  "saved_files": {
+    "all": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/results/round_1/eda_xai_class_attribution/eva02_val_n332_all_groups/class_xai_analysis/qualitative/qualitative_grid__all.png",
+    "orig_rank1_correct": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/results/round_1/eda_xai_class_attribution/eva02_val_n332_all_groups/class_xai_analysis/qualitative/qualitative_grid__orig_rank1_correct.png",
+    "orig_rank1_wrong": "/Users/MicheleMarschner/Documents/Uni/WiSe_2025_26/Applied CV/jaguar_project/results/round_1/eda_xai_class_attribution/eva02_val_n332_all_groups/class_xai_analysis/qualitative/qualitative_grid__orig_rank1_wrong.png"
+  }
+}

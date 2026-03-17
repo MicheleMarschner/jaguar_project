@@ -1,8 +1,6 @@
 import torch
 import tomli_w
 
-from pathlib import Path
-
 def average_checkpoints(checkpoints):
     avg_state = None
     for ckpt_dir in checkpoints:

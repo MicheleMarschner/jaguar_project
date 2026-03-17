@@ -15,10 +15,11 @@ import pandas as pd
 from PIL import Image
 import imagehash
 from sklearn.metrics.pairwise import cosine_similarity
-from jaguar.utils.utils import ensure_dir, json_default, save_parquet, to_abs, to_rel_path
 import numpy as np
 import json
 import cv2
+
+from jaguar.utils.utils import ensure_dir, json_default, save_parquet, to_abs, to_rel_path
 
 
 def build_meta_from_jaguar_dataset(torch_ds) -> pd.DataFrame:

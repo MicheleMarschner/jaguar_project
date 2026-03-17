@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 from typing import Any
 
 from jaguar.utils.utils_evaluation import l2_normalize

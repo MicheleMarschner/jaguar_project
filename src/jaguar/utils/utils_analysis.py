@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from jaguar.config import PATHS
-
 from jaguar.analysis.baseline_and_eda import run_analysis as baseline_and_eda_analysis
 from jaguar.analysis.eda_background_intervention import (
     background_intervention_analysis,

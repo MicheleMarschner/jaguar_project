@@ -1,12 +1,12 @@
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from jaguar.config import DATA_STORE
-from jaguar.utils.utils import resolve_path, save_npy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+from jaguar.utils.utils import resolve_path, save_npy
 from jaguar.models.foundation_models import FoundationModelWrapper
 from jaguar.utils.utils_losses import (
     ArcFaceLoss,

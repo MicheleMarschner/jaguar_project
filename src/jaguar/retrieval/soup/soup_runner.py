@@ -16,7 +16,6 @@ from jaguar.retrieval.soup.soup_grouping import (
     group_models 
 )
 from jaguar.retrieval.soup.soup_utils import average_checkpoints
-from jaguar.logging.wandb_logger import log_wandb_table
 from jaguar.config import DATA_ROOT
 
 def run_soup_sensitivity(

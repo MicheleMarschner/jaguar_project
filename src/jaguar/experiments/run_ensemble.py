@@ -1,6 +1,5 @@
 import argparse
 from pathlib import Path
-
 import pandas as pd
 
 from jaguar.config import PATHS

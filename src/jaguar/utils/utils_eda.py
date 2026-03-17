@@ -4,7 +4,6 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 import seaborn as sns

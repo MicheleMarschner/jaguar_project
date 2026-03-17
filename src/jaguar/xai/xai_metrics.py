@@ -20,9 +20,6 @@ Purpose:
 
 import gc
 from pathlib import Path
-from jaguar.experiments.experiment_output import save_requested_outputs
-from jaguar.experiments.run_class_attribution_generation import build_val_resolver
-from jaguar.utils.utils_xai_class import compute_saliency_gradcam_class, compute_saliency_ig_class
 import numpy as np
 import torch
 from collections import defaultdict
@@ -35,14 +32,16 @@ import torch.nn.functional as F
 from typing import Any, Callable, Dict
 
 from jaguar.xai.xai_similarity import build_emb_row_sample_resolver, compute_saliency_gradcam_for_pair_type, compute_saliency_ig_for_pair_type
-from jaguar.config import EXPERIMENTS_STORE, PATHS
+from jaguar.config import PATHS
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_metrics_results
-from jaguar.utils.utils import ensure_dir, load_parquet, resolve_path
+from jaguar.utils.utils import ensure_dir, load_parquet
 from jaguar.utils.utils_xai_similarity import SimilarityForward
 from jaguar.utils.utils_xai import format_n_samples_tag, save_vec, build_val_resolver
 from jaguar.utils.utils_evaluation import build_eval_context
 from jaguar.utils.utils_experiments import load_toml_from_path, resolve_xai_metrics_paths
-
+from jaguar.experiments.experiment_output import save_requested_outputs
+from jaguar.experiments.run_class_attribution_generation import build_val_resolver
+from jaguar.utils.utils_xai_class import compute_saliency_gradcam_class, compute_saliency_ig_class
 
 # ============================================================
 # Faithfulness

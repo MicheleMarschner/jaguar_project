@@ -45,7 +45,7 @@ class FODataset:
 
         self.dataset.persistent = bool(persistent)
 
-    def get_dataset(self) -> "fo.Dataset":
+    def get_dataset(self):
         """Return the underlying FiftyOne dataset object."""
         return self.dataset
 
@@ -65,7 +65,7 @@ class FODataset:
         tags: Optional[List[str]] = None,
         metadata: Optional[Dict] = None,
         detections: Optional[List[Dict]] = None,
-    ) -> "fo.Sample":
+    ):
         """Build a FiftyOne sample from an image path with optional label, tags, metadata, and detections."""
         _require_fiftyone()
         abs_path = str(Path(filepath).absolute())
@@ -100,7 +100,7 @@ class FODataset:
 
         return sample
 
-    def add_samples(self, samples: List["fo.Sample"]) -> None:
+    def add_samples(self, samples) -> None:
         """Add a batch of samples to the dataset and persist the changes."""
         self.dataset.add_samples(samples)
         self.dataset.save()
@@ -218,7 +218,7 @@ def build_from_raw_filename_ids(
 
     fo_ds = FODataset(dataset_name=dataset_name, overwrite=overwrite_db)
 
-    samples: List["fo.Sample"] = []
+    samples = []
 
     # train labeled
     for p in sorted(train_dir.glob("*")):

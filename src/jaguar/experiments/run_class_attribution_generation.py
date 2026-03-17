@@ -2,11 +2,9 @@ import argparse
 import json
 from dataclasses import dataclass
 from pathlib import Path
-
 import pandas as pd
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_class_attribution_results
 import torch
-from tqdm import tqdm
 
 from jaguar.config import PATHS
 from jaguar.experiments.experiment_output import save_requested_outputs

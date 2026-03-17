@@ -1,6 +1,5 @@
 import argparse
 import tomllib
-import torch
 from pathlib import Path
 
 from jaguar.retrieval.soup.soup_utils import generate_soup_experiments
@@ -8,8 +7,6 @@ from jaguar.retrieval.soup.soup_runner import run_soup_sensitivity
 from jaguar.retrieval.soup.soup_grouping import discover_seed_models
 from jaguar.retrieval.retrieval_runner import build_val_loader
 from jaguar.retrieval.retrieval_main import load_model, load_checkpoint_config
-from jaguar.models.jaguarid_models import JaguarIDModel
-from jaguar.config import DEVICE
 from jaguar.logging.wandb_logger import (
     init_wandb_run,
     finish_wandb_run,

@@ -20,7 +20,6 @@ Purpose:
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
-from jaguar.utils.utils_xai import find_module_name, format_n_samples_tag, get_val_query_indices, resolve_n_samples
 import numpy as np
 import pandas as pd
 import torch
@@ -31,10 +30,10 @@ from pytorch_grad_cam import GradCAM
 from typing import Dict, Any, Sequence, Tuple, List
 
 from jaguar.config import PATHS 
+from jaguar.utils.utils_xai import find_module_name, format_n_samples_tag, get_val_query_indices, resolve_n_samples
 from jaguar.utils.utils_models import load_or_extract_jaguarid_embeddings
 from jaguar.utils.utils import ensure_dir, save_parquet
 from jaguar.models.foundation_models import FoundationModelWrapper  
-
 from jaguar.utils.utils_xai_similarity import ig_saliency_batched_similarity, CosineSimilarityTarget, EmbeddingForwardWrapper, SimilarityForward
 from jaguar.utils.utils_evaluation import RetrievalState, build_eval_context, build_query_gallery_retrieval_state, get_ranked_candidates_for_query, map_emb_rows_to_local_indices
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_xai_similarity_results

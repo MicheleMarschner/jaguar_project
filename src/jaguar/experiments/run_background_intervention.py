@@ -16,7 +16,7 @@ from jaguar.config import PATHS
 from jaguar.utils.utils_experiments import load_toml_config, deep_update, load_toml_from_path
 from jaguar.utils.utils import ensure_dir
 from jaguar.experiments.experiment_output import save_requested_outputs
-from jaguar.utils.utils_evaluation import build_original_gallery_base, build_query_for_setting, build_query_gallery_retrieval_state, build_val_gallery_base, build_val_only_retrieval_for_setting, evaluate_query_gallery_retrieval
+from jaguar.utils.utils_evaluation import build_val_gallery_base, build_val_only_retrieval_for_setting, evaluate_query_gallery_retrieval
 from jaguar.logging.wandb_logger import init_wandb_run, log_wandb_background_intervention_results
 
 def save_retrieval_results(

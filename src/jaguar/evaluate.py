@@ -1,8 +1,7 @@
 import argparse
 from pathlib import Path
 
-from jaguar.models.ensemble import fuse_embeddings_concat
-
+from jaguar.models.fusion_suite import fuse_embeddings_concat
 from jaguar.utils.utils_evaluate import (
     SUPPORTED_MULTISCALE_BACKBONES,
     load_model_from_toml,

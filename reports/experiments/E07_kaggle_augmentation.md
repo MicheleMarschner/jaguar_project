@@ -52,10 +52,10 @@ Evaluation is based on the same internal validation metrics used throughout the 
 | aug_geom_noflip_nocol_noerase | 0.6329 | -0.0989 | 0.9150 | 0.5305 | 0.6330 |
 | aug_none | 0.6149 | -0.1169 | 0.9150 | 0.5305 | 0.6149 |
 
-<p align="center"><img src="../../results/round_2/baseline/Bildschirmfoto 2026-03-17 um 23.17.29.png" width="90%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_augmentation/Bildschirmfoto 2026-03-17 um 23.17.29.png" width="90%" /></p>
 <p align="center"><em>Figure 1. Validation trajectories for the augmentation ablation, including similarity gap, silhouette, Rank-1, pairwise AP, mAP, and validation loss.</em></p>
 
-<p align="center"><img src="../../results/round_2/baseline/W&B Chart 17.3.2026, 23_17_14.png" width="80%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_augmentation/W&B Chart 17.3.2026, 23_17_14.png" width="80%" /></p>
 <p align="center"><em>Figure 2. Training loss across augmentation settings.</em></p>
 
 ## Analysis

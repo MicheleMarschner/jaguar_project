@@ -63,10 +63,10 @@ Third, the mining strategies differ clearly in their training dynamics. As shown
 | Random | 0.6262 | 0.9524 | 0.4601 | 0.6386 | 0.4884 |
 | Weighted | 0.6001 | 0.9286 | 0.4519 | 0.6594 | 0.5915 |
 
-<p align="center"><img src="W&B Chart 17.3.2026, 23_05_49.png" width="80%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_mining/Bildschirmfoto 2026-03-17 um 23.06.19.png" width="80%" /></p>
 <p align="center"><em>Figure 1. Validation metrics across epochs for the four triplet mining strategies. The panels show similarity gap, silhouette, Rank-1, pairwise AP, mAP, and validation loss.</em></p>
 
-<p align="center"><img src="Bildschirmfoto 2026-03-17 um 23.06.19.png" width="80%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_mining/W&B Chart 17.3.2026, 23_05_49.png" width="80%" /></p>
 <p align="center"><em>Figure 2. Training loss across epochs for the same mining strategies.</em></p>
 
 ## Analysis

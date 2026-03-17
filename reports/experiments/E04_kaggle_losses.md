@@ -66,10 +66,10 @@ The results also show that the best loss depends somewhat on the metric used. **
 
 The Weights & Biases curves make these differences visible over training.
 
-<p align="center"><img src="../../results/round_2/baseline/Bildschirmfoto 2026-03-17 um 23.03.34.png" width="90%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_losses/Bildschirmfoto 2026-03-17 um 23.03.34.png" width="90%" /></p>
 <p align="center"><em>Figure 1. Validation curves across epochs for the different loss/head configurations with EVA-02.</em></p>
 
-<p align="center"><img src="../../results/round_2/baseline/W&B Chart 17.3.2026, 23_03_09.png" width="90%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_losses/W&B Chart 17.3.2026, 23_03_09.png" width="90%" /></p>
 <p align="center"><em>Figure 2. Training-loss curves across epochs for the different loss/head configurations with EVA-02.</em></p>
 
 Several patterns are consistent across the plots:

@@ -50,10 +50,10 @@ The table shows that the **multi-stage progressive schedule** achieves the best 
 
 The Weights & Biases curves support the same interpretation.
 
-<p align="center"><img src="../../results/round_2/kaggle_progressive_resizing/wandb_dashboard_progressive_resizing.png" width="88%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_resizing/Bildschirmfoto 2026-03-17 um 23.22.23.png" width="88%" /></p>
 <p align="center"><em>Figure 1. Validation curves for the progressive-resizing study. The three main schedules of interest are the progressive and non-progressive ConvNeXt-V2 runs; the dashboard also contains additional fixed-resolution control runs that are not part of the main comparison in Table 1.</em></p>
 
-<p align="center"><img src="../../results/round_2/kaggle_progressive_resizing/wandb_train_loss_progressive_resizing.png" width="70%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_resizing/W&B Chart 17.3.2026, 23_22_05.png" width="70%" /></p>
 <p align="center"><em>Figure 2. Training-loss trajectories for the progressive-resizing study.</em></p>
 
 ### Aggregate performance behavior

@@ -176,7 +176,7 @@ While Kaggle evaluates submissions with identity-level mAP on the hidden test se
 
 The Weights & Biases curves show a clear performance hierarchy across the backbone families.
 
-<p align="center"><img src="../../results/round_2/baseline/Bildschirmfoto 2026-03-17 um 22.51.03.png" width="90%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_backbone/Bildschirmfoto 2026-03-17 um 22.51.03.png" width="90%" /></p>
 <p align="center"><em>Figure 1. Validation metrics across epochs for the different pretrained backbones.</em></p>
 
 Two models form the top tier: **EVA-02** and **MegaDescriptor-L-384**. Across the displayed validation metrics, both outperform the remaining backbones and reach the strongest final retrieval quality. In the curves shown here, both exceed roughly **0.7 validation sim-gap**, **0.5 silhouette**, **0.8 pairwise AP**, and **0.94 Rank-1**, with the strongest validation mAP trajectories among all compared models.
@@ -200,7 +200,7 @@ Overall, the trends suggest that strong backbones do not merely improve one retr
 
 The train-loss curves provide a complementary view of optimization behavior.
 
-<p align="center"><img src="../../results/round_2/baseline/W&B Chart 17.3.2026, 22_50_15.png" width="90%" /></p>
+<p align="center"><img src="../../results/round_2/kaggle_backbone/W&B Chart 17.3.2026, 22_50_15.png" width="90%" /></p>
 <p align="center"><em>Figure 2. Training loss across epochs for the different pretrained backbones.</em></p>
 
 Most backbones show the expected rapid drop in loss during the first epochs, followed by a flatter late-training regime. However, the trajectories differ markedly in level and stability. **EVA-02** and **MegaDescriptor-L** reach very low final train loss while also maintaining the strongest validation metrics, suggesting that their good validation performance is not simply a consequence of unstable optimization. By contrast, **Swin-Transformer** remains at a much higher training-loss plateau and also underperforms in validation, which indicates weaker fitting under this setup rather than better regularization.

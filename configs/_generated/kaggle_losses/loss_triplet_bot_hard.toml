@@ -1,0 +1,27 @@
+[training]
+experiment_name = "loss_triplet_bot_hard"
+early_stopping = false
+seed = 42
+multiple_seeds = false
+
+[model]
+head_type = "triplet"
+m = 0.7
+mining_type = "hard"
+
+[mining_analysis]
+force_silhouette = false
+
+[optimizer]
+lr = 3.5e-05
+
+[scheduler]
+lr_start = 3.5e-05
+lr_max = 0.00035
+
+[output]
+profile = "loss"
+experiment_group = "kaggle_losses"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

@@ -9,19 +9,56 @@ import numpy as np
 import random 
 import pandas as pd
 import torch 
+import fiftyone as fo
 import torchvision.transforms.v2 as transforms
 from torchvision.transforms import InterpolationMode
 from functools import partial
-from torch.utils.data import Sampler, Dataset
+from torch.utils.data import Sampler, Dataset, Subset
 from sklearn.model_selection import train_test_split
 from pathlib import Path
 from collections import defaultdict, Counter
  
-from jaguar.config import DATA_ROOT, PATHS, IMGNET_MEAN, IMGNET_STD, DATA_STORE
+from jaguar.config import DATA_ROOT, IMGNET_MEAN, IMGNET_STD, DATA_STORE
 from jaguar.preprocessing.preprocessing_background import PROCESSORS
 from jaguar.datasets.FiftyOneDataset import FODataset, ManifestDataset
 from jaguar.datasets.JaguarDataset import JaguarDataset 
 from jaguar.utils.utils import resolve_path
+
+
+# --------------------Identity distribution analysis --------------------
+def analyze_identity_distribution(train_ds, val_ds, save_path=None):
+    train_counts = Counter(train_ds.labels_idx)
+    val_counts = Counter(val_ds.labels_idx)
+
+    all_ids = sorted(set(train_counts) | set(val_counts))
+
+    rows = []
+    for i in all_ids:
+        rows.append({
+            "identity": i,
+            "train_images": train_counts.get(i, 0),
+            "val_images": val_counts.get(i, 0),
+            "total_images": train_counts.get(i, 0) + val_counts.get(i, 0),
+        })
+
+    df = pd.DataFrame(rows).sort_values("total_images")
+
+    if save_path:
+        df.to_csv(save_path, index=False)
+
+    return df
+
+def get_rare_identities(identity_df, threshold=3):
+    rare_ids = identity_df[identity_df.total_images <= threshold]["identity"].tolist()
+    return set(rare_ids)
+
+def build_rare_val_dataset(val_ds, rare_ids):
+    rare_indices = [
+        i for i, lbl in enumerate(val_ds.labels_idx)
+        if lbl in rare_ids
+    ]
+
+    return Subset(val_ds, rare_indices)
 
 # --------------------Progressive resizing utilities--------------------
 def _round_to_patch(size, patch):
@@ -52,16 +89,32 @@ def auto_generate_pr_sizes(model):
     print(f"[ProgressiveResizing] Auto-generated sizes: {sizes}")
     return sizes
 
-
-def get_resize_for_epoch(epoch: int, sizes: list[int], stage_epochs: list[int]) -> int:
+def get_resize_for_epoch(epoch, sizes, stage_epochs):
     """Return the resize value assigned to a given training epoch."""
-    cum = 0
-    for size, n_epochs in zip(sizes, stage_epochs):
-        cum += n_epochs
-        if epoch <= cum:
+    cumulative = 0
+    for size, stage_len in zip(sizes, stage_epochs):
+        cumulative += stage_len
+        if epoch <= cumulative:
             return size
     return sizes[-1]
 
+# --------------------Helpers for augmentatiosn & transformations--------------------
+class TransformSubset(torch.utils.data.Dataset):
+    def __init__(self, subset, transform=None, processing_fn=None):
+        self.subset = subset
+        self.transform = transform
+        
+    def __getitem__(self, index):
+        sample = self.subset[index]
+
+        if self.transform:
+            # Assuming the dataset returns a dict with "img"
+            sample["img"] = self.transform(sample["img"])
+        return sample
+        
+    def __len__(self):
+        return len(self.subset)
+    
 def get_transforms(config, model_wrapper, is_training=True, input_size_override=None):
     """Build the transform pipeline for training or evaluation images."""
     registry_entry = model_wrapper.registry_entry
@@ -115,9 +168,7 @@ def get_transforms(config, model_wrapper, is_training=True, input_size_override=
                     saturation=aug_cfg.get("color_jitter_saturation", 0.1),
                 )
             )
-
     else:
-
         transform_list.append(
             transforms.Resize((input_size, input_size), interpolation=interpolation)
         )

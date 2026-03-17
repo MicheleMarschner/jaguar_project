@@ -1,0 +1,20 @@
+[training]
+experiment_name = "backbone_convnext_v2"
+unfreeze_blocks = 100
+epochs = 50
+seed = 42
+multiple_seeds = false
+
+[model]
+backbone_name = "ConvNeXt-V2"
+m = 0.7
+
+[augmentation]
+random_resized_crop = true
+
+[output]
+profile = "backbone"
+experiment_group = "kaggle_backbone"
+
+[data]
+split_data_path = "/splits/strclosed_set__dupFalse__kTrain3__kVal3__p4/full_split.parquet"

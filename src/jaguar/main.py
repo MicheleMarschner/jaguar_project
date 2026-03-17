@@ -19,13 +19,22 @@ from jaguar.utils.utils_datasets import (
     load_split_jaguar_from_FO_export,
     BalancedBatchSampler,
     get_transforms,
+    analyze_identity_distribution,
+    get_rare_identities,
+    build_rare_val_dataset,
+    # get_stratified_train_val_split,
     auto_generate_pr_sizes,
+    TransformSubset
 )
 from jaguar.train import JaguarTrainer
 from jaguar.logging.wandb_logger import (
-    init_wandb_run, log_wandb_dataset_info, log_wandb_epoch_metrics,
-    finish_wandb_run, log_wandb_output_artifact, log_wandb_model_info,
-    log_wandb_checkpoint_artifact
+    init_wandb_run, 
+    log_wandb_dataset_info, 
+    log_wandb_epoch_metrics,
+    finish_wandb_run, 
+    log_wandb_output_artifact, 
+    log_wandb_model_info,
+    log_wandb_checkpoint_artifact,
 )
 
 def parse_args():
@@ -55,6 +64,25 @@ def parse_args():
     return parser.parse_args()
 
 
+def resolve_training_experiment_name(config: dict) -> str:
+    """Return the effective experiment name used for outputs and checkpoints."""
+    exp_name = config["training"]["experiment_name"]
+
+    if not config["training"].get("multiple_seeds", False):
+        return exp_name
+
+    backbone_name = config["model"]["backbone_name"]
+    optim_name = config["optimizer"]["type"]
+    sched_name = config["scheduler"]["type"]
+
+    suffix = f"{backbone_name}_{optim_name}_{sched_name}"
+
+    if suffix not in exp_name:
+        exp_name = f"{exp_name}_{suffix}"
+
+    return exp_name
+
+
 def main():
     """Run the full JaguarID training pipeline: config loading, data setup, training, validation, and output logging."""
     # Parse CLI arguments
@@ -71,17 +99,19 @@ def main():
         config.setdefault("training", {})
         config["training"]["experiment_name"] = args.experiment_name
 
-    exp_name = config["training"]["experiment_name"]
+    exp_name = resolve_training_experiment_name(config)
+    config["training"]["experiment_name"] = exp_name
     experiment_group = config.get("output", {}).get("experiment_group")
 
-    # run artifact directory
     if experiment_group:
         run_dir = PATHS.runs / experiment_group / exp_name
         config["training"]["save_dir"] = str(PATHS.checkpoints / experiment_group / exp_name)
     else:
         run_dir = PATHS.runs / exp_name
         config["training"]["save_dir"] = str(PATHS.checkpoints / exp_name)
+
     ensure_dir(run_dir)
+    ensure_dir(Path(config["training"]["save_dir"]))
 
     wandb_run = init_wandb_run(
         config=config,
@@ -181,10 +211,6 @@ def main():
         print(f"[ProgressiveResizing] Initial input size: {current_resize}")
     else:
         current_resize = model.backbone_wrapper.input_size
-        
-    if pr_enabled:
-        current_resize = get_resize_for_epoch(1, pr_sizes, pr_stage_epochs)
-        print(f"[ProgressiveResizing] Initial input size: {current_resize}")
 
     # Apply transforms directly to pre-split datasets
     train_ds.transform = get_transforms(
@@ -229,6 +255,41 @@ def main():
         pin_memory=True
     )
     
+    rare_cfg = config.get("rare_identity_eval", {})
+    rare_eval_enabled = rare_cfg.get("enabled", False)
+    rare_threshold = rare_cfg.get("threshold", 15)
+
+    rare_val_loader = None
+    if rare_eval_enabled:
+
+        identity_df = analyze_identity_distribution(
+            train_ds,
+            val_ds,
+            save_path=run_dir/"identity_distribution.csv"
+        )
+        print(identity_df.total_images.describe())
+
+        rare_ids = get_rare_identities(identity_df, rare_threshold)
+        rare_subset = build_rare_val_dataset(val_ds, rare_ids)
+        rare_val_ds = TransformSubset(
+            rare_subset,
+            transform=get_transforms(
+                config,
+                model.backbone_wrapper,
+                is_training=False,
+                input_size_override=current_resize,
+            )
+        )
+        rare_val_loader = DataLoader(
+            rare_val_ds,
+            batch_size=config['training']['batch_size'],
+            shuffle=False,
+            num_workers=config['data']['num_workers'],
+            pin_memory=True
+        )
+        print(f"[RARE VAL Info] identities <= {rare_threshold} images")
+        print(f"[RARE VAL Info] samples: {len(rare_val_ds)}")
+    
     # Start Training Loop
     if not config['training']['save_dir']:
         config['training']['save_dir'] = PROJECT_ROOT
@@ -241,6 +302,9 @@ def main():
     history = []
     epoch_times = []
     best_checkpoint_path = None
+    best_score_rare = 0.0
+    best_epoch_rare = None
+    best_rare_metrics = None
 
     patience = config["training"].get("early_stopping_patience", 5)
     patience_counter = 0
@@ -275,10 +339,10 @@ def main():
         avg_loss = trainer.train_epoch(epoch)
         metrics, current_embs, current_lbls, was_heavy = trainer.validate(epoch=epoch)
         
-        
         print(f"\nEpoch {epoch} Summary:")
         print(
             f"Train Loss: {avg_loss:.4f} | "
+            f"Val Loss: {metrics['val_loss']:.4f} | "
             f"Val mAP: {metrics['mAP']:.4f} | "
             f"Val pairAP: {metrics['pairwise_AP']:.4f} | "
             f"Val Rank1: {metrics['rank1']:.4f} | "
@@ -286,6 +350,17 @@ def main():
         )
         if was_heavy: 
             print(f" | Val Silhouette: {metrics['silhouette']:.4f}")
+                   
+        rare_metrics = None
+        if rare_val_loader is not None:
+            rare_metrics, _, _, _ = trainer.validate(
+                epoch=epoch,
+                loader=rare_val_loader
+            )
+            print(
+                f"[RARE VAL] mAP: {rare_metrics['mAP']:.4f} | "
+                f"Rank1: {rare_metrics['rank1']:.4f}"
+            )
         
         # Save best model
         current_score = metrics[monitor_metric]
@@ -307,9 +382,15 @@ def main():
                 # Overwrites the previous best to save disk space
                 viz_path = Path(run_dir) / "best_val_viz_data.npz"
                 np.savez(viz_path, **viz_data)
-
         else:
             patience_counter += 1
+        
+        if rare_metrics is not None:
+            rare_score = rare_metrics["mAP"]
+            if rare_score > best_score_rare:
+                best_rare_metrics = rare_metrics
+                best_score_rare = rare_score
+                best_epoch_rare = epoch
             
         if config["scheduler"]["type"] == "ReduceLROnPlateau":
             trainer.scheduler.step(metrics["mAP"])
@@ -324,6 +405,7 @@ def main():
         history.append({
             "epoch": epoch,
             "train_loss": float(avg_loss),
+            "val_loss": float(metrics["val_loss"]),
             "val_mAP": float(metrics["mAP"]),
             "val_pairwise_AP": float(metrics["pairwise_AP"]),
             "val_rank1": float(metrics["rank1"]),
@@ -342,6 +424,7 @@ def main():
             current_lr=current_lr,
             epoch_time_sec=epoch_time_sec,
             input_size=current_resize if pr_enabled else model.backbone_wrapper.input_size,
+            rare_metrics=rare_metrics,
         )
         
         if config["training"].get("early_stopping", False):
@@ -356,6 +439,10 @@ def main():
         "best_score": best_score,
         "metrics": best_metrics,
     }
+    
+    if rare_metrics is not None:
+        final_results["best_epoch_rare"] = best_epoch_rare
+        final_results["best_score_rare"] = best_score_rare
 
     artifacts = build_output_artifacts(
         run_dir=run_dir,
@@ -394,8 +481,9 @@ def main():
         best_metrics=best_metrics,
         epochs_completed=len(history),
         total_train_time_sec=sum(epoch_times),
-    )
-        
+        best_rare_epoch=best_epoch_rare,
+        best_rare_metrics=best_rare_metrics,
+    )       
 
 if __name__ == "__main__":
     main()

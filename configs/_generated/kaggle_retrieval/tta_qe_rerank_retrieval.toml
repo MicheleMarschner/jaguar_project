@@ -1,0 +1,18 @@
+[evaluation]
+apply_tta = true
+tta_modality = "flip"
+apply_qe = true
+top_k_expansion = [
+    3,
+]
+apply_rerank = true
+k1 = [
+    15,
+]
+k2 = [
+    6,
+]
+lambda_value = [
+    0.3,
+]
+experiment_group = "kaggle_retrieval"

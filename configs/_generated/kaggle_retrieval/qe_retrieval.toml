@@ -1,0 +1,9 @@
+[evaluation]
+apply_qe = true
+top_k_expansion = [
+    3,
+    5,
+    7,
+    10,
+]
+experiment_group = "kaggle_retrieval"

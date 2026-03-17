@@ -30,7 +30,6 @@ def parse_args():
     return parser.parse_args()
 
 
-
 def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) -> str:
     """Resolve which experiment entry script to run for the given mode and experiment metadata."""
     if mode == "train":
@@ -62,6 +61,29 @@ def resolve_target_script(mode: str, experiment_meta: dict, main_script: str) ->
     raise ValueError(f"Unknown mode: {mode}")
 
 
+def expand_run_variants(run_cfg: dict) -> list[dict]:
+    """Expand one run config into one or more concrete run variants."""
+    if "seed" not in run_cfg:
+        return [run_cfg]
+
+    raw_seed = run_cfg["seed"]
+
+    if not isinstance(raw_seed, list):
+        return [run_cfg]
+
+    experiment_name = run_cfg["experiment_name"]
+    variants = []
+
+    for seed in raw_seed:
+        variant = dict(run_cfg)
+        variant["seed"] = seed
+        variant["multiple_seeds"] = True
+        variant["experiment_name"] = f"{experiment_name}_seed_{seed}"
+        variants.append(variant)
+
+    return variants
+
+
 def run_experiments():
     """Generate per-run override configs, optionally run setup, and write a shell script for all commands."""
     args = parse_args()
@@ -80,14 +102,18 @@ def run_experiments():
 
     mode = experiment_meta.get("mode", "train")
 
-    print(f"Found {len(runs)} runs.")
+    expanded_runs = []
+    for run_cfg in runs:
+        expanded_runs.extend(expand_run_variants(run_cfg))
+
+    print(f"Found {len(expanded_runs)} concrete runs.")
     print(f"mode = {mode}")
 
     all_cmds = []
 
-    for i, run_cfg in enumerate(runs, start=1):
+    for i, run_cfg in enumerate(expanded_runs, start=1):
         experiment_name = run_cfg["experiment_name"]
-        
+
         if mode == "ensemble":
             override = build_ensemble_override(
                 run_cfg=run_cfg,
@@ -106,9 +132,16 @@ def run_experiments():
                 experiment_meta=experiment_meta,
                 base_config=base_config,
             )
+
+        if "seed" in run_cfg:
+            override.setdefault("training", {})["seed"] = run_cfg["seed"]
+
+        if run_cfg.get("multiple_seeds"):
+            override.setdefault("training", {})["multiple_seeds"] = True
+        
         override_text = dict_to_toml(override)
 
-        print(f"\n[{i}/{len(runs)}] {experiment_name}")
+        print(f"\n[{i}/{len(expanded_runs)}] {experiment_name}")
 
         override_path = generated_dir / f"{experiment_name}.toml"
         override_path.write_text(override_text, encoding="utf-8")

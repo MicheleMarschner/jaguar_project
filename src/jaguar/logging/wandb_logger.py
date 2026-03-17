@@ -109,8 +109,10 @@ def init_wandb_run(
     run.define_metric("epoch")
     run.define_metric("train/*", step_metric="epoch")
     run.define_metric("val/*", step_metric="epoch")
+    run.define_metric("inference/*", step_metric="epoch")
     run.define_metric("timing/*", step_metric="epoch")
     run.define_metric("meta/*", step_metric="epoch")
+    run.define_metric("val_rare/*", step_metric="epoch")
 
     return run
 
@@ -168,15 +170,16 @@ def log_wandb_epoch_metrics(
     current_lr: float,
     epoch_time_sec: float,
     input_size: int | tuple[int, int] | list[int],
+    rare_metrics: dict[str, Any] = None,
 ) -> None:
     """Log one epoch of training and validation metrics."""
     if run is None:
         return
 
-    
     log_dict = {
             "epoch": int(epoch),
             "train/loss": float(avg_loss),
+            "val/loss": float(metrics["val_loss"]),
             "val/mAP": float(metrics["mAP"]),
             "val/pairwise_AP": float(metrics["pairwise_AP"]),
             "val/rank1": float(metrics["rank1"]),
@@ -189,6 +192,12 @@ def log_wandb_epoch_metrics(
 
     if "silhouette" in metrics:
         log_dict["val/silhouette"] = float(metrics["silhouette"])
+    
+    if rare_metrics is not None:
+        log_dict["val_rare/mAP"] = float(rare_metrics["mAP"])
+        log_dict["val_rare/rank1"] = float(rare_metrics["rank1"])
+        log_dict["val_rare/pairwise_AP"] = float(rare_metrics["pairwise_AP"])
+        
     run.log(log_dict)
 
 
@@ -269,6 +278,8 @@ def finish_wandb_run(
     best_metrics: dict[str, Any] | None,
     epochs_completed: int,
     total_train_time_sec: float,
+    best_rare_epoch: int | None = None,
+    best_rare_metrics: dict[str, Any] | None = None,
 ) -> None:
     """Write final summary fields and finish the W&B run."""
     if run is None:
@@ -285,7 +296,10 @@ def finish_wandb_run(
         run.summary["best_pairwise_AP"] = float(best_metrics["pairwise_AP"])
         run.summary["best_rank1"] = float(best_metrics["rank1"])
         run.summary["best_sim_gap"] = float(best_metrics["sim_gap"])
-
+    
+    if best_rare_metrics is not None:
+        run.summary["best_rare_mAP"] = float(best_rare_metrics["mAP"])
+        run.summary["best_rare_epoch"] = best_rare_epoch
     run.finish()
 
 

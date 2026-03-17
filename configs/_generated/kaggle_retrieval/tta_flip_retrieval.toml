@@ -1,0 +1,4 @@
+[evaluation]
+apply_tta = true
+tta_modality = "flip"
+experiment_group = "kaggle_retrieval"

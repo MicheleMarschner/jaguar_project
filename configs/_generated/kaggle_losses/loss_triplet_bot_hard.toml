@@ -1,6 +1,8 @@
 [training]
 experiment_name = "loss_triplet_bot_hard"
 early_stopping = false
+seed = 42
+multiple_seeds = false
 
 [model]
 head_type = "triplet"

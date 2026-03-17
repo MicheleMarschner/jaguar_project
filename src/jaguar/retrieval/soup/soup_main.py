@@ -30,7 +30,6 @@ def parse_args():
         required=True,
         help="Soup sensitivity experiment config (configs/experiments/...)",
     )
-    return parser.parse_args()
 
 def main():
     args = parse_args()
@@ -38,6 +37,9 @@ def main():
 
     with open(args.experiment_config, "rb") as f:
         soup_cfg = tomllib.load(f)
+        
+    experiment_meta = soup_cfg["experiment"]
+    print(experiment_meta)
 
     # Generate run configs
     generated_paths = generate_soup_experiments(
@@ -61,6 +63,8 @@ def main():
     is_stability_round = "stability" in root_dir.name
     for cfg_path in generated_paths:
         run_name = cfg_path.stem
+        experiment_group = experiment_meta["name"]
+        
         if is_stability_round and run_name != "stability_analysis": continue
         if not is_stability_round and run_name == "stability_analysis": continue
 
@@ -69,14 +73,14 @@ def main():
             run_cfg = tomllib.load(f)
             
         # Setup WandB config
+        # wandb config usually present in config/base and absent in the experiments one 
+        # overwriting as merge here is safe
         run_cfg.setdefault("logging", {})
-        run_cfg["logging"].update({
-            "enabled": True,
-            "project": "jaguar-reid-soup",
-            "online": True
-        })
-
-        output_dir = Path("soup_eval") / run_name
+        run_cfg["logging"]["enabled"] = True
+        run_cfg["logging"]["project"] = "jaguar-reid"
+        run_cfg["logging"]["online"] = True
+        
+        output_dir = root_dir / "soup_eval" / run_name
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Initialize WandB
@@ -84,8 +88,10 @@ def main():
             config=run_cfg,
             run_dir=output_dir,
             exp_name=run_name,
-            experiment_group=soup_cfg["experiment"]["name"],
+            experiment_group=experiment_group,
         )
+        
+        extra_ckpt = Path(args.extra_checkpoint_dir) if args.extra_checkpoint_dir else None
 
         leaderboard_df = run_soup_sensitivity(
             root_dir=root_dir,
@@ -93,7 +99,8 @@ def main():
             labels=labels,
             run_cfg=run_cfg["evaluation"],
             output_dir=output_dir,
-            wandb_run=wandb_run
+            wandb_run=wandb_run,
+            extra_checkpoint_dir=extra_ckpt,
         )
 
         # Finish WandB

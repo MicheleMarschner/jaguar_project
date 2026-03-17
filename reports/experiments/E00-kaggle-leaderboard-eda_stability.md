@@ -1,0 +1,21 @@
+In this experiment we aim to answer the following **Research Question**: *Is the species-specific re-identification pipeline robust to stochastic variations, or are performance gains dependent on "lucky" random initializations?*
+
+Following the findings from the backbone ablation study (see `E00_leaderboard-kaggle_backbone.md`), we use the best-performing configuration: an EVA-02 backbone with a Triplet Loss head with Hard mining (please, refer to `E00_leaderboard-kaggle_backbone.md` and `config/base/kaggle-base/tomlz` for fruther details on hyperparameters, configuration, training scheme and evaluation procedure). To evaluate robustness, we fixed all hyperparameters and varied only the random seed. We evaluated the following seeds: [42, 123, 256, 512, 1024]. This selection includes commonly used benchmarking seeds (42, 123) and powers of two (256, 512, 1024), which is a common practice in deep learning experiments to verify that results are not tied to a particular pseudo-random generator state.
+
+<insert WandB screenshot of validation curves>
+
+The training curves highlight an important observation regarding variance across seeds. In particular, the deviation observed for seed 256 appears to stem from the interaction between batch size and Triplet Loss sampling. We opted for a batch size of 32*for computational efficiency and to follow common deep learning training standards. However, the dataset contains 31 unique jaguar identities, meaning that a batch of 32 samples rarely contains a balanced representation of all identities within a single training step. Additionally, the dataset is highly imbalanced, which is typical for animal re-identification datasets that rely on camera trap bursts, where some individuals appear much more frequently than others. As a consequence, some batches may contain very few positive pairs for rare identities. During validation, these rare identities may be temporarily misclassified, which results in the small loss spikes visible in the training curve for seed 256 and slightly slower convergence compared to the other seeds.
+
+We also experimented with larger batch sizes (e.g., 128; experiment omitted for brevity). In that scenario, the model could compute gradients against nearly all identities simultaneously, which stabilized training dynamics. However, this configuration did not translate into higher identity mAP on the public Kaggle test set**, so we retained the more computationally efficient batch size of 32. We additionally tested *Exponential Moving Average (EMA) to stabilize training (experiment omitted for brevity; past runs available on Weights & Biases dashboard). While EMA reduced variance in the training curves (results omitted here for brevity), it slightly degraded performance on the public Kaggle leaderboard. Our intuition is that for fine-grained re-identification, where extremely subtle spot patterns differentiate individuals, EMA may act as an over-smoothing mechanism, blurring the discriminative features needed to distinguish between visually similar jaguars.
+
+The table below summarizes the stability across the five seeds on the Round 2 dataset:
+
+| Metric | Mean (μ) | Std Dev (σ) | CV (%) |
+|------|------|------|------|
+| Identity mAP | 0.6509 | 0.0214 | 3.29 |
+| Pairwise AP | 0.9005 | 0.0284 | 3.15 |
+| Rank-1 Accuracy | 0.9367 | 0.0085 | 0.91 |
+| Similarity Gap | 0.7863 | 0.0558 | 7.09 |
+| Silhouette Score | 0.6479 | 0.0676 | 10.4 |
+
+Rank-1 Accuracy is remarkably stable across seeds (σ < 0.01), indicating that the model consistently retrieves the correct jaguar at the top of the ranking.   In contrast, identity mAP exhibits slightly higher variance. For example, seed 256 (mAP = 0.613) is a clear outlier compared to seed 42 (mAP = 0.664). Finally, Silhouette Score and Similarity Gap show the highest variability. This suggests that while the model frequently retrieves the correct identity (high Rank-1), the structure of the embedding space —specifically the compactness and separation of identity clusters — remains sensitive to the random initialization and to the sequence of triplets mined during training.

@@ -1,5 +1,7 @@
 [training]
 experiment_name = "loss_cosface"
+seed = 42
+multiple_seeds = false
 
 [model]
 head_type = "cosface"

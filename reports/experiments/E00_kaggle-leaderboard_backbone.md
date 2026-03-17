@@ -35,7 +35,6 @@ Only one of these options is enabled at a time.
 - `label_smooth`
   Applies label smoothing to Cross Entropy losses to reduce overfitting and improve generalization during training.
 
-
 The full Re-ID pipeline implemented in our codebase is summarized in the diagram below. Most of the ablation experiments performed during benchmarking are conducted with respect to this modular architecture, where we systematically vary backbone models, pooling strategies, embedding projections, and loss functions.
 
 ```mermaid
@@ -186,5 +185,11 @@ The diagnostic metrics provide deeper insight into why certain models perform be
 - The val/pairwise_AP trend mirrors the mAP results but shows smoother improvement. It is worth noting that while most models start at a similar baseline (around epoch 0), the foundational Transformers exhibit a much steeper "learning curve" in the first 10 epochs, likely due to the high quality of their frozen representations.
 
 The results highlight that general-purpose foundation models can match or exceed specialized wildlife models. EVA-02, which was not specifically trained on animals, slightly edges out MegaDescriptor-L, which was curated specifically for wildlife Re-ID. This suggests that the scale and diversity of pretraining in modern foundation models (like EVA and DINOv2) result in "universal" visual features that are highly transferable to niche domains like jaguar identification.
+
+< insert here wandb screenshot on time per epoch >
+
+Looking carefully at the timing/epoch_time_sec Figure, while accuracy is the primary goal for the Kaggle competition, EVA-02 is the most computationally expensive model, taking approximately 44.2 seconds per epoch. This represents a ~37% increase in training time compared to the fastest models. However, given its superior mAP and Rank-1 results, this "overhead" is justified for the competition setting.
+
+A standout result in the efficiency analysis is MegaDescriptor-L-384. Despite being one of the top two performers in terms of accuracy, its epoch time is remarkably low at ~34 seconds. It is faster than the smaller DINO-Small and MiewID models. Swin-Transformer (~32.3s) and EfficientNet-B4 (~33.3s) are the fastest architectures. However, as noted in the accuracy analysis, their performance was significantly lower. This indicates that for the Jaguar Re-ID task, the time saved during training (roughly 10-12 seconds per epoch) does not compensate for the loss in identification accuracy.
 
 Recommendation for the pipeline: Moving forward, EVA-02 is used as the default backbone to achieve 90%+ target observed on the leaderboard. 

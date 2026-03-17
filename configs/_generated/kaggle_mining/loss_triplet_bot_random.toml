@@ -3,6 +3,8 @@ experiment_name = "loss_triplet_bot_random"
 early_stopping = false
 unfreeze_epoch = 5
 samples_per_class = 4
+seed = 42
+multiple_seeds = false
 
 [model]
 head_type = "triplet"

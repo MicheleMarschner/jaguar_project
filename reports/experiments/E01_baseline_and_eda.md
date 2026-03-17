@@ -4,7 +4,7 @@ This initial baseline experiment establishes the starting point for all later an
 
 ## Background Information
 --------------------------------------------------------
-The first finding is that after running a vorsorglichen? check the **background information is indeed absent for all images**. The dataset consists entirely of **cutout images with missing background**, so background-based cues are not available in this round. 
+The first finding is that after running a precautionay? check the **background information is indeed absent for all images**. The dataset consists entirely of **cutout images with missing background**, so background-based cues are not available in this round. 
 In addition, the "empty" area is substantial: the median `alpha0_frac` is **0.533**, indicating that for a typical image, just over half of the canvas consists of transparent non-foreground area. 
 
 | Statistic | `alpha0_frac` |

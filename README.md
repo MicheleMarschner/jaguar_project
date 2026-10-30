@@ -4,9 +4,27 @@ SpotItLikeItsHot is a reproducible research project on jaguar re-identification 
 
 This README is intentionally limited to setup and reproducibility. Detailed descriptions of the project experiments, research questions, interventions, and findings are documented separately in **[E00_experiments_outline](reports/E00_experiments_outline.md)**.
 
+**Competition:** [Jaguar Re-Identification Challenge (Kaggle)](https://www.kaggle.com/competitions/round-2-jaguar-reidentification-challenge)
+
 > Disclaimer
 > AI tools were used exclusively for bug fixing and improving readability, including class and function documentation, visualization styling, and docstrings. They were not used for full code generation or for modeling decisions. 
 > Parts of the implementation and experimental setup were further informed by publicly available notebooks and code shared in the active Jaguar Re-ID Kaggle challenge. Such materials served as inspiration and reference points only; all adaptation, integration, and evaluation for this project were carried out independently.
+
+---
+
+## Team & Contributions
+
+The project was developed in a two-person university team. We collaborated on the initial project design and experimental pipeline.
+
+My contributions included refactoring and extending the shared experimental pipeline, data preparation, and conducting the following experiments:
+
+- **E01:** Baseline retrieval and exploratory data analysis
+- **E02:** Deduplication analysis
+- **E11:** Ensemble evaluation
+- **E12:** Background intervention
+- **E13:** Foreground contribution analysis
+- **E14:** XAI class attribution
+- **E15:** XAI similarity analysis
 
 ---
 

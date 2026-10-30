@@ -39,31 +39,30 @@ Together, these experiment groups move from baseline model development to deeper
 
 ### 4.1 Experiment overview
 
+
 ## EDA Experiments
 
 | ID | Experiment | Research question | README |
 |---|---|---|---|
-| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | `reports/experiments/E01_baseline_and_eda.md` |
-| E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E12_eda_background_intervention.md` |
-| E13; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `reports/experiments/E13_eda_foreground_contribution` |
-| E14; Q2 | XAI class attribution | Which image regions appear to drive the model’s identity-class predictions, and are these class-attribution explanations meaningfully aligned with jaguar identity cues? | `reports/experiments/E14_eda_class_attribution` |
-| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores in Jaguar Re-ID, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | [E15 – XAI Similarity](experiments/E15_eda_xai_similarity.md) |
-| E16; | XAI metrics |  | `reports/experiments/E16_eda_xai_similarity` |
-| E17; | Model Soup | Can we improve generalization and refine error patterns by interpolating between weights of models that have converged to different local minima within the same loss basin? | `reports/experiments/E17_eda_model_soup` |
-
+| E01 | Baseline retrieval model and EDA | Which baseline retrieval setup provides the reference point for later experiments? | [E01](experiments/E01_baseline_and_eda.md) |
+| E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | [E12](experiments/E12_eda_background_intervention.md) |
+| E13; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | [E13](experiments/E13_eda_foreground_contribution.md) |
+| E14; Q2 | XAI class attribution | Which image regions appear to drive the model’s identity-class predictions, and are these class-attribution explanations meaningfully aligned with jaguar identity cues? | [E14](experiments/E14_eda_xai_class_attribution.md) |
+| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores in Jaguar Re-ID, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | [E15](experiments/E15_eda_xai_similarity.md) |
+| E16; | XAI metrics | | [E16](experiments/E16_eda_xai_metrics.md) |
+| E17; | Model Soup | Can we improve generalization and refine error patterns by interpolating between weights of models that have converged to different local minima within the same loss basin? | [E17](experiments/E17-eda_model_soup.md) |
 
 ## Leaderboard Experiments
 
 | ID | Experiment | Research question | README |
 |---|---|---|---|
-| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior? | `reports/experiments/E02_kaggle_deduplication.md` |
-| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? | `reports/experiments/E03_kaggle_backbone.md` |
-| E04; Q11 | Loss comparison | How do different loss functions and head architectures shape embedding quality and retrieval performance in low-data jaguar Re-ID? | `reports/experiments/E04_kaggle_losses.md` |
-| E05 | Mining strategy | How does the choice of triplet mining strategy affect convergence and final retrieval performance? | `reports/experiments/E05_kaggle_mining.md` |
-| E06 | Scheduler and optimizer | Which optimizer and learning-rate scheduler combination yields the strongest and most robust retrieval performance? | `reports/experiments/E06_kaggle_optim_sched.md` |
-| E07 | Augmentation | Which augmentation strategy best regularizes jaguar Re-ID without destroying identity-defining pattern information? | `reports/experiments/E07_kaggle_augmentation.md` |
-| E08 | Progressive resizing | Does a progressive resolution curriculum improve retrieval performance and efficiency for convolutional backbones? | `reports/experiments/E08_kaggle_resizing.md` |
-| E09 | Retrieval post-processing | To what extent can inference-time techniques such as TTA, query expansion, and re-ranking improve retrieval precision? | `reports/experiments/E09_kaggle_retrieval.md` |
-| E10 | Statistical stability | Are the observed gains robust across random seeds, or are they dependent on favorable initializations? | `reports/experiments/E10_kaggle_stability.md` |
-| E11 | Ensemble | Can complementary models be combined to outperform the best single model, and are the gains coherent across gallery protocols? | `reports/experiments/E11_kaggle_ensemble.md` |
-
+| E02; Q14 | Deduplication analysis | How does duplicate removal affect retrieval quality and training behavior? | [E02](experiments/E02_kaggle_deduplication.md) |
+| E03; Q5 | Backbone comparison | Which backbone yields the strongest retrieval performance under the shared protocol? | [E03](experiments/E03_kaggle_backbone.md) |
+| E04; Q11 | Loss comparison | How do different loss functions and head architectures shape embedding quality and retrieval performance in low-data jaguar Re-ID? | [E04](experiments/E04_kaggle_losses.md) |
+| E05 | Mining strategy | How does the choice of triplet mining strategy affect convergence and final retrieval performance? | [E05](experiments/E05_kaggle_mining.md) |
+| E06 | Scheduler and optimizer | Which optimizer and learning-rate scheduler combination yields the strongest and most robust retrieval performance? | [E06](experiments/E06_kaggle_optim_sched.md) |
+| E07 | Augmentation | Which augmentation strategy best regularizes jaguar Re-ID without destroying identity-defining pattern information? | [E07](experiments/E07_kaggle_augmentation.md) |
+| E08 | Progressive resizing | Does a progressive resolution curriculum improve retrieval performance and efficiency for convolutional backbones? | [E08](experiments/E08_kaggle_resizing.md) |
+| E09 | Retrieval post-processing | To what extent can inference-time techniques such as TTA, query expansion, and re-ranking improve retrieval precision? | [E09](experiments/E09_kaggle_retrieval.md) |
+| E10 | Statistical stability | Are the observed gains robust across random seeds, or are they dependent on favorable initializations? | [E10](experiments/E10_kaggle_stability.md) |
+| E11 | Ensemble | Can complementary models be combined to outperform the best single model, and are the gains coherent across gallery protocols? | [E11](experiments/E11_kaggle_ensemble.md) |

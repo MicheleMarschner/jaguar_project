@@ -47,7 +47,7 @@ Together, these experiment groups move from baseline model development to deeper
 | E12; Q1 | Background intervention | How sensitive is retrieval performance to background changes in the query image? | `reports/experiments/E12_eda_background_intervention.md` |
 | E13; Q0 | Foreground contribution | Which image regions contribute most to similarity-based match decisions, and how stable are these explanations? | `reports/experiments/E13_eda_foreground_contribution` |
 | E14; Q2 | XAI class attribution | Which image regions appear to drive the model’s identity-class predictions, and are these class-attribution explanations meaningfully aligned with jaguar identity cues? | `reports/experiments/E14_eda_class_attribution` |
-| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores in Jaguar Re-ID, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | `[E15 – XAI Similarity](experiments/E15_eda_xai_similarity.md)` |
+| E15; Q31 | XAI similarity | Which image regions drive pairwise similarity scores in Jaguar Re-ID, and how do these regions differ across correct, difficult, and incorrect retrieval pairs? | [E15 – XAI Similarity](experiments/E15_eda_xai_similarity.md) |
 | E16; | XAI metrics |  | `reports/experiments/E16_eda_xai_similarity` |
 | E17; | Model Soup | Can we improve generalization and refine error patterns by interpolating between weights of models that have converged to different local minima within the same loss basin? | `reports/experiments/E17_eda_model_soup` |
 

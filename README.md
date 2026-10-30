@@ -10,7 +10,6 @@ This README is intentionally limited to setup and reproducibility. Detailed desc
 > AI tools were used exclusively for bug fixing and improving readability, including class and function documentation, visualization styling, and docstrings. They were not used for full code generation or for modeling decisions. 
 > Parts of the implementation and experimental setup were further informed by publicly available notebooks and code shared in the active Jaguar Re-ID Kaggle challenge. Such materials served as inspiration and reference points only; all adaptation, integration, and evaluation for this project were carried out independently.
 
----
 
 ## Team & Contributions
 
@@ -25,8 +24,7 @@ My contributions included refactoring and extending the shared experimental pipe
 - **E13:** Foreground contribution analysis
 - **E14:** XAI class attribution
 - **E15:** XAI similarity analysis
-
----
+  
 
 ## Repository Structure
 
@@ -55,7 +53,6 @@ JAGUAR_PROJECT/
 ├── README.md                   # Project overview and usage instructions
 └── requirements-captum-nodeps.txt # Optional dependency list for Captum-related setup
 
----
 
 ## Setup Guide
 
@@ -108,8 +105,6 @@ The shell initialization works the same way as on macOS. Restart the terminal af
 Invoke-Expression ((Invoke-WebRequest -Uri https://micro.mamba.pm/install.ps1).Content)
 ```
 
----
-
 ## Create and Activate the Environment
 
 Create the environment with Python 3.11:
@@ -133,7 +128,6 @@ pip install -r requirements-captum-nodeps.txt
 
 This setup installs the project dependencies defined in `pyproject.toml` together with the additional requirements used in the interpretability pipeline.
 
----
 
 ## Verify the Installation
 
@@ -149,8 +143,6 @@ If you use VS Code or Jupyter, make sure the `jaguar` kernel is selected. If it 
 ```bash
 python -m ipykernel install --user --name jaguar --display-name "Python 3.11 (jaguar)"
 ```
-
----
 
 ## Data Download
 
@@ -185,8 +177,6 @@ data/
             └── train.csv
 ```
 
----
-
 ## Project Configuration
 
 Before running experiments, check the local path configuration and environment variables.
@@ -208,8 +198,6 @@ WANDB_API_KEY=your_wandb_api_key_here
 WANDB_ENTITY=your_wandb_username_or_team
 WANDB_PROJECT=jaguar-reid
 ```
-
----
 
 ## Running Experiments
 
@@ -233,7 +221,6 @@ The commands need to be started from the project root directory
 
 The base config defines the common defaults for training, model setup, preprocessing, and evaluation, while the experiment config specifies the actual intervention to be tested.
 
----
 
 ## Running Analyses
 
@@ -253,8 +240,6 @@ Recreates analysis artifacts for one specific run only
 PYTHONPATH=src python -m jaguar.analysis.analysis_runner --experiment_group eda_background_intervention --run_name eva02_triplet_bg_orig_gray_black_rdn_blur_mixed
 ```
 
----
-
 ## Workflow Overview
 
 The general workflow is:
@@ -266,7 +251,6 @@ The general workflow is:
 5. inspect outputs in the saved run directories `experiments/<experiment_group>` and in W&B grouped by `<experiment_group>`
 6. run the corresponding analysis scripts to aggregate results and recreate figures or tables
 
----
 
 ### Typical Outputs
 
@@ -277,7 +261,6 @@ Depending on the experiment, runs store artifacts such as:
 - saved predictions or embeddings
 - aggregated summaries for comparison across runs
 
----
 
 ## Reproducing Results
 
@@ -292,7 +275,6 @@ To reproduce the reported project results, use the same:
 
 The W&B logs are especially useful for verifying whether a reproduced run matches the original trends in training curves, validation metrics, and configuration values.
 
----
 
 ## Weights & Biases
 
@@ -304,7 +286,6 @@ These projects contain the logged training runs, configurations, metrics, and ar
 
 > project_name = jaguar-reid-SpotItLikeItsHot
 
----
 
 ## Limitations
 
